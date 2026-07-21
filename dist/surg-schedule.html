@@ -184,6 +184,8 @@ input[type="date"] {
   scrollbar-width: none;
 }
 .tabbar::-webkit-scrollbar { display: none; }
+.tabbar-spacer { flex: 1 0 8px; }
+.tab-update { align-self: center; margin: 6px 0; white-space: nowrap; }
 
 .tab {
   border: none;
@@ -483,6 +485,14 @@ table.tbl { border-collapse: collapse; width: 100%; }
 }
 
 .unassigned-text { color: var(--red-text); font-weight: 700; }
+.cover-suggest {
+  display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+  margin: 8px 0; padding: 8px 10px;
+  background: #fdf6e7; border: 1px solid #ecd9a8; border-radius: 6px;
+  font-size: 13px; color: #7a5c12;
+}
+.cover-text { flex: 1 1 260px; }
+.covnote { display: block; width: 100%; margin-top: 8px; font-size: 13px; }
 .assign-manual { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .assign-manual label { font-size: 12px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
 .assign-manual select { width: 138px; }
@@ -602,6 +612,9 @@ table.tbl { border-collapse: collapse; width: 100%; }
   <button type="button" class="tab" data-tab="assign" role="tab">Assign</button>
   <button type="button" class="tab" data-tab="preview" role="tab">Preview &amp; Copy</button>
   <button type="button" class="tab" data-tab="reference" role="tab">Reference</button>
+  <span class="tabbar-spacer"></span>
+  <button type="button" class="btn btn-small btn-primary tab-update" id="btnUpdate"
+    title="Save everything, recompute the roster, and refresh Preview &amp; Copy">↻ Update</button>
 </nav>
 
 <main class="app-main">
@@ -634,6 +647,10 @@ table.tbl { border-collapse: collapse; width: 100%; }
       <h2>Clinics <span class="h-note">patient counts come from the EMRs — enter manually</span></h2>
       <div id="clinicRows"></div>
     </div>
+    <div class="card">
+      <h2>Add-ons <span class="h-note">printed at the end of the copied schedule — also editable on Day Roster</span></h2>
+      <div id="addOnsCases"></div>
+    </div>
   </section>
 
   <section class="panel" id="panel-assign">
@@ -663,6 +680,7 @@ table.tbl { border-collapse: collapse; width: 100%; }
     <div class="toolbar card-lite">
       <button type="button" class="btn btn-primary" id="btnCopyHTML">Copy formatted</button>
       <button type="button" class="btn" id="btnCopyText">Copy plain text</button>
+      <button type="button" class="btn" id="btnCopyAddons">Copy add-ons only</button>
       <span class="toolbar-note">Paste straight into email or chat — formatting is preserved.</span>
     </div>
     <div class="document card" id="previewDoc"></div>
@@ -1650,12 +1668,43 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return out;
   }
 
+  // Backup plan per Step 3 of the how-to: when the assigned resident staffs a
+  // PM clinic that this case could pull them out of, the first free name in
+  // the clinic-coverage chain covers the clinic; the next is the 2nd backup.
+  // Returns { clinic, primary: {name, source}, second: {name, source}|null }
+  // or null when no coverage is needed / nobody is free.
+  function backupPlan(caseObj, roster, data, allCases) {
+    var assigned = String((caseObj && caseObj.assigned) || '').replace(/^\s+|\s+$/g, '');
+    if (!assigned) return null;
+    var res = findResident(roster, assigned);
+    if (!res) return null;
+    var pmText = (res.pm && res.pm.text) || '';
+    if (!isClinicText(pmText)) return null;
+    // An AM-only case that won't span the day doesn't threaten the PM clinic.
+    if (sessionOf(caseObj) === 'am' && !spansDay(caseObj)) return null;
+    var busy = {};
+    busy[assigned] = true;
+    (allCases || []).forEach(function (c) {
+      var a = String((c && c.assigned) || '').replace(/^\s+|\s+$/g, '');
+      if (a) busy[a] = true;
+    });
+    var chain = clinicCoverage(roster, data).filter(function (item) {
+      if (busy[item.name]) return false;
+      var other = findResident(roster, item.name);
+      if (other && other.pm && other.pm.text === pmText) return false; // already staffing it
+      return true;
+    });
+    if (!chain.length) return null;
+    return { clinic: pmText, primary: chain[0], second: chain[1] || null };
+  }
+
   /* ------------------------------------------------------------------ */
 
   var Assign = {
     classify: classify,
     suggest: suggest,
-    clinicCoverage: clinicCoverage
+    clinicCoverage: clinicCoverage,
+    backupPlan: backupPlan
   };
 
   if (typeof window !== 'undefined') window.Assign = Assign;
@@ -1755,15 +1804,21 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     if (svc > 0 && svc !== count) t += ', x' + svc + ' service';
     var line = [seg(t)];
     var assigned = trim(c.assigned);
+    var backup = trim(c.backup);
+    var backupNote = trim(c.backupNote);
     if (assigned) {
+      // '- **Bair; Calotti** to cover glaucoma clinic during case if after 1 PM, …'
       line.push(seg(' - '));
-      line.push(seg(assigned, true));
+      line.push(seg(assigned + (backup ? '; ' + backup : ''), true));
+      if (backupNote) line.push(seg(' ' + backupNote));
     } else if (svc > 0) {
       line.push({ t: ' - ⚠ UNASSIGNED', b: false, cls: 'unassigned' });
     }
     var extras = [];
     if (trim(c.notes)) extras.push(trim(c.notes));
-    if (trim(c.backup)) extras.push('backup: ' + trim(c.backup));
+    if (!assigned && backup) {
+      extras.push('backup: ' + backup + (backupNote ? ' ' + backupNote : ''));
+    }
     if (extras.length) line.push(seg(' (' + extras.join('; ') + ')'));
     return line;
   }
@@ -1896,16 +1951,28 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     }
 
     // Add-ons
-    var addLines = [];
-    (day.addOns || []).forEach(function (row) {
-      if (!row || !trim(row.name)) return;
-      var label = trim(row.label);
-      if (label) addLines.push([seg(label + ': '), seg(trim(row.name), true)]);
-      else addLines.push([seg(trim(row.name), true)]);
-    });
+    var addLines = addOnLines(day);
     if (addLines.length) sections.push(['Add-ons'].concat(addLines));
 
     return sections;
+  }
+
+  // 'Tuesday night (7/21/26): **Djulbegovic**'
+  function addOnLines(day) {
+    var lines = [];
+    ((day && day.addOns) || []).forEach(function (row) {
+      if (!row || !trim(row.name)) return;
+      var label = trim(row.label);
+      if (label) lines.push([seg(label + ': '), seg(trim(row.name), true)]);
+      else lines.push([seg(trim(row.name), true)]);
+    });
+    return lines;
+  }
+
+  // The Add-ons section alone, as sections (for paste-at-the-end copying).
+  function addOnsSections(day) {
+    var lines = addOnLines(day);
+    return lines.length ? [['Add-ons'].concat(lines)] : [];
   }
 
   /* ------------------------------------------------------------------ */
@@ -1913,7 +1980,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   /* ------------------------------------------------------------------ */
 
   function buildText(day) {
-    return buildSections(day).map(function (lines) {
+    return sectionsToText(buildSections(day));
+  }
+
+  function sectionsToText(sections) {
+    return sections.map(function (lines) {
       return lines.map(function (line) {
         return normLine(line).map(function (s) {
           return s.b ? '**' + s.t + '**' : s.t;
@@ -1923,7 +1994,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   }
 
   function buildHTML(day) {
-    var body = buildSections(day).map(function (lines) {
+    return sectionsToHTML(buildSections(day));
+  }
+
+  function sectionsToHTML(sections) {
+    var body = sections.map(function (lines) {
       return lines.map(function (line) {
         var inner = normLine(line).map(function (s) {
           var t = esc(s.t);
@@ -1981,6 +2056,24 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     } catch (e) {
       return Promise.resolve(false);
     }
+    return copyPair(html, text);
+  }
+
+  // Copies just the Add-ons section, for pasting at the end of the schedule.
+  function copyAddOns(day) {
+    var html, text;
+    try {
+      var secs = addOnsSections(day);
+      if (!secs.length) return Promise.resolve(false);
+      html = sectionsToHTML(secs);
+      text = sectionsToText(secs);
+    } catch (e) {
+      return Promise.resolve(false);
+    }
+    return copyPair(html, text);
+  }
+
+  function copyPair(html, text) {
     if (typeof navigator === 'undefined' || typeof document === 'undefined') {
       return Promise.resolve(false); // Node — nothing to copy to
     }
@@ -2052,7 +2145,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     buildText: buildText,
     buildHTML: buildHTML,
     copy: copy,
-    copyText: copyText
+    copyText: copyText,
+    copyAddOns: copyAddOns
   };
 
   if (typeof window !== 'undefined') window.ExportFmt = ExportFmt;
@@ -2185,7 +2279,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       addOn: !!c.addOn,
       notes: String(c.notes || ''),
       assigned: String(c.assigned || ''),
-      backup: String(c.backup || '')
+      backup: String(c.backup || ''),
+      backupNote: String(c.backupNote || '')
     };
   }
 
@@ -2550,7 +2645,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     vac.addEventListener('input', function () { st.vacation = vac.value; touch(); });
     host.appendChild(labeledField('Vacation', vac));
 
-    var addOnsWrap = el('div');
+    host.appendChild(labeledField('Add-ons (call coverage)', addOnsEditor()));
+  }
+
+  // Shared add-ons editor — rendered on both the Day Roster tab and the
+  // Cases & Clinics tab; both views edit the same rows.
+  function addOnsEditor() {
+    var st = App.state;
+    var wrap = el('div');
     st.addOns.forEach(function (row, idx) {
       var line = el('div', { class: 'addon-row' });
       var label = el('input', { type: 'text', placeholder: 'e.g. Tuesday night (7/21/26)', value: row.label });
@@ -2562,20 +2664,32 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         onclick: function () {
           st.addOns.splice(idx, 1);
           touch();
-          renderManualInputs();
+          renderAddOnsEverywhere();
         }
       }));
-      addOnsWrap.appendChild(line);
+      wrap.appendChild(line);
     });
-    addOnsWrap.appendChild(el('button', {
+    wrap.appendChild(el('button', {
       type: 'button', class: 'btn btn-small', text: '+ Add add-on row',
       onclick: function () {
         st.addOns.push({ label: '', name: '' });
         touch();
-        renderManualInputs();
+        renderAddOnsEverywhere();
       }
     }));
-    host.appendChild(labeledField('Add-ons (call coverage)', addOnsWrap));
+    return wrap;
+  }
+
+  function renderAddOnsCard() {
+    var host = $('addOnsCases');
+    if (!host) return;
+    clearNode(host);
+    host.appendChild(addOnsEditor());
+  }
+
+  function renderAddOnsEverywhere() {
+    renderManualInputs();
+    renderAddOnsCard();
   }
 
   function renderRosterTab() {
@@ -2804,6 +2918,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   function renderCasesTab() {
     renderCaseSections();
     renderClinicRows();
+    renderAddOnsCard();
   }
 
   /* ------------------------------------------------------------------ */
@@ -2907,6 +3022,33 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       card.appendChild(box);
     }
 
+    // Clinic-coverage backup (how-to Step 3): offered when the assigned
+    // resident staffs a PM clinic this case could pull them out of.
+    var plan = null;
+    if (window.Assign && window.Assign.backupPlan) {
+      try { plan = window.Assign.backupPlan(c, App.roster, data(), App.state.cases); } catch (e) { plan = null; }
+    }
+    if (plan && !trim(c.backup)) {
+      var covText = plan.primary.name + ' (' + plan.primary.source + ') to cover ' +
+        plan.clinic + ' clinic during the case if after 1 PM' +
+        (plan.second ? ' · 2nd backup ' + plan.second.name + ' (' + plan.second.source + ')' : '');
+      var covBox = el('div', { class: 'cover-suggest' }, [
+        el('span', { class: 'cover-text', text: 'Clinic backup: ' + covText }),
+        el('button', {
+          type: 'button', class: 'btn btn-small', text: 'Use as backup',
+          onclick: function () {
+            c.backup = plan.primary.name;
+            c.backupNote = 'to cover ' + plan.clinic.toLowerCase() +
+              ' clinic during case if after 1 PM' +
+              (plan.second ? ', 2nd backup ' + plan.second.name + ' (' + plan.second.source + ')' : '');
+            touch();
+            renderAssignTab();
+          }
+        })
+      ]);
+      card.appendChild(covBox);
+    }
+
     var manual = el('div', { class: 'assign-manual' });
     manual.appendChild(el('label', { text: 'Assigned' }));
     manual.appendChild(residentSelect(c.assigned, function (v) {
@@ -2918,12 +3060,20 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     manual.appendChild(residentSelect(c.backup, function (v) {
       c.backup = v;
       touch();
-      renderAssignSide();
+      renderAssignTab();
     }, '—'));
     if (!trim(c.assigned) && c.serviceCount > 0) {
       manual.appendChild(el('span', { class: 'unassigned-text', text: '⚠ UNASSIGNED' }));
     }
     card.appendChild(manual);
+
+    var covNote = el('input', {
+      type: 'text', class: 'covnote',
+      placeholder: 'backup note — e.g. to cover glaucoma clinic during case if after 1 PM, 2nd backup …',
+      value: c.backupNote || ''
+    });
+    covNote.addEventListener('input', function () { c.backupNote = covNote.value; touch(); });
+    card.appendChild(covNote);
     return card;
   }
 
@@ -3195,6 +3345,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     toast('Roster built for ' + r.weekdayLabel + ' ' + fmtMDYY(parseISO(App.state.date)) + ' — manual entries kept');
   }
 
+  // One-click sync: flush edits, recompute the roster, re-render every tab so
+  // the Preview & Copy output reflects everything entered anywhere in the app.
+  function updateSync() {
+    saveNow();
+    computeRoster();
+    renderAll();
+    toast('Updated — clinics, cases & Preview/Copy are in sync');
+  }
+
   function startFromYesterday() {
     var dates = lsKeys()
       .filter(function (k) { return k.indexOf(LS_PREFIX) === 0; })
@@ -3248,6 +3407,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     for (var j = 0; j < panels.length; j++) {
       panels[j].classList.toggle('active', panels[j].id === 'panel-' + tab);
     }
+    if (tab === 'roster') renderRosterTab();
+    if (tab === 'cases') renderCasesTab();
     if (tab === 'assign') renderAssignTab();
     if (tab === 'preview') renderPreview();
   }
@@ -3282,6 +3443,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     }
 
     $('btnCreate').addEventListener('click', createSchedule);
+    $('btnUpdate').addEventListener('click', updateSync);
     $('btnYesterday').addEventListener('click', startFromYesterday);
     $('btnClear').addEventListener('click', clearDay);
     $('btnSuggestAll').addEventListener('click', suggestAll);
@@ -3296,6 +3458,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     $('btnCopyText').addEventListener('click', function () {
       window.ExportFmt.copyText(exportDay()).then(function (ok) {
         toast(ok ? 'Plain-text schedule copied' : 'Copy failed', ok);
+      });
+    });
+    $('btnCopyAddons').addEventListener('click', function () {
+      var any = (App.state.addOns || []).some(function (a) { return a && trim(a.name); });
+      if (!any) { toast('No add-ons entered yet — fill them in on Day Roster or Cases & Clinics', false); return; }
+      window.ExportFmt.copyAddOns(exportDay()).then(function (ok) {
+        toast(ok ? 'Add-ons copied — paste at the end of the schedule' : 'Copy failed', ok);
       });
     });
 

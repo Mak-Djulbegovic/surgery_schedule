@@ -1,0 +1,41 @@
+# Deploys the app to GitHub Pages so anyone can test it at
+#   https://mak-djulbegovic.github.io/surgery_schedule/
+#
+# NOTE: GitHub Pages needs the repository to be PUBLIC (on a free plan).
+# Once it is, run this workflow from the Actions tab ("Run workflow") —
+# it enables Pages automatically on first run.
+name: Deploy to GitHub Pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage the static app
+        run: |
+          mkdir -p site
+          cp index.html site/
+          cp -r css js site/
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

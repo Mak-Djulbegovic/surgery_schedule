@@ -122,7 +122,8 @@
       addOn: !!c.addOn,
       notes: String(c.notes || ''),
       assigned: String(c.assigned || ''),
-      backup: String(c.backup || '')
+      backup: String(c.backup || ''),
+      backupNote: String(c.backupNote || '')
     };
   }
 
@@ -487,7 +488,14 @@
     vac.addEventListener('input', function () { st.vacation = vac.value; touch(); });
     host.appendChild(labeledField('Vacation', vac));
 
-    var addOnsWrap = el('div');
+    host.appendChild(labeledField('Add-ons (call coverage)', addOnsEditor()));
+  }
+
+  // Shared add-ons editor — rendered on both the Day Roster tab and the
+  // Cases & Clinics tab; both views edit the same rows.
+  function addOnsEditor() {
+    var st = App.state;
+    var wrap = el('div');
     st.addOns.forEach(function (row, idx) {
       var line = el('div', { class: 'addon-row' });
       var label = el('input', { type: 'text', placeholder: 'e.g. Tuesday night (7/21/26)', value: row.label });
@@ -499,20 +507,32 @@
         onclick: function () {
           st.addOns.splice(idx, 1);
           touch();
-          renderManualInputs();
+          renderAddOnsEverywhere();
         }
       }));
-      addOnsWrap.appendChild(line);
+      wrap.appendChild(line);
     });
-    addOnsWrap.appendChild(el('button', {
+    wrap.appendChild(el('button', {
       type: 'button', class: 'btn btn-small', text: '+ Add add-on row',
       onclick: function () {
         st.addOns.push({ label: '', name: '' });
         touch();
-        renderManualInputs();
+        renderAddOnsEverywhere();
       }
     }));
-    host.appendChild(labeledField('Add-ons (call coverage)', addOnsWrap));
+    return wrap;
+  }
+
+  function renderAddOnsCard() {
+    var host = $('addOnsCases');
+    if (!host) return;
+    clearNode(host);
+    host.appendChild(addOnsEditor());
+  }
+
+  function renderAddOnsEverywhere() {
+    renderManualInputs();
+    renderAddOnsCard();
   }
 
   function renderRosterTab() {
@@ -741,6 +761,7 @@
   function renderCasesTab() {
     renderCaseSections();
     renderClinicRows();
+    renderAddOnsCard();
   }
 
   /* ------------------------------------------------------------------ */
@@ -844,6 +865,33 @@
       card.appendChild(box);
     }
 
+    // Clinic-coverage backup (how-to Step 3): offered when the assigned
+    // resident staffs a PM clinic this case could pull them out of.
+    var plan = null;
+    if (window.Assign && window.Assign.backupPlan) {
+      try { plan = window.Assign.backupPlan(c, App.roster, data(), App.state.cases); } catch (e) { plan = null; }
+    }
+    if (plan && !trim(c.backup)) {
+      var covText = plan.primary.name + ' (' + plan.primary.source + ') to cover ' +
+        plan.clinic + ' clinic during the case if after 1 PM' +
+        (plan.second ? ' · 2nd backup ' + plan.second.name + ' (' + plan.second.source + ')' : '');
+      var covBox = el('div', { class: 'cover-suggest' }, [
+        el('span', { class: 'cover-text', text: 'Clinic backup: ' + covText }),
+        el('button', {
+          type: 'button', class: 'btn btn-small', text: 'Use as backup',
+          onclick: function () {
+            c.backup = plan.primary.name;
+            c.backupNote = 'to cover ' + plan.clinic.toLowerCase() +
+              ' clinic during case if after 1 PM' +
+              (plan.second ? ', 2nd backup ' + plan.second.name + ' (' + plan.second.source + ')' : '');
+            touch();
+            renderAssignTab();
+          }
+        })
+      ]);
+      card.appendChild(covBox);
+    }
+
     var manual = el('div', { class: 'assign-manual' });
     manual.appendChild(el('label', { text: 'Assigned' }));
     manual.appendChild(residentSelect(c.assigned, function (v) {
@@ -855,12 +903,20 @@
     manual.appendChild(residentSelect(c.backup, function (v) {
       c.backup = v;
       touch();
-      renderAssignSide();
+      renderAssignTab();
     }, '—'));
     if (!trim(c.assigned) && c.serviceCount > 0) {
       manual.appendChild(el('span', { class: 'unassigned-text', text: '⚠ UNASSIGNED' }));
     }
     card.appendChild(manual);
+
+    var covNote = el('input', {
+      type: 'text', class: 'covnote',
+      placeholder: 'backup note — e.g. to cover glaucoma clinic during case if after 1 PM, 2nd backup …',
+      value: c.backupNote || ''
+    });
+    covNote.addEventListener('input', function () { c.backupNote = covNote.value; touch(); });
+    card.appendChild(covNote);
     return card;
   }
 
@@ -1132,6 +1188,15 @@
     toast('Roster built for ' + r.weekdayLabel + ' ' + fmtMDYY(parseISO(App.state.date)) + ' — manual entries kept');
   }
 
+  // One-click sync: flush edits, recompute the roster, re-render every tab so
+  // the Preview & Copy output reflects everything entered anywhere in the app.
+  function updateSync() {
+    saveNow();
+    computeRoster();
+    renderAll();
+    toast('Updated — clinics, cases & Preview/Copy are in sync');
+  }
+
   function startFromYesterday() {
     var dates = lsKeys()
       .filter(function (k) { return k.indexOf(LS_PREFIX) === 0; })
@@ -1185,6 +1250,8 @@
     for (var j = 0; j < panels.length; j++) {
       panels[j].classList.toggle('active', panels[j].id === 'panel-' + tab);
     }
+    if (tab === 'roster') renderRosterTab();
+    if (tab === 'cases') renderCasesTab();
     if (tab === 'assign') renderAssignTab();
     if (tab === 'preview') renderPreview();
   }
@@ -1219,6 +1286,7 @@
     }
 
     $('btnCreate').addEventListener('click', createSchedule);
+    $('btnUpdate').addEventListener('click', updateSync);
     $('btnYesterday').addEventListener('click', startFromYesterday);
     $('btnClear').addEventListener('click', clearDay);
     $('btnSuggestAll').addEventListener('click', suggestAll);
@@ -1233,6 +1301,13 @@
     $('btnCopyText').addEventListener('click', function () {
       window.ExportFmt.copyText(exportDay()).then(function (ok) {
         toast(ok ? 'Plain-text schedule copied' : 'Copy failed', ok);
+      });
+    });
+    $('btnCopyAddons').addEventListener('click', function () {
+      var any = (App.state.addOns || []).some(function (a) { return a && trim(a.name); });
+      if (!any) { toast('No add-ons entered yet — fill them in on Day Roster or Cases & Clinics', false); return; }
+      window.ExportFmt.copyAddOns(exportDay()).then(function (ok) {
+        toast(ok ? 'Add-ons copied — paste at the end of the schedule' : 'Copy failed', ok);
       });
     });
 

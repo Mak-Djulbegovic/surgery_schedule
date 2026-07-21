@@ -353,12 +353,43 @@
     return out;
   }
 
+  // Backup plan per Step 3 of the how-to: when the assigned resident staffs a
+  // PM clinic that this case could pull them out of, the first free name in
+  // the clinic-coverage chain covers the clinic; the next is the 2nd backup.
+  // Returns { clinic, primary: {name, source}, second: {name, source}|null }
+  // or null when no coverage is needed / nobody is free.
+  function backupPlan(caseObj, roster, data, allCases) {
+    var assigned = String((caseObj && caseObj.assigned) || '').replace(/^\s+|\s+$/g, '');
+    if (!assigned) return null;
+    var res = findResident(roster, assigned);
+    if (!res) return null;
+    var pmText = (res.pm && res.pm.text) || '';
+    if (!isClinicText(pmText)) return null;
+    // An AM-only case that won't span the day doesn't threaten the PM clinic.
+    if (sessionOf(caseObj) === 'am' && !spansDay(caseObj)) return null;
+    var busy = {};
+    busy[assigned] = true;
+    (allCases || []).forEach(function (c) {
+      var a = String((c && c.assigned) || '').replace(/^\s+|\s+$/g, '');
+      if (a) busy[a] = true;
+    });
+    var chain = clinicCoverage(roster, data).filter(function (item) {
+      if (busy[item.name]) return false;
+      var other = findResident(roster, item.name);
+      if (other && other.pm && other.pm.text === pmText) return false; // already staffing it
+      return true;
+    });
+    if (!chain.length) return null;
+    return { clinic: pmText, primary: chain[0], second: chain[1] || null };
+  }
+
   /* ------------------------------------------------------------------ */
 
   var Assign = {
     classify: classify,
     suggest: suggest,
-    clinicCoverage: clinicCoverage
+    clinicCoverage: clinicCoverage,
+    backupPlan: backupPlan
   };
 
   if (typeof window !== 'undefined') window.Assign = Assign;

@@ -33,6 +33,23 @@ machine. Work-in-progress saves automatically in the browser, per date.
 6. **Reference tab** — the hierarchy, scheduling notes, and all three block
    grids, so nobody needs the PDF.
 
+## Sharing it with others
+
+Three options, easiest first:
+
+1. **Send the single file** — `dist/surg-schedule.html` is the whole app in
+   one HTML file (rebuild with `node tools/bundle.js`). Email/Slack it;
+   recipients just double-click it. Their entries stay in their own browser.
+2. **Hosted page** — the app is also published as a private claude.ai page
+   that can be shared from its share menu.
+3. **GitHub Pages** — once this repository is made public, run the
+   *Deploy to GitHub Pages* workflow from the Actions tab; the app then lives
+   at `https://mak-djulbegovic.github.io/surgery_schedule/`. (Pages is not
+   available on private repos on the free plan.)
+
+Note: saved schedules live in each viewer's own browser (localStorage) —
+sharing a link shares the app, not your entered data.
+
 ## Updating for a new academic year
 
 All schedule knowledge lives in `js/data.js` (block grids, block date ranges,

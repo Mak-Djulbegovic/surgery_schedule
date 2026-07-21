@@ -38,6 +38,9 @@
   <button type="button" class="tab" data-tab="assign" role="tab">Assign</button>
   <button type="button" class="tab" data-tab="preview" role="tab">Preview &amp; Copy</button>
   <button type="button" class="tab" data-tab="reference" role="tab">Reference</button>
+  <span class="tabbar-spacer"></span>
+  <button type="button" class="btn btn-small btn-primary tab-update" id="btnUpdate"
+    title="Save everything, recompute the roster, and refresh Preview &amp; Copy">↻ Update</button>
 </nav>
 
 <main class="app-main">
@@ -70,6 +73,10 @@
       <h2>Clinics <span class="h-note">patient counts come from the EMRs — enter manually</span></h2>
       <div id="clinicRows"></div>
     </div>
+    <div class="card">
+      <h2>Add-ons <span class="h-note">printed at the end of the copied schedule — also editable on Day Roster</span></h2>
+      <div id="addOnsCases"></div>
+    </div>
   </section>
 
   <section class="panel" id="panel-assign">
@@ -99,6 +106,7 @@
     <div class="toolbar card-lite">
       <button type="button" class="btn btn-primary" id="btnCopyHTML">Copy formatted</button>
       <button type="button" class="btn" id="btnCopyText">Copy plain text</button>
+      <button type="button" class="btn" id="btnCopyAddons">Copy add-ons only</button>
       <span class="toolbar-note">Paste straight into email or chat — formatting is preserved.</span>
     </div>
     <div class="document card" id="previewDoc"></div>

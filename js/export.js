@@ -89,15 +89,21 @@
     if (svc > 0 && svc !== count) t += ', x' + svc + ' service';
     var line = [seg(t)];
     var assigned = trim(c.assigned);
+    var backup = trim(c.backup);
+    var backupNote = trim(c.backupNote);
     if (assigned) {
+      // '- **Bair; Calotti** to cover glaucoma clinic during case if after 1 PM, …'
       line.push(seg(' - '));
-      line.push(seg(assigned, true));
+      line.push(seg(assigned + (backup ? '; ' + backup : ''), true));
+      if (backupNote) line.push(seg(' ' + backupNote));
     } else if (svc > 0) {
       line.push({ t: ' - ⚠ UNASSIGNED', b: false, cls: 'unassigned' });
     }
     var extras = [];
     if (trim(c.notes)) extras.push(trim(c.notes));
-    if (trim(c.backup)) extras.push('backup: ' + trim(c.backup));
+    if (!assigned && backup) {
+      extras.push('backup: ' + backup + (backupNote ? ' ' + backupNote : ''));
+    }
     if (extras.length) line.push(seg(' (' + extras.join('; ') + ')'));
     return line;
   }
@@ -230,16 +236,28 @@
     }
 
     // Add-ons
-    var addLines = [];
-    (day.addOns || []).forEach(function (row) {
-      if (!row || !trim(row.name)) return;
-      var label = trim(row.label);
-      if (label) addLines.push([seg(label + ': '), seg(trim(row.name), true)]);
-      else addLines.push([seg(trim(row.name), true)]);
-    });
+    var addLines = addOnLines(day);
     if (addLines.length) sections.push(['Add-ons'].concat(addLines));
 
     return sections;
+  }
+
+  // 'Tuesday night (7/21/26): **Djulbegovic**'
+  function addOnLines(day) {
+    var lines = [];
+    ((day && day.addOns) || []).forEach(function (row) {
+      if (!row || !trim(row.name)) return;
+      var label = trim(row.label);
+      if (label) lines.push([seg(label + ': '), seg(trim(row.name), true)]);
+      else lines.push([seg(trim(row.name), true)]);
+    });
+    return lines;
+  }
+
+  // The Add-ons section alone, as sections (for paste-at-the-end copying).
+  function addOnsSections(day) {
+    var lines = addOnLines(day);
+    return lines.length ? [['Add-ons'].concat(lines)] : [];
   }
 
   /* ------------------------------------------------------------------ */
@@ -247,7 +265,11 @@
   /* ------------------------------------------------------------------ */
 
   function buildText(day) {
-    return buildSections(day).map(function (lines) {
+    return sectionsToText(buildSections(day));
+  }
+
+  function sectionsToText(sections) {
+    return sections.map(function (lines) {
       return lines.map(function (line) {
         return normLine(line).map(function (s) {
           return s.b ? '**' + s.t + '**' : s.t;
@@ -257,7 +279,11 @@
   }
 
   function buildHTML(day) {
-    var body = buildSections(day).map(function (lines) {
+    return sectionsToHTML(buildSections(day));
+  }
+
+  function sectionsToHTML(sections) {
+    var body = sections.map(function (lines) {
       return lines.map(function (line) {
         var inner = normLine(line).map(function (s) {
           var t = esc(s.t);
@@ -315,6 +341,24 @@
     } catch (e) {
       return Promise.resolve(false);
     }
+    return copyPair(html, text);
+  }
+
+  // Copies just the Add-ons section, for pasting at the end of the schedule.
+  function copyAddOns(day) {
+    var html, text;
+    try {
+      var secs = addOnsSections(day);
+      if (!secs.length) return Promise.resolve(false);
+      html = sectionsToHTML(secs);
+      text = sectionsToText(secs);
+    } catch (e) {
+      return Promise.resolve(false);
+    }
+    return copyPair(html, text);
+  }
+
+  function copyPair(html, text) {
     if (typeof navigator === 'undefined' || typeof document === 'undefined') {
       return Promise.resolve(false); // Node — nothing to copy to
     }
@@ -386,7 +430,8 @@
     buildText: buildText,
     buildHTML: buildHTML,
     copy: copy,
-    copyText: copyText
+    copyText: copyText,
+    copyAddOns: copyAddOns
   };
 
   if (typeof window !== 'undefined') window.ExportFmt = ExportFmt;

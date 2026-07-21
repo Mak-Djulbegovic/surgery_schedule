@@ -366,6 +366,49 @@ var text2 = ExportFmt.buildText(day2);
 ok(/JHN\/TJUH\/JSC\n-none/.test(text2), 'text: empty JHN/TJUH/JSC section renders -none');
 
 /* ================================================================== */
+/* (4) Backups — Assign.backupPlan + the '**Assigned; Backup** note' render  */
+
+// Huang x7 0730 assigned to Bair (Surg 4; Glaucoma clinic PM on Wednesdays):
+// the case spans the day, so the clinic needs coverage — first free name in
+// the coverage chain is Calotti (Surg 2).
+var huang = {
+  id: 'b1', section: 'wills', surgeon: 'Huang', count: 7, serviceCount: 2,
+  start: '0730', category: 'cataract', addOn: false, notes: '',
+  assigned: 'Bair', backup: '', backupNote: ''
+};
+var plan = Assign.backupPlan(huang, roster, DATA, [huang]);
+ok(!!plan, 'backupPlan: returns a plan for Bair (PM Glaucoma clinic) on a day-spanning case');
+ok(plan && plan.clinic === 'Glaucoma', 'backupPlan: clinic is Glaucoma');
+ok(plan && plan.primary && plan.primary.name === 'Calotti', 'backupPlan: primary is Calotti (first free in chain)');
+ok(plan && plan.primary && plan.primary.source === 'Surg 2', 'backupPlan: primary source is Surg 2');
+ok(plan && plan.second && !!plan.second.name, 'backupPlan: offers a 2nd backup');
+
+// Short AM-only case for the same resident -> no coverage needed.
+var shortAm = Object.assign({}, huang, { count: 2, start: '0800' });
+ok(Assign.backupPlan(shortAm, roster, DATA, [shortAm]) === null,
+  'backupPlan: null for a short AM-only case');
+
+// A resident with no PM clinic (Cheng, Surg 1 all day) -> null.
+var chengCase = Object.assign({}, huang, { assigned: 'Cheng' });
+ok(Assign.backupPlan(chengCase, roster, DATA, [chengCase]) === null,
+  'backupPlan: null when the assignee has no PM clinic');
+
+// Render: '- **Bair; Calotti** to cover glaucoma clinic …' (example format)
+var day3 = JSON.parse(JSON.stringify(day));
+day3.roster = roster;
+day3.cases = [Object.assign({}, huang, {
+  backup: 'Calotti',
+  backupNote: 'to cover glaucoma clinic during case if after 1 PM, 2nd backup Samuel (Retina)'
+})];
+var text3 = ExportFmt.buildText(day3);
+contains(text3,
+  '-Huang x7 (0730 start), x2 service - **Bair; Calotti** to cover glaucoma clinic during case if after 1 PM, 2nd backup Samuel (Retina)',
+  'text: assigned+backup line matches the example document format');
+var html3 = ExportFmt.buildHTML(day3);
+contains(html3, '<b>Bair; Calotti</b> to cover glaucoma clinic',
+  'html: assigned+backup bolded together, note plain');
+
+/* ================================================================== */
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures > 0) process.exit(1);
 console.log('OK');

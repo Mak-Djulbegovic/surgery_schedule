@@ -177,6 +177,8 @@ input[type="date"] {
   scrollbar-width: none;
 }
 .tabbar::-webkit-scrollbar { display: none; }
+.tabbar-spacer { flex: 1 0 8px; }
+.tab-update { align-self: center; margin: 6px 0; white-space: nowrap; }
 
 .tab {
   border: none;
@@ -476,6 +478,14 @@ table.tbl { border-collapse: collapse; width: 100%; }
 }
 
 .unassigned-text { color: var(--red-text); font-weight: 700; }
+.cover-suggest {
+  display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+  margin: 8px 0; padding: 8px 10px;
+  background: #fdf6e7; border: 1px solid #ecd9a8; border-radius: 6px;
+  font-size: 13px; color: #7a5c12;
+}
+.cover-text { flex: 1 1 260px; }
+.covnote { display: block; width: 100%; margin-top: 8px; font-size: 13px; }
 .assign-manual { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .assign-manual label { font-size: 12px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
 .assign-manual select { width: 138px; }
