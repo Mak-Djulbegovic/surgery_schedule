@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Surg Schedule Builder</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+    </span>
+    <span class="brand-text">
+      <h1>Surg Schedule Builder</h1>
+      <span class="brand-sub" id="ayLabel"></span>
+    </span>
+  </div>
+  <div class="header-controls">
+    <label class="date-field">
+      <span class="field-label">Schedule date</span>
+      <input type="date" id="datePicker">
+    </label>
+    <div class="day-chips" id="dayChips"></div>
+    <div class="header-actions">
+      <button type="button" class="btn btn-primary" id="btnCreate">Create Surg Schedule</button>
+      <button type="button" class="btn" id="btnYesterday">Start from yesterday</button>
+      <button type="button" class="btn btn-danger" id="btnClear">Clear day</button>
+    </div>
+  </div>
+</header>
+
+<nav class="tabbar" id="tabbar" role="tablist" aria-label="Sections">
+  <button type="button" class="tab active" data-tab="roster" role="tab">Day Roster</button>
+  <button type="button" class="tab" data-tab="cases" role="tab">Cases &amp; Clinics</button>
+  <button type="button" class="tab" data-tab="assign" role="tab">Assign</button>
+  <button type="button" class="tab" data-tab="preview" role="tab">Preview &amp; Copy</button>
+  <button type="button" class="tab" data-tab="reference" role="tab">Reference</button>
+</nav>
+
+<main class="app-main">
+  <div id="dayBanner" class="banner hidden"></div>
+
+  <section class="panel active" id="panel-roster">
+    <div class="layout-2col">
+      <div class="col">
+        <div class="card">
+          <h2>Resident day roster <span class="h-note">auto-generated from the block schedule</span></h2>
+          <div id="rosterGrid"></div>
+        </div>
+      </div>
+      <div class="col col-side">
+        <div class="card">
+          <h2>Derived summary</h2>
+          <div id="rosterSummary"></div>
+        </div>
+        <div class="card">
+          <h2>Manual entries <span class="h-note">saved automatically per date</span></h2>
+          <div id="manualInputs"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-cases">
+    <div id="caseSections"></div>
+    <div class="card">
+      <h2>Clinics <span class="h-note">patient counts come from the EMRs — enter manually</span></h2>
+      <div id="clinicRows"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-assign">
+    <div class="toolbar card-lite">
+      <button type="button" class="btn btn-primary" id="btnSuggestAll">Suggest all</button>
+      <button type="button" class="btn" id="btnAcceptAll">Accept all suggestions</button>
+      <span class="toolbar-note">Suggestions never auto-assign — accept per case, or all at once.</span>
+    </div>
+    <div class="layout-2col">
+      <div class="col">
+        <div id="assignCases"></div>
+      </div>
+      <div class="col col-side">
+        <div class="card">
+          <h2>Resident load</h2>
+          <div id="loadPanel"></div>
+        </div>
+        <div class="card">
+          <h2>PM clinic coverage chain</h2>
+          <div id="coveragePanel"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-preview">
+    <div class="toolbar card-lite">
+      <button type="button" class="btn btn-primary" id="btnCopyHTML">Copy formatted</button>
+      <button type="button" class="btn" id="btnCopyText">Copy plain text</button>
+      <span class="toolbar-note">Paste straight into email or chat — formatting is preserved.</span>
+    </div>
+    <div class="document card" id="previewDoc"></div>
+  </section>
+
+  <section class="panel" id="panel-reference">
+    <div id="referenceBody"></div>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/assign.js"></script>
+<script src="js/export.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

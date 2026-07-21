@@ -97,7 +97,6 @@ const SCHED_DATA = {
         // Block 1: Cooper clinic 1st Wednesday and 4th Tuesday AM
         { block: 1, day: 'tue', session: 'am', nth: [4], set: 'Cooper Clinic', note: 'Cooper clinic 4th Tuesday AM' },
         { block: 1, day: 'wed', session: 'am', nth: [1], set: 'Cooper Clinic', note: 'Cooper clinic 1st Wednesday AM' },
-        { block: 1, day: 'tue', session: 'am', note: 'Benson if not seeing consults' },
         { block: 1, day: 'wed', session: 'am', note: 'Benson if not seeing consults' },
         // Block 3: Peds OR 4th Tues and 1st and 5th Fri of the month
         { block: 3, day: 'tue', session: 'am', nth: [4], set: 'Peds OR', note: 'Peds OR 4th Tuesday' },
@@ -106,7 +105,7 @@ const SCHED_DATA = {
         { block: 3, day: 'wed', session: 'am', nth: [3], set: 'Stadium OR (Abendroth)', note: 'Abendroth 3rd Wednesday' },
         { block: 3, day: 'wed', session: 'am', nth: [1], set: 'Peds', note: 'Cover Peds clinic 1st Wed while the 2nd year is in ROP Rounds' },
         // Block 3 Thu PM: OR (often Cornea cases) 2nd, 4th, and 5th Thu
-        { block: 3, day: 'thu', session: 'pm', nth: [2, 4, 5], set: 'Peds OR', note: 'OR (often Cornea cases) 2nd, 4th, and 5th Thursday' },
+        { block: 3, day: 'thu', session: 'pm', nth: [2, 4, 5], set: 'OR', note: 'OR (often Cornea cases) 2nd, 4th, and 5th Thursday' },
         // Block 4: Oncology alternate Mon/Tue odd/even weeks (1st, 3rd, 5th Mon; 2nd, 4th Tue)
         { block: 4, day: 'mon', session: 'am', nth: [1, 3, 5], set: 'Oncology', note: 'Oncology 1st, 3rd, 5th Monday' },
         { block: 4, day: 'tue', session: 'am', nth: [2, 4], set: 'Oncology', note: 'Oncology 2nd, 4th Tuesday' },
@@ -117,7 +116,9 @@ const SCHED_DATA = {
         { block: 6, day: 'thu', session: 'am', nth: [3], months: [1, 3, 5, 7], set: 'Stadium OR (Marous)', note: 'Stadium OR Marous AM/PM 3rd Thursday Jan/Mar/May/Jul' },
         { block: 6, day: 'thu', session: 'pm', nth: [3], months: [1, 3, 5, 7], set: 'Stadium OR (Marous)', note: 'Stadium OR Marous AM/PM 3rd Thursday Jan/Mar/May/Jul' },
         { block: 6, day: 'thu', session: 'am', nth: [3], months: [12, 2, 4, 6], set: 'Carrasco Clinic', note: 'Carrasco AM clinic 3rd Thursday Dec/Feb/Apr/Jun' },
-        { block: 6, day: 'thu', session: 'am', note: 'Bilyk Clinic when not in OR' }
+        { block: 6, day: 'thu', session: 'am', note: 'Bilyk Clinic when not in OR' },
+        { block: 6, day: 'thu', session: 'pm', note: 'Bilyk Clinic when not in OR' },
+        { block: 6, day: 'thu', session: 'pm', note: 'May be Plastics clinic when there are no OR cases' }
       ],
       gridNotes: [
         'Blocks 2 & 5: Taskmaster',
@@ -357,16 +358,16 @@ const SCHED_DATA = {
   //   WILLS_OR         = resident on Wills OR block
   //   RETINA           = resident on Retina block
   hierarchy: {
-    scheduledCataract: { label: 'Scheduled cataracts', chain: ['Surg 1', 'Surg 5'], note: 'Assign per the master cataract schedule in the lounge (Wills, Stadium, Cherry Hill).' },
+    scheduledCataract: { label: 'Scheduled cataracts', chain: ['Surg 1', 'Surg 5'], note: 'Assign per the master cataract schedule.' },
     scheduledCornea: { label: 'Scheduled cornea', chain: ['Surg 3'] },
     scheduledGlaucoma: { label: 'Scheduled glaucoma', chain: ['Surg 4'] },
     addOnCornea: { label: 'Add-on cornea (incl. trauma requiring tissue)', chain: ['Surg 3'] },
     addOnGlaucoma: { label: 'Add-on glaucoma', chain: ['Surg 4'] },
     scheduledPlastics: { label: 'Scheduled plastics (incl. Gibbon/JHN)', chain: ['PLASTICS_OR_PGY2', 'FREE_JUNIOR', 'Surg 4'] },
-    peds: { label: 'Peds', chain: ['PEDS_OR_JUNIOR', 'FREE_JUNIOR', 'Surg 4', 'Surg 3'], note: 'All peds cases should be covered by a resident. If tight, ask the peds fellow.' },
+    peds: { label: 'Peds', chain: ['PEDS_OR_JUNIOR', 'FREE_JUNIOR', 'Surg 4', 'Surg 3'] },
     traumaPlasticsAddOn: { label: 'Trauma and plastics add-ons', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'] },
     remaining: { label: 'Remaining cases (chronological order)', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'] },
-    clinicCoverage: { label: 'PM clinic coverage', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5', 'WILLS_OR', 'RETINA'] }
+    clinicCoverage: { label: 'Clinic coverage', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5', 'WILLS_OR', 'RETINA'] }
   },
 
   schedulingNotes: [
