@@ -523,6 +523,8 @@ table.tbl { border-collapse: collapse; width: 100%; }
 
 .ref-note-list { padding-left: 20px; }
 .ref-note-list li { padding: 2px 0; }
+.ref-quote { font-style: italic; color: var(--muted); font-size: 15px; margin: 2px 2px 14px; }
+.ref-para { margin: 0; line-height: 1.5; }
 .grid-tbl td { font-size: 12.5px; }
 .grid-tbl .g-line { white-space: nowrap; }
 .grid-tbl .g-line + .g-line { margin-top: 2px; }

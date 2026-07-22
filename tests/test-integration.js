@@ -409,6 +409,48 @@ contains(html3, '<b>Bair; Calotti</b> to cover glaucoma clinic',
   'html: assigned+backup bolded together, note plain');
 
 /* ================================================================== */
+/* (5) PowerPoint how-to refinements                                         */
+
+function firstSuggestion(caseObj) {
+  var res = Assign.suggest([caseObj], roster, DATA);
+  return res && res[0];
+}
+
+// Overflow / add-on cataract -> Surg 2 (Calotti) first.
+var ovfl = { id: 'p1', section: 'wills', surgeon: 'X', count: 1, serviceCount: 1,
+  start: '1400', category: 'cataract', addOn: true, notes: '', assigned: '', backup: '', backupNote: '' };
+var s1 = firstSuggestion(ovfl);
+ok(s1 && s1.name === 'Calotti', 'pptx: overflow/add-on cataract goes to Surg 2 (Calotti) first');
+
+// Add-on at JHN/Gibbon/JSC -> Surg 2 first regardless of category.
+var jhnAdd = Object.assign({}, ovfl, { id: 'p2', section: 'jhn', category: 'plastics' });
+ok(Assign.classify(jhnAdd) === 'jhnAddOn', 'pptx: JHN add-on classifies as jhnAddOn');
+var s2 = firstSuggestion(jhnAdd);
+ok(s2 && s2.name === 'Calotti', 'pptx: JHN/Gibbon/JSC add-on goes to Surg 2 (Calotti) first');
+
+// Plastics add-on AT WILLS -> junior on Plastics OR first (Camacho, 4th-Wed
+// Plastics OR); real trauma skips the junior and starts at Surg 2.
+var plAdd = Object.assign({}, ovfl, { id: 'p3', section: 'wills', category: 'plastics' });
+var s3 = firstSuggestion(plAdd);
+ok(s3 && s3.name === 'Camacho', 'pptx: plastics add-on (TAB/outpatient) goes to the junior on Plastics OR');
+var trAdd = Object.assign({}, ovfl, { id: 'p4', section: 'wills', category: 'trauma' });
+var s4 = firstSuggestion(trAdd);
+ok(s4 && s4.name === 'Calotti', 'pptx: trauma add-on skips the Plastics OR junior and goes to Surg 2');
+
+// Add-on cornea/glaucoma now fall back to Surg 2 in the chain.
+var agAdd = Object.assign({}, ovfl, { id: 'p5', category: 'glaucoma' });
+var s5 = firstSuggestion(agAdd);
+ok(s5 && s5.name === 'Bair' && s5.alternates.indexOf('Calotti') !== -1,
+  'pptx: add-on glaucoma -> Surg 4 with Surg 2 as fallback alternate');
+
+// Scheduled plastics chain now ends at Surg 2.
+ok((DATA.hierarchy.scheduledPlastics.chain || []).slice(-1)[0] === 'Surg 2',
+  'pptx: scheduled plastics chain ends at Surg 2');
+// Scheduled cataracts include Wills OR.
+ok((DATA.hierarchy.scheduledCataract.chain || []).indexOf('WILLS_OR') !== -1,
+  'pptx: scheduled cataract chain includes Wills OR');
+
+/* ================================================================== */
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures > 0) process.exit(1);
 console.log('OK');

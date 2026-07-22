@@ -30,8 +30,11 @@
     var cat = (caseObj && caseObj.category) || '';
     var addOn = !!(caseObj && caseObj.addOn);
     if (cat === 'peds') return 'peds';
+    // Add-ons at JHN/Gibbon/Jeff Surgicenter go to Surg 2 first.
+    if (addOn && caseObj && caseObj.section === 'jhn') return 'jhnAddOn';
     if (cat === 'cornea' && addOn) return 'addOnCornea';
     if (cat === 'glaucoma' && addOn) return 'addOnGlaucoma';
+    if (cat === 'cataract' && addOn) return 'addOnCataract';
     if (cat === 'trauma' || (cat === 'plastics' && addOn)) return 'traumaPlasticsAddOn';
     if (cat === 'plastics') return 'scheduledPlastics';
     if (cat === 'cornea') return 'scheduledCornea';
@@ -157,6 +160,12 @@
       });
       return { label: 'PGY-2 on Plastics OR', names: firsts.map(function (p) { return p.name; }) };
     }
+    if (token === 'PLASTICS_OR_JUNIOR') {
+      var pj = orBlockPeople(roster, 'Plastics OR').filter(function (p) {
+        return p.year === 'pgy2' || p.year === 'pgy3';
+      });
+      return { label: 'junior on Plastics OR (TABs / outpatient plastics only)', names: pj.map(function (p) { return p.name; }) };
+    }
     if (token === 'FREE_JUNIOR') {
       // Can't compute "willing" — never a primary suggestion, only an alternate.
       return { label: FREE_JUNIOR_LABEL, names: [], freeJunior: true };
@@ -206,7 +215,8 @@
 
   function processGroup(key) {
     if (key === 'remaining') return 2;
-    if (key === 'addOnCornea' || key === 'addOnGlaucoma' || key === 'traumaPlasticsAddOn') return 1;
+    if (key === 'addOnCornea' || key === 'addOnGlaucoma' || key === 'addOnCataract' ||
+        key === 'jhnAddOn' || key === 'traumaPlasticsAddOn') return 1;
     return 0; // peds + scheduled specialty + plastics + cataract
   }
 
@@ -255,7 +265,13 @@
       }
 
       var hier = hierarchy[entry.key] || { label: entry.key, chain: [] };
-      var candidates = resolveChain(hier.chain, roster);
+      var chain = hier.chain || [];
+      // The junior on Plastics OR takes only TABs / outpatient plastics
+      // add-ons — real trauma skips them and starts at Surg 2.
+      if (entry.key === 'traumaPlasticsAddOn' && c.category === 'trauma') {
+        chain = chain.filter(function (t) { return t !== 'PLASTICS_OR_JUNIOR'; });
+      }
+      var candidates = resolveChain(chain, roster);
 
       var primary = null;
       var alternates = [];

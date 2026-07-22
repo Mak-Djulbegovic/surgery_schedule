@@ -358,25 +358,56 @@ const SCHED_DATA = {
   //   WILLS_OR         = resident on Wills OR block
   //   RETINA           = resident on Retina block
   hierarchy: {
-    scheduledCataract: { label: 'Scheduled cataracts', chain: ['Surg 1', 'Surg 5'], note: 'Assign per the master cataract schedule.' },
-    scheduledCornea: { label: 'Scheduled cornea', chain: ['Surg 3'] },
-    scheduledGlaucoma: { label: 'Scheduled glaucoma', chain: ['Surg 4'] },
-    addOnCornea: { label: 'Add-on cornea (incl. trauma requiring tissue)', chain: ['Surg 3'] },
-    addOnGlaucoma: { label: 'Add-on glaucoma', chain: ['Surg 4'] },
-    scheduledPlastics: { label: 'Scheduled plastics (incl. Gibbon/JHN)', chain: ['PLASTICS_OR_PGY2', 'FREE_JUNIOR', 'Surg 4'] },
-    peds: { label: 'Peds', chain: ['PEDS_OR_JUNIOR', 'FREE_JUNIOR', 'Surg 4', 'Surg 3'] },
-    traumaPlasticsAddOn: { label: 'Trauma and plastics add-ons', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'] },
+    scheduledCataract: { label: 'Scheduled cataracts', chain: ['Surg 1', 'Surg 5', 'WILLS_OR'], note: 'Assign per the surgical block schedule on the lounge wall; check NextGen and Cerner to delineate service vs private. PGY-3s join Wills OR cataracts Tue/Thu.' },
+    addOnCataract: { label: 'Overflow / add-on cataracts', chain: ['Surg 2', 'Surg 1', 'Surg 5', 'WILLS_OR'], note: 'Surg 2 is the first to get overflow cataracts if available.' },
+    scheduledCornea: { label: 'Scheduled cornea', chain: ['Surg 3'], note: 'Surg 3 should know scheduled cases and reach out to the operating attending beforehand.' },
+    scheduledGlaucoma: { label: 'Scheduled glaucoma', chain: ['Surg 4'], note: 'Surg 4 should know scheduled cases and reach out to the operating attending beforehand.' },
+    addOnCornea: { label: 'Add-on cornea (incl. trauma requiring tissue)', chain: ['Surg 3', 'Surg 2'], note: 'Emergent PKP / ruptures needing new corneal tissue go to cornea; Surg 2 next up if the subspecialty resident is not available.' },
+    addOnGlaucoma: { label: 'Add-on glaucoma', chain: ['Surg 4', 'Surg 2'], note: 'Tubes go to glaucoma; Surg 2 next up if the subspecialty resident is not available.' },
+    scheduledPlastics: { label: 'Scheduled plastics (incl. Gibbon/JHN)', chain: ['PLASTICS_OR_PGY2', 'FREE_JUNIOR', 'Surg 4', 'Surg 2'], note: 'Run the master daily schedule for JHN/Gibbon and specifically check for combo cases with Wills attendings.' },
+    peds: { label: 'Peds', chain: ['PEDS_OR_JUNIOR', 'FREE_JUNIOR', 'Surg 4', 'Surg 3'], note: 'Strabismus requires a resident — juniors on Peds get priority; schedule a senior backup if cases may run into evening clinic. Non-strab peds cases do not require coverage but attendings prefer one. If short, check with the Peds fellow.' },
+    traumaPlasticsAddOn: { label: 'Trauma and plastics add-ons', chain: ['PLASTICS_OR_JUNIOR', 'Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'], note: 'The junior on Plastics OR takes only TABs and add-on outpatient plastics; trauma goes to Surg 2 first (unless corneal tissue is needed — then cornea).' },
+    jhnAddOn: { label: 'Add-ons at JHN/Gibbon/Jeff Surgicenter', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'], note: 'Add-on cases at JHN/Gibbon/JSC go to Surg 2 first if available.' },
     remaining: { label: 'Remaining cases (chronological order)', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'] },
-    clinicCoverage: { label: 'Clinic coverage', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5', 'WILLS_OR', 'RETINA'] }
+    clinicCoverage: { label: 'Clinic coverage', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5', 'WILLS_OR', 'RETINA'], note: 'The PM clinic manager is helpful with clinic assignments.' }
   },
 
   schedulingNotes: [
     'Surg 2 is the boss. Give them some grace when things get busy.',
-    'All strabismus cases require a resident.',
+    'Surg 2 is first for trauma (not requiring corneal tissue).',
+    'Add-on cases at Wills go to the resident on the subspecialty block if available (tubes → glaucoma; emergent PKP / ruptures requiring new corneal tissue → cornea); Surg 2 next up if the subspecialty resident is not available.',
+    'Add-on cases at JHN/Gibbon/Jeff Surgicenter go to Surg 2 first if available.',
+    'Surg 2 is the first to get overflow cataracts if available.',
+    'Strabismus cases require a resident — 1st and 2nd years on Peds get priority, but schedule a senior backup if cases may run over into evening clinic.',
+    'Other peds cases (non-strab) do not require resident coverage, but attendings prefer to have one.',
     'Ayres pterygiums require a resident.',
-    'JP Dunn cases are service.',
-    'If the patient has not rolled back to the OR by 4:30, it can be passed to the call person.'
+    'JP Dunn cases are service at the START of the year (first and fourth Fridays).',
+    'Enucleations / eviscerations / TABs / lid procedures can go to free 1st and 2nd years.',
+    'If the patient has not rolled back to the OR by 4:30, it can be passed to the call person.',
+    'For urgent call-outs or coverage issues (especially during MYF, AAO, etc.), involve the chiefs.'
   ],
+
+  postOpNotes: [
+    'The operating third year is responsible for cataract post-ops until POM1.',
+    'Subspecialty plastics, cornea, and glaucoma post-ops: about 1 week if uncomplicated — may be attending dependent.',
+    'Keep a tight schedule of your post-ops — a common point of contention with clinic managers, and patients sometimes show up at random times/days/weeks.'
+  ],
+
+  caseSourcesNote: 'Which cases am I actually doing? Compare all three and take the overlap: the NextGen "CPEC surgery" filter (probably the most accurate, but sometimes not), the CPEC surgical block schedule on the lounge wall (the key — NextGen occasionally lists cases under the wrong resident), and the packets (mildly accurate).',
+
+  cataractPrep: [
+    'Do lens calcs and send to the attending 1 week before surgery (consider the NextGen surgical sign-up template).',
+    'Put the lens order request in Cerner at least 3 days before the surgical date.',
+    'Call patients before surgery — especially monovision, near aim, missing testing, or high-maintenance (a Google Voice number helps).',
+    'Prepare copies of post-op drop instructions (for Stadium and Cherry Hill).',
+    'Make sure the POD1 visit is scheduled at a time you can actually see them.',
+    'Bring your hard drive and packets on the day of surgery (packets live in Kris Davis’ office in CPEC; the cover page is the lens order sheet).',
+    'Cherry Hill (Markovitz): Loida emails packets with the IOL Master; do calcs from ModMed (first-eye “green sheet” under attachments); send calcs to Markovitz; fax the lens selection sheet to Cherry Hill.',
+    'Cooper (Markovitz): send calcs to Markovitz; no fax needed — lenses are sent to Cooper in advance; bring any torics from Wills (multiple options if between lenses).',
+    'Stadium: same prep as other Wills cases; fax lens selection sheets at least 3 days ahead — longer for non-standard lenses (high torics, unusual powers).'
+  ],
+
+  quote: '“The Surg schedule makes itself, Surg 2 just enforces it.” — Pat Rapuano',
 
   // Attending clinic patterns (2nd-year page): shown as day-context info.
   specialClinics: [

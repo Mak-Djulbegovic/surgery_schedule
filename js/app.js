@@ -1056,6 +1056,10 @@
     clearNode(host);
     var d = data();
 
+    if (d.quote) {
+      host.appendChild(el('p', { class: 'ref-quote', text: d.quote }));
+    }
+
     // Hierarchy chains
     var hCard = refCard('Case-assignment hierarchy');
     var hTbl = el('table', { class: 'tbl' });
@@ -1090,11 +1094,36 @@
     host.appendChild(sCard);
 
     // Scheduling notes
-    var nCard = refCard('Scheduling notes');
+    var nCard = refCard('Things to keep in mind');
     var ul = el('ul', { class: 'ref-note-list' });
     (d.schedulingNotes || []).forEach(function (n) { ul.appendChild(el('li', { text: n })); });
     nCard.appendChild(ul);
     host.appendChild(nCard);
+
+    // Post-ops
+    if ((d.postOpNotes || []).length) {
+      var pCard = refCard('Post-ops');
+      var pUl = el('ul', { class: 'ref-note-list' });
+      d.postOpNotes.forEach(function (n) { pUl.appendChild(el('li', { text: n })); });
+      pCard.appendChild(pUl);
+      host.appendChild(pCard);
+    }
+
+    // Which cases am I actually doing?
+    if (d.caseSourcesNote) {
+      var csCard = refCard('Finding your case list');
+      csCard.appendChild(el('p', { class: 'ref-para', text: d.caseSourcesNote }));
+      host.appendChild(csCard);
+    }
+
+    // PGY-4 cataract prep checklist
+    if ((d.cataractPrep || []).length) {
+      var cpCard = refCard('PGY-4 cataract prep checklist');
+      var cpUl = el('ul', { class: 'ref-note-list' });
+      d.cataractPrep.forEach(function (n) { cpUl.appendChild(el('li', { text: n })); });
+      cpCard.appendChild(cpUl);
+      host.appendChild(cpCard);
+    }
 
     // Special clinics
     var scCard = refCard('Attending clinic patterns');
