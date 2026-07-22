@@ -26,17 +26,22 @@
     <div class="day-chips" id="dayChips"></div>
     <div class="header-actions">
       <button type="button" class="btn btn-primary" id="btnCreate">Create Surg Schedule</button>
-      <button type="button" class="btn" id="btnYesterday">Start from yesterday</button>
-      <button type="button" class="btn btn-danger" id="btnClear">Clear day</button>
+      <details class="more-menu" id="moreMenu">
+        <summary title="More actions">⋯</summary>
+        <div class="menu-pop">
+          <button type="button" class="btn" id="btnYesterday">Start from yesterday</button>
+          <button type="button" class="btn btn-danger" id="btnClear">Clear day</button>
+        </div>
+      </details>
     </div>
   </div>
 </header>
 
 <nav class="tabbar" id="tabbar" role="tablist" aria-label="Sections">
-  <button type="button" class="tab active" data-tab="roster" role="tab">Day Roster</button>
-  <button type="button" class="tab" data-tab="cases" role="tab">Cases &amp; Clinics</button>
-  <button type="button" class="tab" data-tab="assign" role="tab">Assign</button>
-  <button type="button" class="tab" data-tab="preview" role="tab">Preview &amp; Copy</button>
+  <button type="button" class="tab active" data-tab="roster" role="tab"><span class="tab-num">1</span>Day Roster</button>
+  <button type="button" class="tab" data-tab="cases" role="tab"><span class="tab-num">2</span>Cases &amp; Clinics</button>
+  <button type="button" class="tab" data-tab="assign" role="tab"><span class="tab-num">3</span>Assign</button>
+  <button type="button" class="tab" data-tab="preview" role="tab"><span class="tab-num">4</span>Preview &amp; Copy</button>
   <button type="button" class="tab" data-tab="reference" role="tab">Reference</button>
   <span class="tabbar-spacer"></span>
   <button type="button" class="btn btn-small btn-primary tab-update" id="btnUpdate"
@@ -47,24 +52,21 @@
   <div id="dayBanner" class="banner hidden"></div>
 
   <section class="panel active" id="panel-roster">
-    <div class="layout-2col">
-      <div class="col">
-        <div class="card">
-          <h2>Resident day roster <span class="h-note">auto-generated from the block schedule</span></h2>
-          <div id="rosterGrid"></div>
-        </div>
+    <div class="card glance-card">
+      <div class="glance-head">
+        <h2>Today at a glance <span class="h-note">auto-generated from the block schedule</span></h2>
+        <div class="glance-chips" id="glanceChips"></div>
       </div>
-      <div class="col col-side">
-        <div class="card">
-          <h2>Derived summary</h2>
-          <div id="rosterSummary"></div>
-        </div>
-        <div class="card">
-          <h2>Manual entries <span class="h-note">saved automatically per date</span></h2>
-          <div id="manualInputs"></div>
-        </div>
-      </div>
+      <div id="rosterSummary"></div>
     </div>
+    <div class="card">
+      <h2>Day details <span class="h-note">night float, add-ons, vacation — saved automatically</span></h2>
+      <div id="manualInputs" class="manual-grid"></div>
+    </div>
+    <details class="card collapse-card">
+      <summary>Full resident roster <span class="h-note">every resident's AM/PM block assignment for this date</span></summary>
+      <div id="rosterGrid"></div>
+    </details>
   </section>
 
   <section class="panel" id="panel-cases">

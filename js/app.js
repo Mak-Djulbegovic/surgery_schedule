@@ -329,12 +329,6 @@
     var r = App.roster;
     if (!r) return;
     chips.appendChild(chipEl(ordinal(r.nth) + ' ' + r.weekdayLabel, 'chip-day'));
-    if (r.taskmasters && r.taskmasters.length) {
-      chips.appendChild(chipEl('Taskmaster: ' + r.taskmasters.join(' & '), 'chip-task'));
-    }
-    (r.specialClinicsToday || []).forEach(function (sc) {
-      chips.appendChild(chipEl(sc, 'chip-special'));
-    });
 
     var banner = $('dayBanner');
     if (r.isWeekend) {
@@ -421,28 +415,57 @@
     return parts.join(', ');
   }
 
+  function glanceKV(k, v) {
+    return el('span', { class: 'glance-kv' }, [
+      el('span', { class: 'k', text: k }),
+      el('b', { text: v })
+    ]);
+  }
+
   function renderSummary() {
     var host = $('rosterSummary');
     clearNode(host);
     var r = App.roster;
-    var list = el('div', { class: 'summary-list' });
-    var surgKeys = Object.keys(r.surg || {}).sort(function (a, b) { return (+a) - (+b); });
     var meta = data().surgRoleMeta || {};
+
+    var chips = $('glanceChips');
+    if (chips) {
+      clearNode(chips);
+      (r.specialClinicsToday || []).forEach(function (sc) {
+        chips.appendChild(chipEl(sc, 'chip-special'));
+      });
+    }
+
+    var surgKeys = Object.keys(r.surg || {}).sort(function (a, b) { return (+a) - (+b); });
+    if (!surgKeys.length) {
+      host.appendChild(el('p', { class: 'empty-note', text: 'Nothing derived for this date — pick a weekday inside the academic year, then press Create Surg Schedule.' }));
+      return;
+    }
+
+    var grid = el('div', { class: 'glance-grid' });
     surgKeys.forEach(function (n) {
       var s = r.surg[n];
-      var sessions = (s.am && s.pm) ? '' : (s.am ? ' (AM only)' : (s.pm ? ' (PM only)' : ''));
-      var val = el('span', {}, [s.name + sessions + ' ']);
-      if (meta['Surg ' + n]) val.appendChild(el('span', { class: 'sub', text: '— ' + meta['Surg ' + n] }));
-      list.appendChild(summaryItem('Surg ' + n, val));
+      var tile = el('div', { class: 'glance-tile' }, [
+        el('div', { class: 'glance-role', text: 'Surg ' + n }),
+        el('div', { class: 'glance-name', text: s.name })
+      ]);
+      if (s.am && !s.pm) tile.appendChild(el('div', { class: 'glance-sess', text: 'AM only · PM: ' + (s.pmText || '—') }));
+      else if (s.pm && !s.am) tile.appendChild(el('div', { class: 'glance-sess', text: 'PM only · AM: ' + (s.amText || '—') }));
+      var m = meta['Surg ' + n];
+      if (m) tile.appendChild(el('div', { class: 'glance-sub', text: m.split(';')[0] }));
+      grid.appendChild(tile);
     });
+    host.appendChild(grid);
+
+    var row = el('div', { class: 'glance-row' });
     var wer = collapseWerLocal(r.wer);
-    if (wer) list.appendChild(summaryItem('WER', el('span', { text: wer })));
-    if ((r.jeffConsults || []).length) list.appendChild(summaryItem('Jeff Consults', el('span', { text: r.jeffConsults.join(', ') })));
-    if ((r.cooperConsults || []).length) list.appendChild(summaryItem('Cooper Consults', el('span', { text: r.cooperConsults.join(', ') })));
-    if ((r.dayFloat || []).length) list.appendChild(summaryItem('Day Float', el('span', { text: r.dayFloat.join(', ') })));
-    if ((r.taskmasters || []).length) list.appendChild(summaryItem('Taskmaster', el('span', { text: r.taskmasters.join(' & ') })));
-    if (!list.firstChild) list.appendChild(el('p', { class: 'empty-note', text: 'Nothing derived for this date.' }));
-    host.appendChild(list);
+    if (wer) row.appendChild(glanceKV('WER', wer));
+    row.appendChild(glanceKV('Night Float', trim(App.state && App.state.nightFloat) || '—'));
+    if ((r.jeffConsults || []).length) row.appendChild(glanceKV('Jeff Consults', r.jeffConsults.join(', ')));
+    if ((r.cooperConsults || []).length) row.appendChild(glanceKV('Cooper Consults', r.cooperConsults.join(', ')));
+    if ((r.dayFloat || []).length) row.appendChild(glanceKV('Day Float', r.dayFloat.join(', ')));
+    if ((r.taskmasters || []).length) row.appendChild(glanceKV('Taskmaster', r.taskmasters.join(' & ')));
+    host.appendChild(row);
   }
 
   function labeledField(labelText, control, hint) {
@@ -474,7 +497,7 @@
     host.appendChild(labeledField('Lectures / Events', lectures));
 
     var nf = el('input', { type: 'text', placeholder: 'resident name', value: st.nightFloat });
-    nf.addEventListener('input', function () { st.nightFloat = nf.value; touch(); });
+    nf.addEventListener('input', function () { st.nightFloat = nf.value; touch(); renderSummary(); });
     host.appendChild(labeledField('Night Float', nf));
 
     var buddies = el('div', {}, [
@@ -488,7 +511,9 @@
     vac.addEventListener('input', function () { st.vacation = vac.value; touch(); });
     host.appendChild(labeledField('Vacation', vac));
 
-    host.appendChild(labeledField('Add-ons (call coverage)', addOnsEditor()));
+    var addOnsField = labeledField('Add-ons (call coverage)', addOnsEditor());
+    addOnsField.classList.add('field-wide');
+    host.appendChild(addOnsField);
   }
 
   // Shared add-ons editor — rendered on both the Day Roster tab and the
@@ -1316,8 +1341,16 @@
 
     $('btnCreate').addEventListener('click', createSchedule);
     $('btnUpdate').addEventListener('click', updateSync);
-    $('btnYesterday').addEventListener('click', startFromYesterday);
-    $('btnClear').addEventListener('click', clearDay);
+    function closeMoreMenu() {
+      var m = $('moreMenu');
+      if (m) m.removeAttribute('open');
+    }
+    $('btnYesterday').addEventListener('click', function () { closeMoreMenu(); startFromYesterday(); });
+    $('btnClear').addEventListener('click', function () { closeMoreMenu(); clearDay(); });
+    document.addEventListener('click', function (ev) {
+      var m = $('moreMenu');
+      if (m && m.hasAttribute('open') && !m.contains(ev.target)) m.removeAttribute('open');
+    });
     $('btnSuggestAll').addEventListener('click', suggestAll);
     $('btnAcceptAll').addEventListener('click', acceptAll);
 
