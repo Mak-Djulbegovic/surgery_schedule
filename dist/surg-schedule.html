@@ -67,7 +67,17 @@ button { font: inherit; color: inherit; }
   align-items: flex-start;
 }
 
-.brand { display: flex; align-items: center; gap: 10px; }
+/* The brand block is a button — clicking it returns to the Home view. */
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  border: none; background: none; padding: 2px 6px 2px 2px; margin: -2px 0 -2px -2px;
+  border-radius: 9px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.brand:hover { background: var(--accent-soft); }
+.brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .brand-mark {
   width: 38px; height: 38px;
@@ -80,7 +90,8 @@ button { font: inherit; color: inherit; }
   flex: none;
 }
 
-.brand-text h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+.brand-text { display: flex; flex-direction: column; }
+.brand-title { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); }
 .brand-sub { font-size: 12px; color: var(--muted); }
 
 .header-controls {
@@ -130,6 +141,92 @@ input[type="date"] {
 .chip-special { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-text); }
 
 .header-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; padding-bottom: 1px; }
+
+/* ---------------- Home landing view ---------------- */
+
+/* .home-active on <body> = landing mode: only the hero card is visible. */
+.home-view { display: none; }
+body.home-active .app-header,
+body.home-active .tabbar,
+body.home-active .app-main { display: none; }
+body.home-active .home-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: 28px 16px;
+}
+
+.home-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 14px 40px rgba(24, 39, 58, 0.10), var(--shadow);
+  max-width: 560px;
+  width: 100%;
+  padding: 38px 34px 30px;
+  text-align: center;
+}
+
+.home-mark { width: 54px; height: 54px; border-radius: 14px; margin-bottom: 14px; }
+.home-title { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.home-tagline { color: var(--muted); font-size: 14px; margin: 6px auto 24px; max-width: 400px; }
+
+.home-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  justify-content: center;
+  align-items: flex-end;
+}
+.home-date-field { text-align: left; }
+.home-date-field input { font-size: 15px; padding: 8px 10px; }
+.home-cta { font-size: 15px; padding: 9px 20px; border-radius: 8px; }
+.home-draft { flex-basis: 100%; margin: 0; color: var(--green-text); font-weight: 600; }
+
+.home-links {
+  margin-top: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  justify-content: center;
+  align-items: center;
+}
+.home-dot { color: var(--faint); }
+
+.btn-link {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.btn-link:hover { text-decoration: underline; }
+
+.home-recent {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+.home-recent-label {
+  flex-basis: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+}
+.chip-recent { cursor: pointer; }
+.chip-recent:hover { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
 
 /* ---------------- buttons ---------------- */
 
@@ -388,13 +485,82 @@ table.tbl { border-collapse: collapse; width: 100%; }
 .cell-text.is-surg { font-weight: 700; color: var(--accent); }
 .cell-note { font-size: 11.5px; color: var(--faint); font-style: italic; margin-top: 1px; }
 
-/* case-entry tables */
-.case-tbl input[type="text"] { width: 100%; min-width: 70px; }
-.case-tbl input[type="number"] { width: 60px; }
-.case-tbl select { width: 100%; min-width: 92px; }
-.case-tbl td.num { width: 64px; }
-.case-tbl td.actions { white-space: nowrap; text-align: right; width: 66px; }
-.case-tbl { min-width: 780px; }
+/* ---------------- case sections (details cards) ---------------- */
+
+.case-section > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+}
+.case-section > summary::-webkit-details-marker { display: none; }
+.case-section > summary::before { content: '▸'; color: var(--faint); font-size: 13px; flex: none; }
+.case-section[open] > summary::before { content: '▾'; }
+.case-section[open] > summary { margin-bottom: 12px; }
+.case-summary-title { font-weight: 700; font-size: 14.5px; letter-spacing: -0.005em; }
+.case-summary .btn { margin-left: auto; }
+
+.count-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--border-soft);
+  border-radius: 999px;
+  padding: 1px 9px;
+  white-space: nowrap;
+}
+
+.case-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+
+.case-card {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 64px 64px 84px minmax(120px, 150px) max-content max-content;
+  gap: 8px 10px;
+  align-items: end;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.case-card:last-child { margin-bottom: 0; }
+
+.mini-field { display: block; min-width: 0; }
+.mini-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+.mini-field input, .mini-field select { width: 100%; }
+.cf-notes { grid-column: 1 / -1; }
+
+.pill-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: #fff;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.pill-check input { margin: 0; accent-color: var(--amber-text); }
+.pill-check.on { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-text); }
+
+.cf-pill, .case-actions { align-self: end; padding-bottom: 3px; }
+.case-actions { white-space: nowrap; text-align: right; }
 
 /* ---------------- summary list ---------------- */
 
@@ -519,22 +685,77 @@ table.tbl { border-collapse: collapse; width: 100%; }
 
 /* ---------------- clinics ---------------- */
 
+/* Aligned on a grid: [label+session 170px] [staff chips 1fr] [count 90px] [note 1fr] */
 .clinic-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1.2fr) 90px minmax(0, 1fr);
   align-items: center;
-  gap: 8px 10px;
+  gap: 6px 10px;
   padding: 9px 2px;
   border-bottom: 1px solid var(--border-soft);
 }
 .clinic-row:last-child { border-bottom: none; }
-.clinic-label { flex: none; width: 168px; font-weight: 600; }
-.clinic-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; flex: 1; min-width: 220px; }
+.clinic-label { font-weight: 600; min-width: 0; }
+.clinic-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
 .clinic-add { width: 108px; font-size: 12px; padding: 3px 5px; }
-.clinic-count { width: 90px; }
-.clinic-extra { width: 170px; }
+.clinic-count { width: 100%; }
+.clinic-extra { width: 100%; }
 
 /* ---------------- assign tab ---------------- */
+
+.assign-filters { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-chip:hover { border-color: #c9d2dc; color: var(--text); }
+.filter-chip .filter-count {
+  background: var(--border-soft);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+}
+.filter-chip.active { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+.filter-chip.active .filter-count { background: var(--accent); color: #fff; }
+
+/* compact one-line rows for assigned / private cases */
+.assign-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.assign-row .row-check { color: var(--green-text); font-weight: 700; flex: none; }
+.assign-row .row-check.none { color: var(--faint); }
+.assign-row .row-title { font-weight: 600; }
+.assign-row .row-arrow { color: var(--faint); }
+.assign-row .row-assigned { font-weight: 700; }
+.assign-row .row-meta { color: var(--faint); font-size: 12px; }
+.assign-row .row-edit { margin-left: auto; }
+
+.assign-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.assign-empty .empty-note { padding: 0; }
+.assign-collapse { margin-left: auto; }
 
 .assign-card {
   background: var(--card);
@@ -617,6 +838,46 @@ table.tbl { border-collapse: collapse; width: 100%; }
 }
 .document b { font-weight: 700; }
 
+/* ---------------- how-to ---------------- */
+
+.howto-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.howto-step:last-child { border-bottom: none; padding-bottom: 2px; }
+.howto-num {
+  flex: none;
+  width: 26px; height: 26px; line-height: 26px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  margin-top: 1px;
+}
+.howto-step-body { flex: 1; min-width: 0; }
+.howto-step-title { font-weight: 700; }
+.howto-step-text { color: var(--muted); font-size: 13px; margin-top: 1px; }
+.howto-step .btn { flex: none; align-self: center; }
+
+.howto-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; }
+.howto-col h3 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  margin-bottom: 6px;
+}
+.howto-note { margin-top: 12px; }
+.howto-rules li { padding: 3px 0; }
+.howto-foot { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.howto-quote { margin: 12px 2px 0; }
+
 /* ---------------- reference ---------------- */
 
 .ref-note-list { padding-left: 20px; }
@@ -666,25 +927,59 @@ table.tbl { border-collapse: collapse; width: 100%; }
   .header-actions { margin-left: 0; }
   .layout-2col { grid-template-columns: 1fr; }
   .app-main { padding: 14px 12px 60px; }
-  .clinic-label { width: 100%; }
+  .clinic-row { grid-template-columns: 1fr; gap: 6px; }
   .summary-key { width: 96px; }
   .document { padding: 18px 16px; }
+  .home-card { padding: 28px 20px 24px; }
+  .howto-cols { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .case-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cf-surgeon { grid-column: 1 / -1; }
+  .cf-pill, .case-actions { padding-bottom: 0; }
 }
 
 </style>
 </head>
-<body>
+<body class="home-active">
+
+<div class="home-view" id="homeView">
+  <div class="home-card">
+    <div class="home-hero">
+      <span class="brand-mark home-mark" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+      </span>
+      <h1 class="home-title">Surg Schedule Builder</h1>
+      <p class="home-tagline">Builds the daily surgery schedule from the block schedules — you add the cases.</p>
+    </div>
+    <div class="home-form">
+      <label class="date-field home-date-field">
+        <span class="field-label">Schedule date</span>
+        <input type="date" id="homeDate">
+      </label>
+      <button type="button" class="btn btn-primary home-cta" id="btnHomeCreate">Create Surg Schedule →</button>
+      <p class="field-hint home-draft hidden" id="homeDraftHint"></p>
+    </div>
+    <div class="home-links">
+      <button type="button" class="btn-link" id="btnHomeHowto">How it works</button>
+      <span class="home-dot" aria-hidden="true">·</span>
+      <button type="button" class="btn-link" id="btnHomeReference">Block schedule reference</button>
+    </div>
+    <div class="home-recent hidden" id="homeRecent"></div>
+  </div>
+</div>
 
 <header class="app-header">
-  <div class="brand">
+  <button type="button" class="brand" id="btnBrandHome" title="Home">
     <span class="brand-mark" aria-hidden="true">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
     </span>
     <span class="brand-text">
-      <h1>Surg Schedule Builder</h1>
+      <span class="brand-title">Surg Schedule Builder</span>
       <span class="brand-sub" id="ayLabel"></span>
     </span>
-  </div>
+  </button>
   <div class="header-controls">
     <label class="date-field">
       <span class="field-label">Schedule date</span>
@@ -709,6 +1004,7 @@ table.tbl { border-collapse: collapse; width: 100%; }
   <button type="button" class="tab" data-tab="cases" role="tab"><span class="tab-num">2</span>Cases &amp; Clinics</button>
   <button type="button" class="tab" data-tab="assign" role="tab"><span class="tab-num">3</span>Assign</button>
   <button type="button" class="tab" data-tab="preview" role="tab"><span class="tab-num">4</span>Preview &amp; Copy</button>
+  <button type="button" class="tab" data-tab="howto" role="tab">How-to</button>
   <button type="button" class="tab" data-tab="reference" role="tab">Reference</button>
   <span class="tabbar-spacer"></span>
   <button type="button" class="btn btn-small btn-primary tab-update" id="btnUpdate"
@@ -752,6 +1048,7 @@ table.tbl { border-collapse: collapse; width: 100%; }
     <div class="toolbar card-lite">
       <button type="button" class="btn btn-primary" id="btnSuggestAll">Suggest all</button>
       <button type="button" class="btn" id="btnAcceptAll">Accept all suggestions</button>
+      <span class="assign-filters" id="assignFilters"></span>
       <span class="toolbar-note">Suggestions never auto-assign — accept per case, or all at once.</span>
     </div>
     <div class="layout-2col">
@@ -779,6 +1076,10 @@ table.tbl { border-collapse: collapse; width: 100%; }
       <span class="toolbar-note">Paste straight into email or chat — formatting is preserved.</span>
     </div>
     <div class="document card" id="previewDoc"></div>
+  </section>
+
+  <section class="panel" id="panel-howto">
+    <div id="howtoBody"></div>
   </section>
 
   <section class="panel" id="panel-reference">
@@ -1209,7 +1510,28 @@ const SCHED_DATA = {
     { label: 'Pemphigoid Clinic', day: 'fri', session: 'all', nth: [3] },
     { label: 'Wasserman Clinic', day: 'thu', session: 'pm', nth: [3] },
     { label: 'Schnall Clinic', day: 'fri', session: 'am', nth: [2, 4] }
-  ]
+  ],
+
+  // Cooper buddy call — from the "Cooper Buddy Call 2026-2027" PDF.
+  buddyCall: {
+    note: 'Cooper buddy call — senior buddy for the Cooper consult PGY-2. Later blocks TBD; the weekly template shows which rotation the buddy is pulled from.',
+    template: {
+      am: { mon: 'Retina', tue: 'Wills OR (B3)', wed: 'Private Glaucoma', thu: 'Cooper', fri: 'Cooper OR' },
+      pm: { mon: 'Retina', tue: 'Wills OR (B3)', wed: 'Retina', thu: 'Cooper (PGY-4)', fri: 'PT (B6)' }
+    },
+    ranges: [
+      {
+        start: '2026-07-20', end: '2026-08-09',
+        am: { mon: 'DeSimone', tue: 'Williamson', wed: 'Camacho', thu: 'Nahar', fri: 'Nahar' },
+        pm: { mon: 'DeSimone', tue: 'Williamson', wed: 'DeSimone', thu: 'Shields', fri: 'Perez' }
+      },
+      {
+        start: '2026-08-10', end: '2026-08-30',
+        am: { mon: 'DeSimone', tue: 'Williamson', wed: 'Camacho', thu: 'Nahar', fri: 'Nahar' },
+        pm: { mon: 'DeSimone', tue: 'Williamson', wed: 'DeSimone', thu: 'Aguwa', fri: 'Perez' }
+      }
+    ]
+  }
 };
 
 if (typeof window !== 'undefined') window.SCHED_DATA = SCHED_DATA;
@@ -1310,7 +1632,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       taskmasters: [],
       clinics: {},
       orBlocks: {},
-      specialClinicsToday: []
+      specialClinicsToday: [],
+      cooperBuddies: { am: null, pm: null, templateAM: null, templatePM: null }
     };
   }
 
@@ -1420,6 +1743,25 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       if (sc.day !== weekdayKey) continue;
       if (sc.nth && sc.nth.indexOf(nth) === -1) continue;
       day.specialClinicsToday.push(sc.label + sessionSuffix(sc.session));
+    }
+
+    // Cooper buddy call: template rotation by weekday; named buddy from the
+    // range containing this date (ISO string compare), if any. Weekend /
+    // out-of-year days never reach this point and keep all-null values.
+    var bc = data.buddyCall;
+    if (bc) {
+      var tmpl = bc.template || {};
+      day.cooperBuddies.templateAM = (tmpl.am && tmpl.am[weekdayKey]) || null;
+      day.cooperBuddies.templatePM = (tmpl.pm && tmpl.pm[weekdayKey]) || null;
+      var bcRanges = bc.ranges || [];
+      for (var bi = 0; bi < bcRanges.length; bi++) {
+        var br = bcRanges[bi];
+        if (br.start <= dateISO && dateISO <= br.end) {
+          day.cooperBuddies.am = (br.am && br.am[weekdayKey]) || null;
+          day.cooperBuddies.pm = (br.pm && br.pm[weekdayKey]) || null;
+          break;
+        }
+      }
     }
 
     return day;
@@ -1920,12 +2262,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
 
   function buddyPart(b, sess) {
     if (!b || !trim(b.name)) return '';
-    var t = trim(b.name);
+    var t = trim(b.name) + ' ' + sess;
     if (trim(b.note)) t += ' (' + trim(b.note) + ')';
-    return t + ' ' + sess;
+    return t;
   }
 
-  // 'Illiano + buddy [Camacho AM | DeSimone PM]'
+  // 'Illiano + buddy [Camacho AM (private glaucoma) | DeSimone PM (retina)]'
   function cooperText(roster, day) {
     var cooper = (roster.cooperConsults || []);
     if (!cooper.length) return '';
@@ -2326,6 +2668,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     activeTab: 'roster'
   };
 
+  // Local UI state — never persisted.
+  var assignFilter = 'needs';                 // 'needs' | 'assigned' | 'all'
+  var assignExpanded = {};                    // caseId -> true (compact row expanded inline)
+  var caseSectionOpen = { wills: true, private: true, jhn: true, other: true };
+
   function data() { return window.SCHED_DATA; }
 
   /* ------------------------------------------------------------------ */
@@ -2606,15 +2953,51 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   }
 
   function computeRoster() {
+    App.roster = null;
     try {
       if (window.Engine && window.Engine.resolveDay) {
         App.roster = window.Engine.resolveDay(App.state.date, data());
-        return;
       }
     } catch (e) {
       if (window.console) console.error('resolveDay failed', e);
     }
-    App.roster = emptyRoster(App.state.date);
+    if (!App.roster) App.roster = emptyRoster(App.state.date);
+    prefillBuddies();
+  }
+
+  /* Cooper buddy prefill (buddy call schedule) — roster.cooperBuddies may be
+     absent (older engine.js); guard everything. Never overwrite a non-empty
+     user value: prefill only when BOTH name and note are empty. */
+
+  function prefillBuddies() {
+    var st = App.state;
+    var r = App.roster;
+    if (!st || !r || !r.cooperBuddies) return;
+    var cb = r.cooperBuddies;
+    var am = st.cooperBuddyAM || (st.cooperBuddyAM = { name: '', note: '' });
+    var pm = st.cooperBuddyPM || (st.cooperBuddyPM = { name: '', note: '' });
+    if (cb.am && !trim(am.name) && !trim(am.note)) {
+      st.cooperBuddyAM = { name: String(cb.am), note: String(cb.templateAM || '').toLowerCase() };
+    }
+    if (cb.pm && !trim(pm.name) && !trim(pm.note)) {
+      st.cooperBuddyPM = { name: String(cb.pm), note: String(cb.templatePM || '').toLowerCase() };
+    }
+  }
+
+  function buddyMatchesPrefill(b, name, template) {
+    return !!name && !!b && trim(b.name) === String(name) &&
+      trim(b.note) === trim(String(template || '').toLowerCase());
+  }
+
+  // True while the buddy fields still hold exactly the buddy-call values —
+  // survives reloads, disappears as soon as the user edits either field.
+  function buddiesAutoFilled() {
+    var st = App.state;
+    var r = App.roster;
+    if (!st || !r || !r.cooperBuddies) return false;
+    var cb = r.cooperBuddies;
+    return buddyMatchesPrefill(st.cooperBuddyAM, cb.am, cb.templateAM) ||
+      buddyMatchesPrefill(st.cooperBuddyPM, cb.pm, cb.templatePM);
   }
 
   /* ------------------------------------------------------------------ */
@@ -2761,7 +3144,18 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     if (wer) row.appendChild(glanceKV('WER', wer));
     row.appendChild(glanceKV('Night Float', trim(App.state && App.state.nightFloat) || '—'));
     if ((r.jeffConsults || []).length) row.appendChild(glanceKV('Jeff Consults', r.jeffConsults.join(', ')));
-    if ((r.cooperConsults || []).length) row.appendChild(glanceKV('Cooper Consults', r.cooperConsults.join(', ')));
+    if ((r.cooperConsults || []).length) {
+      // 'Illiano + Camacho AM / DeSimone PM' when buddies are set (from state)
+      var cooperVal = r.cooperConsults.join(', ');
+      var st = App.state || {};
+      var buddyBits = [];
+      var amName = trim(st.cooperBuddyAM && st.cooperBuddyAM.name);
+      var pmName = trim(st.cooperBuddyPM && st.cooperBuddyPM.name);
+      if (amName) buddyBits.push(amName + ' AM');
+      if (pmName) buddyBits.push(pmName + ' PM');
+      if (buddyBits.length) cooperVal += ' + ' + buddyBits.join(' / ');
+      row.appendChild(glanceKV('Cooper Consults', cooperVal));
+    }
     if ((r.dayFloat || []).length) row.appendChild(glanceKV('Day Float', r.dayFloat.join(', ')));
     if ((r.taskmasters || []).length) row.appendChild(glanceKV('Taskmaster', r.taskmasters.join(' & ')));
     host.appendChild(row);
@@ -2778,11 +3172,24 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   function buddyRow(sess, buddy) {
     var row = el('div', { class: 'buddy-row' });
     row.appendChild(el('span', { class: 'buddy-session', text: sess }));
-    row.appendChild(residentSelect(buddy.name, function (v) { buddy.name = v; touch(); }, 'buddy…'));
+    row.appendChild(residentSelect(buddy.name, function (v) {
+      buddy.name = v;
+      touch();
+      renderSummary();
+      updateBuddyHint();
+    }, 'buddy…'));
     var note = el('input', { type: 'text', placeholder: 'note (e.g. private glaucoma)', value: buddy.note });
-    note.addEventListener('input', function () { buddy.note = note.value; touch(); });
+    note.addEventListener('input', function () { buddy.note = note.value; touch(); updateBuddyHint(); });
     row.appendChild(note);
     return row;
+  }
+
+  function updateBuddyHint() {
+    var n = $('buddyHint');
+    if (!n) return;
+    var on = buddiesAutoFilled();
+    n.textContent = on ? 'auto-filled from the buddy call schedule — edit freely' : '';
+    n.classList.toggle('hidden', !on);
   }
 
   function renderManualInputs() {
@@ -2803,7 +3210,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       buddyRow('AM', st.cooperBuddyAM),
       buddyRow('PM', st.cooperBuddyPM)
     ]);
-    host.appendChild(labeledField('Cooper buddies', buddies));
+    var buddiesField = labeledField('Cooper buddies', buddies);
+    buddiesField.appendChild(el('span', { class: 'field-hint hidden', id: 'buddyHint' }));
+    host.appendChild(buddiesField);
+    updateBuddyHint();
 
     var vac = el('textarea', { rows: '2', placeholder: '24 strong' });
     vac.value = st.vacation;
@@ -2922,60 +3332,94 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return inp;
   }
 
-  function caseTable(list) {
-    var tbl = el('table', { class: 'tbl case-tbl' });
-    tbl.appendChild(el('thead', {}, [el('tr', {}, [
-      el('th', { text: 'Surgeon' }), el('th', { text: 'Cases' }), el('th', { text: 'Service' }),
-      el('th', { text: 'Start' }), el('th', { text: 'Category' }), el('th', { text: 'Add-on' }),
-      el('th', { text: 'Notes' }), el('th', { text: '' })
-    ])]));
-    var tbody = el('tbody');
-    list.forEach(function (c) {
-      var addOn = el('input', { type: 'checkbox' });
-      addOn.checked = c.addOn;
-      addOn.addEventListener('change', function () { c.addOn = addOn.checked; touch(); });
-      var cat = el('select');
-      CATEGORIES.forEach(function (k) { cat.appendChild(el('option', { value: k, text: k })); });
-      cat.value = c.category;
-      cat.addEventListener('change', function () { c.category = cat.value; touch(); });
-      tbody.appendChild(el('tr', {}, [
-        el('td', {}, [textInput(c.surgeon, 'Surgeon', function (v) { c.surgeon = v; touch(); })]),
-        el('td', { class: 'num' }, [numInput(c.count, function (v) { c.count = v; touch(); })]),
-        el('td', { class: 'num' }, [numInput(c.serviceCount, function (v) { c.serviceCount = v; touch(); })]),
-        el('td', {}, [textInput(c.start, '0730', function (v) { c.start = v; touch(); })]),
-        el('td', {}, [cat]),
-        el('td', { class: 'num' }, [addOn]),
-        el('td', {}, [textInput(c.notes, 'no Peds OR…', function (v) { c.notes = v; touch(); })]),
-        el('td', { class: 'actions' }, [
-          el('button', { type: 'button', class: 'btn-icon', title: 'Duplicate case', text: '⧉', onclick: function () { duplicateCase(c.id); } }),
-          el('button', { type: 'button', class: 'btn-icon danger', title: 'Remove case', text: '×', onclick: function () { removeCase(c.id); } })
-        ])
-      ]));
+  function miniField(labelText, control, cls) {
+    return el('label', { class: 'mini-field' + (cls ? ' ' + cls : '') }, [
+      el('span', { class: 'mini-label', text: labelText }),
+      control
+    ]);
+  }
+
+  function caseCard(c) {
+    var card = el('div', { class: 'case-card' });
+
+    card.appendChild(miniField('Surgeon',
+      textInput(c.surgeon, 'Surgeon', function (v) { c.surgeon = v; touch(); }), 'cf-surgeon'));
+    card.appendChild(miniField('Cases',
+      numInput(c.count, function (v) { c.count = v; touch(); }), 'cf-num'));
+    card.appendChild(miniField('Service',
+      numInput(c.serviceCount, function (v) { c.serviceCount = v; touch(); }), 'cf-num'));
+    card.appendChild(miniField('Start',
+      textInput(c.start, '0730', function (v) { c.start = v; touch(); }), 'cf-start'));
+
+    var cat = el('select');
+    CATEGORIES.forEach(function (k) { cat.appendChild(el('option', { value: k, text: k })); });
+    cat.value = c.category;
+    cat.addEventListener('change', function () { c.category = cat.value; touch(); });
+    card.appendChild(miniField('Category', cat, 'cf-cat'));
+
+    var box = el('input', { type: 'checkbox' });
+    box.checked = c.addOn;
+    var pill = el('label', { class: 'pill-check' + (c.addOn ? ' on' : '') }, [box, 'Add-on']);
+    box.addEventListener('change', function () {
+      c.addOn = box.checked;
+      pill.classList.toggle('on', box.checked);
+      touch();
     });
-    tbl.appendChild(tbody);
-    return el('div', { class: 'table-scroll' }, [tbl]);
+    card.appendChild(el('div', { class: 'cf-pill' }, [pill]));
+
+    card.appendChild(el('div', { class: 'case-actions' }, [
+      el('button', { type: 'button', class: 'btn-icon', title: 'Duplicate case', text: '⧉', onclick: function () { duplicateCase(c.id); } }),
+      el('button', { type: 'button', class: 'btn-icon danger', title: 'Remove case', text: '×', onclick: function () { removeCase(c.id); } })
+    ]));
+
+    card.appendChild(miniField('Notes',
+      textInput(c.notes, 'no Peds OR…', function (v) { c.notes = v; touch(); }), 'cf-notes'));
+    return card;
   }
 
   function renderCaseSections() {
     var wrap = $('caseSections');
     clearNode(wrap);
     CASE_SECTIONS.forEach(function (secDef) {
-      var card = el('div', { class: 'card' });
-      var head = el('div', { class: 'card-head' }, [
-        el('h2', { text: secDef.label }),
-        el('button', {
-          type: 'button', class: 'btn btn-small', text: '+ Add case',
-          onclick: function () { addCase(secDef.key); }
-        })
-      ]);
-      card.appendChild(head);
-      if (secDef.key === 'private') {
-        card.appendChild(el('p', { class: 'field-hint', text: 'Private-only cases keep Service at 0 — no resident needed.' }));
-      }
       var list = App.state.cases.filter(function (c) { return c.section === secDef.key; });
-      if (!list.length) card.appendChild(el('p', { class: 'empty-note', text: 'No cases yet.' }));
-      else card.appendChild(caseTable(list));
-      wrap.appendChild(card);
+
+      var det = el('details', { class: 'card case-section', open: !!caseSectionOpen[secDef.key] });
+      det.addEventListener('toggle', function () { caseSectionOpen[secDef.key] = det.open; });
+
+      // The button lives inside <summary>: preventDefault + stopPropagation so
+      // adding a case never toggles the <details> open/closed state.
+      var addBtn = el('button', {
+        type: 'button', class: 'btn btn-small', text: '+ Add case',
+        onclick: function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          caseSectionOpen[secDef.key] = true;
+          addCase(secDef.key);
+        }
+      });
+      det.appendChild(el('summary', { class: 'case-summary' }, [
+        el('span', { class: 'case-summary-title', text: secDef.label }),
+        el('span', { class: 'count-badge', text: list.length + (list.length === 1 ? ' case' : ' cases') }),
+        addBtn
+      ]));
+
+      var body = el('div', { class: 'case-section-body' });
+      if (secDef.key === 'private') {
+        body.appendChild(el('p', { class: 'field-hint', text: 'Private-only cases keep Service at 0 — no resident needed.' }));
+      }
+      if (!list.length) {
+        body.appendChild(el('div', { class: 'case-empty' }, [
+          el('span', { class: 'empty-note', text: 'No cases yet — add the first one.' }),
+          el('button', {
+            type: 'button', class: 'btn btn-small', text: '+ Add case',
+            onclick: function () { addCase(secDef.key); }
+          })
+        ]));
+      } else {
+        list.forEach(function (c) { body.appendChild(caseCard(c)); });
+      }
+      det.appendChild(body);
+      wrap.appendChild(det);
     });
   }
 
@@ -3129,7 +3573,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return key;
   }
 
-  function assignCaseCard(c) {
+  function assignCaseCard(c, collapsible) {
     var card = el('div', { class: 'assign-card' });
     var head = el('div', { class: 'assign-head' }, [
       el('span', { class: 'assign-title', text: caseTitle(c) }),
@@ -3137,6 +3581,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       el('span', { class: 'badge badge-cat', text: c.category })
     ]);
     if (c.addOn) head.appendChild(el('span', { class: 'badge badge-addon', text: 'ADD-ON' }));
+    if (collapsible) {
+      head.appendChild(el('button', {
+        type: 'button', class: 'btn btn-small assign-collapse', text: 'Done',
+        title: 'Collapse back to one line',
+        onclick: function () { delete assignExpanded[c.id]; renderAssignTab(); }
+      }));
+    }
     if (window.Assign && window.Assign.classify) {
       var hier = (data().hierarchy || {})[window.Assign.classify(c)];
       if (hier) head.appendChild(el('span', { class: 'assign-meta', text: '· ' + hier.label }));
@@ -3244,18 +3695,105 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return card;
   }
 
+  // A case still needs a resident: has service cases and nobody assigned yet.
+  function needsResident(c) { return c.serviceCount > 0 && !trim(c.assigned); }
+
+  function renderAssignFilters() {
+    var host = $('assignFilters');
+    if (!host) return;
+    clearNode(host);
+    var cases = App.state.cases;
+    var nNeeds = 0, nAssigned = 0;
+    cases.forEach(function (c) {
+      if (needsResident(c)) nNeeds++;
+      if (trim(c.assigned)) nAssigned++;
+    });
+    [
+      { key: 'needs', label: 'Needs resident', count: nNeeds },
+      { key: 'assigned', label: 'Assigned', count: nAssigned },
+      { key: 'all', label: 'All', count: cases.length }
+    ].forEach(function (f) {
+      host.appendChild(el('button', {
+        type: 'button',
+        class: 'filter-chip' + (assignFilter === f.key ? ' active' : ''),
+        onclick: function () {
+          assignFilter = f.key;
+          renderAssignFilters();
+          renderAssignCases();
+        }
+      }, [f.label + ' ', el('span', { class: 'filter-count', text: String(f.count) })]));
+    });
+  }
+
+  // Compact one-line row: '✓ Huang x7 (0730) → Bair; backup Calotti' + Edit.
+  function assignCompactRow(c) {
+    var assigned = trim(c.assigned);
+    var row = el('div', { class: 'assign-row' });
+    row.appendChild(el('span', { class: 'row-check' + (assigned ? '' : ' none'), text: assigned ? '✓' : '—' }));
+    row.appendChild(el('span', { class: 'row-title', text: caseTitle(c) }));
+    if (assigned) {
+      row.appendChild(el('span', { class: 'row-arrow', text: '→' }));
+      row.appendChild(el('b', { class: 'row-assigned', text: assigned }));
+      if (trim(c.backup)) row.appendChild(el('span', { class: 'row-meta', text: '; backup ' + trim(c.backup) }));
+    } else {
+      row.appendChild(el('span', { class: 'row-meta', text: 'private — no resident needed' }));
+    }
+    row.appendChild(el('button', {
+      type: 'button', class: 'btn btn-small row-edit', text: 'Edit',
+      onclick: function () { assignExpanded[c.id] = true; renderAssignCases(); }
+    }));
+    return row;
+  }
+
+  function assignEmptyCard(text, btnLabel, btnTab, primary) {
+    var kids = [el('p', { class: 'empty-note', text: text })];
+    if (btnLabel) {
+      kids.push(el('button', {
+        type: 'button', class: 'btn btn-small' + (primary ? ' btn-primary' : ''), text: btnLabel,
+        onclick: function () { setTab(btnTab); }
+      }));
+    }
+    return el('div', { class: 'card assign-empty' }, kids);
+  }
+
   function renderAssignCases() {
     var host = $('assignCases');
     clearNode(host);
-    if (!App.state.cases.length) {
-      host.appendChild(el('div', { class: 'card' }, [
-        el('p', { class: 'empty-note', text: 'No cases yet — add them on the Cases & Clinics tab.' })
-      ]));
+    var cases = App.state.cases;
+
+    if (!cases.length) {
+      host.appendChild(assignEmptyCard(
+        'No cases yet — add them on the Cases & Clinics tab.',
+        'Go to Cases & Clinics', 'cases', false));
       return;
     }
+
+    var shown = [];
     CASE_SECTIONS.forEach(function (secDef) {
-      App.state.cases.filter(function (c) { return c.section === secDef.key; })
-        .forEach(function (c) { host.appendChild(assignCaseCard(c)); });
+      cases.forEach(function (c) {
+        if (c.section !== secDef.key) return;
+        if (assignFilter === 'needs' && !needsResident(c)) return;
+        if (assignFilter === 'assigned' && !trim(c.assigned)) return;
+        shown.push(c);
+      });
+    });
+
+    if (!shown.length) {
+      if (assignFilter === 'needs') {
+        host.appendChild(assignEmptyCard(
+          'Everything has a resident — check the output.',
+          'Go to Preview & Copy', 'preview', true));
+      } else {
+        host.appendChild(assignEmptyCard(
+          'Nothing assigned yet — suggest and accept, or pick residents on the cards.', null, null, false));
+      }
+      return;
+    }
+
+    shown.forEach(function (c) {
+      if (needsResident(c)) host.appendChild(assignCaseCard(c, false));
+      else if (assignExpanded[c.id]) host.appendChild(assignCaseCard(c, true));
+      else host.appendChild(assignCompactRow(c));
     });
   }
 
@@ -3344,6 +3882,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   }
 
   function renderAssignTab() {
+    renderAssignFilters();
     renderAssignCases();
     renderAssignSide();
     if (App.activeTab === 'preview') renderPreview();
@@ -3363,6 +3902,119 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     } else {
       host.textContent = 'Export module not loaded.';
     }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* How-to view — friendly onboarding cards (static)                    */
+  /* ------------------------------------------------------------------ */
+
+  function bulletList(items, cls) {
+    var u = el('ul', { class: 'ref-note-list' + (cls ? ' ' + cls : '') });
+    items.forEach(function (t) { u.appendChild(el('li', { text: t })); });
+    return u;
+  }
+
+  var CHAIN_TOKEN_LABELS = {
+    COOPER: 'Cooper',
+    WILLS_OR: 'Wills OR',
+    RETINA: 'Retina',
+    PEDS_OR_JUNIOR: 'junior on Peds OR',
+    FREE_JUNIOR: 'free junior',
+    PLASTICS_OR_PGY2: 'PGY-2 on Plastics OR',
+    PLASTICS_OR_JUNIOR: 'junior on Plastics OR'
+  };
+
+  function chainText(key, fallback) {
+    var h = (data().hierarchy || {})[key];
+    if (!h || !(h.chain || []).length) return fallback;
+    return h.chain.map(function (tok) { return CHAIN_TOKEN_LABELS[tok] || tok; }).join(' → ');
+  }
+
+  function renderHowto() {
+    var host = $('howtoBody');
+    if (!host) return;
+    clearNode(host);
+
+    // 1. The flow — four numbered rows mirroring the tabs
+    var flow = refCard('The flow');
+    [
+      { tab: 'roster', num: '1', title: 'Day Roster', text: 'Pick the date — everyone’s block assignment, Surg 1–5, WER, consults and clinics fill in automatically. You type night float, add-ons and vacation.' },
+      { tab: 'cases', num: '2', title: 'Cases & Clinics', text: 'Copy the case list out of Cerner/NextGen by hand — count, start time, service vs private. Enter clinic patient counts.' },
+      { tab: 'assign', num: '3', title: 'Assign', text: 'Press Suggest all — the how-to hierarchy proposes a resident per case, with warnings. Accept or override, and use the clinic-backup suggestions.' },
+      { tab: 'preview', num: '4', title: 'Preview & Copy', text: 'The document, exactly in the usual format — Copy formatted and paste.' }
+    ].forEach(function (s) {
+      flow.appendChild(el('div', { class: 'howto-step' }, [
+        el('span', { class: 'howto-num', text: s.num }),
+        el('div', { class: 'howto-step-body' }, [
+          el('div', { class: 'howto-step-title', text: s.title }),
+          el('div', { class: 'howto-step-text', text: s.text })
+        ]),
+        el('button', {
+          type: 'button', class: 'btn btn-small', text: 'Go →',
+          onclick: function () { setTab(s.tab); }
+        })
+      ]));
+    });
+    host.appendChild(flow);
+
+    // 2. What fills itself in vs what you type
+    var av = refCard('What fills itself in — and what you type');
+    av.appendChild(el('div', { class: 'howto-cols' }, [
+      el('div', { class: 'howto-col' }, [
+        el('h3', { text: 'Fills itself in' }),
+        bulletList([
+          'Rosters & block assignments for every resident',
+          'Surg 1–5 roles',
+          'WER & Jeff/Cooper consult coverage',
+          'Clinic staffing',
+          'Cooper buddies (from the buddy call schedule)',
+          'Special clinic days (Bilyk, Wasserman, …)'
+        ])
+      ]),
+      el('div', { class: 'howto-col' }, [
+        el('h3', { text: 'You type' }),
+        bulletList([
+          'Cases from the EMRs',
+          'Clinic patient counts',
+          'Night float',
+          'Add-ons (call coverage)',
+          'Vacation',
+          'Lectures & events'
+        ])
+      ])
+    ]));
+    av.appendChild(el('p', { class: 'field-hint howto-note', text: 'Several EMRs, no interfaces — the case list is deliberately manual.' }));
+    host.appendChild(av);
+
+    // 3. The rules in 30 seconds — condensed chains (pulled from SCHED_DATA)
+    var rules = refCard('The rules in 30 seconds');
+    rules.appendChild(bulletList([
+      'Scheduled cornea → Surg 3. Scheduled glaucoma → Surg 4.',
+      'Cataracts → ' + chainText('scheduledCataract', 'Surg 1 → Surg 5 → Wills OR') + ' (per the lounge-wall block schedule).',
+      'Peds → ' + chainText('peds', 'junior on Peds OR → free junior → Surg 4 → Surg 3') + '.',
+      'Trauma → Surg 2 first (unless corneal tissue is needed — then cornea).',
+      'Everything else, chronologically: ' + chainText('remaining', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + '.',
+      'Clinic coverage: ' + chainText('clinicCoverage', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 → Wills OR → Retina') + '.'
+    ], 'howto-rules'));
+    rules.appendChild(el('div', { class: 'howto-foot' }, [
+      el('span', { class: 'field-hint', text: 'Full chains, notes, and the block grids live in the Reference tab.' }),
+      el('button', {
+        type: 'button', class: 'btn btn-small', text: 'Open Reference',
+        onclick: function () { setTab('reference'); }
+      })
+    ]));
+    host.appendChild(rules);
+
+    // 4. Tips for new schedulers — from the how-to deck
+    var tips = refCard('Tips for new schedulers');
+    tips.appendChild(bulletList([
+      'Check the Google Calendar for lectures and vacations first — before anything else.',
+      'Surg 3 and Surg 4 should reach out to the attendings about their scheduled cases beforehand.',
+      'The schedule is built the evening before — expect late changes and add-ons.',
+      'Surg 2 is the boss — give them some grace.'
+    ]));
+    if (data().quote) tips.appendChild(el('p', { class: 'ref-quote howto-quote', text: data().quote }));
+    host.appendChild(tips);
   }
 
   /* ------------------------------------------------------------------ */
@@ -3590,6 +4242,88 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   }
 
   /* ------------------------------------------------------------------ */
+  /* Home landing view                                                   */
+  /* ------------------------------------------------------------------ */
+
+  function savedDayISOs() {
+    return lsKeys()
+      .filter(function (k) { return k.indexOf(LS_PREFIX) === 0; })
+      .map(function (k) { return k.slice(LS_PREFIX.length); })
+      .filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); })
+      .sort();
+  }
+
+  // Big home button: 'Create Surg Schedule →', or 'Open schedule for M/D/YY'
+  // with a 'saved draft' hint when a draft already exists for the chosen date.
+  function updateHomeCreate() {
+    var hd = $('homeDate');
+    var btn = $('btnHomeCreate');
+    var hint = $('homeDraftHint');
+    if (!hd || !btn) return;
+    var v = hd.value;
+    var hasDraft = !!(v && lsGet(LS_PREFIX + v));
+    if (hasDraft) {
+      btn.textContent = 'Open schedule for ' + fmtMDYY(parseISO(v));
+      if (hint) {
+        hint.textContent = 'saved draft — picks up right where you left off';
+        hint.classList.remove('hidden');
+      }
+    } else {
+      btn.textContent = 'Create Surg Schedule →';
+      if (hint) {
+        hint.textContent = '';
+        hint.classList.add('hidden');
+      }
+    }
+  }
+
+  function renderHome() {
+    var hd = $('homeDate');
+    if (hd && !hd.value) hd.value = tomorrowISO();
+    updateHomeCreate();
+    var host = $('homeRecent');
+    if (!host) return;
+    clearNode(host);
+    var dates = savedDayISOs();
+    dates.reverse();
+    dates = dates.slice(0, 4);
+    if (!dates.length) {
+      host.classList.add('hidden');
+      return;
+    }
+    host.classList.remove('hidden');
+    host.appendChild(el('span', { class: 'home-recent-label', text: 'Recent days' }));
+    dates.forEach(function (dISO) {
+      var d = parseISO(dISO);
+      host.appendChild(el('button', {
+        type: 'button', class: 'chip chip-recent',
+        text: WEEKDAY_NAMES[d.getDay()].slice(0, 3) + ' ' + fmtMDYY(d),
+        onclick: function () { enterApp(dISO); }
+      }));
+    });
+  }
+
+  function enterApp(dateISO, tab) {
+    var dp = $('datePicker');
+    if (dp) dp.value = dateISO;
+    document.body.classList.remove('home-active');
+    setDate(dateISO);
+    setTab(tab || 'roster');
+    if (!tab || tab === 'roster') {
+      toast('Roster built for ' + App.roster.weekdayLabel + ' ' + fmtMDYY(parseISO(dateISO)) + ' — manual entries kept');
+    }
+  }
+
+  // Brand click in the header — back to Home. Nothing is lost: state saved.
+  function goHome() {
+    saveNow();
+    var hd = $('homeDate');
+    if (hd && App.state) hd.value = App.state.date;
+    document.body.classList.add('home-active');
+    renderHome();
+  }
+
+  /* ------------------------------------------------------------------ */
   /* tabs + boot                                                         */
   /* ------------------------------------------------------------------ */
 
@@ -3607,6 +4341,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     if (tab === 'cases') renderCasesTab();
     if (tab === 'assign') renderAssignTab();
     if (tab === 'preview') renderPreview();
+    // 'howto' and 'reference' are static — rendered once at boot.
   }
 
   function renderAll() {
@@ -3672,16 +4407,50 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       });
     });
 
+    // Home view + brand-click-returns-home
+    var brand = $('btnBrandHome');
+    if (brand) brand.addEventListener('click', goHome);
+    var homeDate = $('homeDate');
+    if (homeDate) {
+      homeDate.addEventListener('change', updateHomeCreate);
+      homeDate.addEventListener('input', updateHomeCreate);
+    }
+    var btnHomeCreate = $('btnHomeCreate');
+    if (btnHomeCreate) {
+      btnHomeCreate.addEventListener('click', function () {
+        enterApp((homeDate && homeDate.value) || tomorrowISO());
+      });
+    }
+    var btnHomeHowto = $('btnHomeHowto');
+    if (btnHomeHowto) {
+      btnHomeHowto.addEventListener('click', function () {
+        enterApp((homeDate && homeDate.value) || tomorrowISO(), 'howto');
+      });
+    }
+    var btnHomeReference = $('btnHomeReference');
+    if (btnHomeReference) {
+      btnHomeReference.addEventListener('click', function () {
+        enterApp((homeDate && homeDate.value) || tomorrowISO(), 'reference');
+      });
+    }
+
     window.addEventListener('beforeunload', saveNow);
 
     renderReference();
+    renderHowto();
     setDate(initial);
+
+    // Land on Home (body starts with .home-active from the markup).
+    if (homeDate) homeDate.value = initial;
+    renderHome();
   }
 
   App.setDate = setDate;
   App.setTab = setTab;
   App.saveNow = saveNow;
   App.exportDay = exportDay;
+  App.enterApp = enterApp;
+  App.goHome = goHome;
   window.App = App;
 
   if (document.readyState === 'loading') {

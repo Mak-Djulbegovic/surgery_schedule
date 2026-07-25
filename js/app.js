@@ -691,60 +691,94 @@
     return inp;
   }
 
-  function caseTable(list) {
-    var tbl = el('table', { class: 'tbl case-tbl' });
-    tbl.appendChild(el('thead', {}, [el('tr', {}, [
-      el('th', { text: 'Surgeon' }), el('th', { text: 'Cases' }), el('th', { text: 'Service' }),
-      el('th', { text: 'Start' }), el('th', { text: 'Category' }), el('th', { text: 'Add-on' }),
-      el('th', { text: 'Notes' }), el('th', { text: '' })
-    ])]));
-    var tbody = el('tbody');
-    list.forEach(function (c) {
-      var addOn = el('input', { type: 'checkbox' });
-      addOn.checked = c.addOn;
-      addOn.addEventListener('change', function () { c.addOn = addOn.checked; touch(); });
-      var cat = el('select');
-      CATEGORIES.forEach(function (k) { cat.appendChild(el('option', { value: k, text: k })); });
-      cat.value = c.category;
-      cat.addEventListener('change', function () { c.category = cat.value; touch(); });
-      tbody.appendChild(el('tr', {}, [
-        el('td', {}, [textInput(c.surgeon, 'Surgeon', function (v) { c.surgeon = v; touch(); })]),
-        el('td', { class: 'num' }, [numInput(c.count, function (v) { c.count = v; touch(); })]),
-        el('td', { class: 'num' }, [numInput(c.serviceCount, function (v) { c.serviceCount = v; touch(); })]),
-        el('td', {}, [textInput(c.start, '0730', function (v) { c.start = v; touch(); })]),
-        el('td', {}, [cat]),
-        el('td', { class: 'num' }, [addOn]),
-        el('td', {}, [textInput(c.notes, 'no Peds OR…', function (v) { c.notes = v; touch(); })]),
-        el('td', { class: 'actions' }, [
-          el('button', { type: 'button', class: 'btn-icon', title: 'Duplicate case', text: '⧉', onclick: function () { duplicateCase(c.id); } }),
-          el('button', { type: 'button', class: 'btn-icon danger', title: 'Remove case', text: '×', onclick: function () { removeCase(c.id); } })
-        ])
-      ]));
+  function miniField(labelText, control, cls) {
+    return el('label', { class: 'mini-field' + (cls ? ' ' + cls : '') }, [
+      el('span', { class: 'mini-label', text: labelText }),
+      control
+    ]);
+  }
+
+  function caseCard(c) {
+    var card = el('div', { class: 'case-card' });
+
+    card.appendChild(miniField('Surgeon',
+      textInput(c.surgeon, 'Surgeon', function (v) { c.surgeon = v; touch(); }), 'cf-surgeon'));
+    card.appendChild(miniField('Cases',
+      numInput(c.count, function (v) { c.count = v; touch(); }), 'cf-num'));
+    card.appendChild(miniField('Service',
+      numInput(c.serviceCount, function (v) { c.serviceCount = v; touch(); }), 'cf-num'));
+    card.appendChild(miniField('Start',
+      textInput(c.start, '0730', function (v) { c.start = v; touch(); }), 'cf-start'));
+
+    var cat = el('select');
+    CATEGORIES.forEach(function (k) { cat.appendChild(el('option', { value: k, text: k })); });
+    cat.value = c.category;
+    cat.addEventListener('change', function () { c.category = cat.value; touch(); });
+    card.appendChild(miniField('Category', cat, 'cf-cat'));
+
+    var box = el('input', { type: 'checkbox' });
+    box.checked = c.addOn;
+    var pill = el('label', { class: 'pill-check' + (c.addOn ? ' on' : '') }, [box, 'Add-on']);
+    box.addEventListener('change', function () {
+      c.addOn = box.checked;
+      pill.classList.toggle('on', box.checked);
+      touch();
     });
-    tbl.appendChild(tbody);
-    return el('div', { class: 'table-scroll' }, [tbl]);
+    card.appendChild(el('div', { class: 'cf-pill' }, [pill]));
+
+    card.appendChild(el('div', { class: 'case-actions' }, [
+      el('button', { type: 'button', class: 'btn-icon', title: 'Duplicate case', text: '⧉', onclick: function () { duplicateCase(c.id); } }),
+      el('button', { type: 'button', class: 'btn-icon danger', title: 'Remove case', text: '×', onclick: function () { removeCase(c.id); } })
+    ]));
+
+    card.appendChild(miniField('Notes',
+      textInput(c.notes, 'no Peds OR…', function (v) { c.notes = v; touch(); }), 'cf-notes'));
+    return card;
   }
 
   function renderCaseSections() {
     var wrap = $('caseSections');
     clearNode(wrap);
     CASE_SECTIONS.forEach(function (secDef) {
-      var card = el('div', { class: 'card' });
-      var head = el('div', { class: 'card-head' }, [
-        el('h2', { text: secDef.label }),
-        el('button', {
-          type: 'button', class: 'btn btn-small', text: '+ Add case',
-          onclick: function () { addCase(secDef.key); }
-        })
-      ]);
-      card.appendChild(head);
-      if (secDef.key === 'private') {
-        card.appendChild(el('p', { class: 'field-hint', text: 'Private-only cases keep Service at 0 — no resident needed.' }));
-      }
       var list = App.state.cases.filter(function (c) { return c.section === secDef.key; });
-      if (!list.length) card.appendChild(el('p', { class: 'empty-note', text: 'No cases yet.' }));
-      else card.appendChild(caseTable(list));
-      wrap.appendChild(card);
+
+      var det = el('details', { class: 'card case-section', open: !!caseSectionOpen[secDef.key] });
+      det.addEventListener('toggle', function () { caseSectionOpen[secDef.key] = det.open; });
+
+      // The button lives inside <summary>: preventDefault + stopPropagation so
+      // adding a case never toggles the <details> open/closed state.
+      var addBtn = el('button', {
+        type: 'button', class: 'btn btn-small', text: '+ Add case',
+        onclick: function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          caseSectionOpen[secDef.key] = true;
+          addCase(secDef.key);
+        }
+      });
+      det.appendChild(el('summary', { class: 'case-summary' }, [
+        el('span', { class: 'case-summary-title', text: secDef.label }),
+        el('span', { class: 'count-badge', text: list.length + (list.length === 1 ? ' case' : ' cases') }),
+        addBtn
+      ]));
+
+      var body = el('div', { class: 'case-section-body' });
+      if (secDef.key === 'private') {
+        body.appendChild(el('p', { class: 'field-hint', text: 'Private-only cases keep Service at 0 — no resident needed.' }));
+      }
+      if (!list.length) {
+        body.appendChild(el('div', { class: 'case-empty' }, [
+          el('span', { class: 'empty-note', text: 'No cases yet — add the first one.' }),
+          el('button', {
+            type: 'button', class: 'btn btn-small', text: '+ Add case',
+            onclick: function () { addCase(secDef.key); }
+          })
+        ]));
+      } else {
+        list.forEach(function (c) { body.appendChild(caseCard(c)); });
+      }
+      det.appendChild(body);
+      wrap.appendChild(det);
     });
   }
 
@@ -898,7 +932,7 @@
     return key;
   }
 
-  function assignCaseCard(c) {
+  function assignCaseCard(c, collapsible) {
     var card = el('div', { class: 'assign-card' });
     var head = el('div', { class: 'assign-head' }, [
       el('span', { class: 'assign-title', text: caseTitle(c) }),
@@ -906,6 +940,13 @@
       el('span', { class: 'badge badge-cat', text: c.category })
     ]);
     if (c.addOn) head.appendChild(el('span', { class: 'badge badge-addon', text: 'ADD-ON' }));
+    if (collapsible) {
+      head.appendChild(el('button', {
+        type: 'button', class: 'btn btn-small assign-collapse', text: 'Done',
+        title: 'Collapse back to one line',
+        onclick: function () { delete assignExpanded[c.id]; renderAssignTab(); }
+      }));
+    }
     if (window.Assign && window.Assign.classify) {
       var hier = (data().hierarchy || {})[window.Assign.classify(c)];
       if (hier) head.appendChild(el('span', { class: 'assign-meta', text: '· ' + hier.label }));
@@ -1013,18 +1054,105 @@
     return card;
   }
 
+  // A case still needs a resident: has service cases and nobody assigned yet.
+  function needsResident(c) { return c.serviceCount > 0 && !trim(c.assigned); }
+
+  function renderAssignFilters() {
+    var host = $('assignFilters');
+    if (!host) return;
+    clearNode(host);
+    var cases = App.state.cases;
+    var nNeeds = 0, nAssigned = 0;
+    cases.forEach(function (c) {
+      if (needsResident(c)) nNeeds++;
+      if (trim(c.assigned)) nAssigned++;
+    });
+    [
+      { key: 'needs', label: 'Needs resident', count: nNeeds },
+      { key: 'assigned', label: 'Assigned', count: nAssigned },
+      { key: 'all', label: 'All', count: cases.length }
+    ].forEach(function (f) {
+      host.appendChild(el('button', {
+        type: 'button',
+        class: 'filter-chip' + (assignFilter === f.key ? ' active' : ''),
+        onclick: function () {
+          assignFilter = f.key;
+          renderAssignFilters();
+          renderAssignCases();
+        }
+      }, [f.label + ' ', el('span', { class: 'filter-count', text: String(f.count) })]));
+    });
+  }
+
+  // Compact one-line row: '✓ Huang x7 (0730) → Bair; backup Calotti' + Edit.
+  function assignCompactRow(c) {
+    var assigned = trim(c.assigned);
+    var row = el('div', { class: 'assign-row' });
+    row.appendChild(el('span', { class: 'row-check' + (assigned ? '' : ' none'), text: assigned ? '✓' : '—' }));
+    row.appendChild(el('span', { class: 'row-title', text: caseTitle(c) }));
+    if (assigned) {
+      row.appendChild(el('span', { class: 'row-arrow', text: '→' }));
+      row.appendChild(el('b', { class: 'row-assigned', text: assigned }));
+      if (trim(c.backup)) row.appendChild(el('span', { class: 'row-meta', text: '; backup ' + trim(c.backup) }));
+    } else {
+      row.appendChild(el('span', { class: 'row-meta', text: 'private — no resident needed' }));
+    }
+    row.appendChild(el('button', {
+      type: 'button', class: 'btn btn-small row-edit', text: 'Edit',
+      onclick: function () { assignExpanded[c.id] = true; renderAssignCases(); }
+    }));
+    return row;
+  }
+
+  function assignEmptyCard(text, btnLabel, btnTab, primary) {
+    var kids = [el('p', { class: 'empty-note', text: text })];
+    if (btnLabel) {
+      kids.push(el('button', {
+        type: 'button', class: 'btn btn-small' + (primary ? ' btn-primary' : ''), text: btnLabel,
+        onclick: function () { setTab(btnTab); }
+      }));
+    }
+    return el('div', { class: 'card assign-empty' }, kids);
+  }
+
   function renderAssignCases() {
     var host = $('assignCases');
     clearNode(host);
-    if (!App.state.cases.length) {
-      host.appendChild(el('div', { class: 'card' }, [
-        el('p', { class: 'empty-note', text: 'No cases yet — add them on the Cases & Clinics tab.' })
-      ]));
+    var cases = App.state.cases;
+
+    if (!cases.length) {
+      host.appendChild(assignEmptyCard(
+        'No cases yet — add them on the Cases & Clinics tab.',
+        'Go to Cases & Clinics', 'cases', false));
       return;
     }
+
+    var shown = [];
     CASE_SECTIONS.forEach(function (secDef) {
-      App.state.cases.filter(function (c) { return c.section === secDef.key; })
-        .forEach(function (c) { host.appendChild(assignCaseCard(c)); });
+      cases.forEach(function (c) {
+        if (c.section !== secDef.key) return;
+        if (assignFilter === 'needs' && !needsResident(c)) return;
+        if (assignFilter === 'assigned' && !trim(c.assigned)) return;
+        shown.push(c);
+      });
+    });
+
+    if (!shown.length) {
+      if (assignFilter === 'needs') {
+        host.appendChild(assignEmptyCard(
+          'Everything has a resident — check the output.',
+          'Go to Preview & Copy', 'preview', true));
+      } else {
+        host.appendChild(assignEmptyCard(
+          'Nothing assigned yet — suggest and accept, or pick residents on the cards.', null, null, false));
+      }
+      return;
+    }
+
+    shown.forEach(function (c) {
+      if (needsResident(c)) host.appendChild(assignCaseCard(c, false));
+      else if (assignExpanded[c.id]) host.appendChild(assignCaseCard(c, true));
+      else host.appendChild(assignCompactRow(c));
     });
   }
 
@@ -1113,6 +1241,7 @@
   }
 
   function renderAssignTab() {
+    renderAssignFilters();
     renderAssignCases();
     renderAssignSide();
     if (App.activeTab === 'preview') renderPreview();
@@ -1132,6 +1261,119 @@
     } else {
       host.textContent = 'Export module not loaded.';
     }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* How-to view — friendly onboarding cards (static)                    */
+  /* ------------------------------------------------------------------ */
+
+  function bulletList(items, cls) {
+    var u = el('ul', { class: 'ref-note-list' + (cls ? ' ' + cls : '') });
+    items.forEach(function (t) { u.appendChild(el('li', { text: t })); });
+    return u;
+  }
+
+  var CHAIN_TOKEN_LABELS = {
+    COOPER: 'Cooper',
+    WILLS_OR: 'Wills OR',
+    RETINA: 'Retina',
+    PEDS_OR_JUNIOR: 'junior on Peds OR',
+    FREE_JUNIOR: 'free junior',
+    PLASTICS_OR_PGY2: 'PGY-2 on Plastics OR',
+    PLASTICS_OR_JUNIOR: 'junior on Plastics OR'
+  };
+
+  function chainText(key, fallback) {
+    var h = (data().hierarchy || {})[key];
+    if (!h || !(h.chain || []).length) return fallback;
+    return h.chain.map(function (tok) { return CHAIN_TOKEN_LABELS[tok] || tok; }).join(' → ');
+  }
+
+  function renderHowto() {
+    var host = $('howtoBody');
+    if (!host) return;
+    clearNode(host);
+
+    // 1. The flow — four numbered rows mirroring the tabs
+    var flow = refCard('The flow');
+    [
+      { tab: 'roster', num: '1', title: 'Day Roster', text: 'Pick the date — everyone’s block assignment, Surg 1–5, WER, consults and clinics fill in automatically. You type night float, add-ons and vacation.' },
+      { tab: 'cases', num: '2', title: 'Cases & Clinics', text: 'Copy the case list out of Cerner/NextGen by hand — count, start time, service vs private. Enter clinic patient counts.' },
+      { tab: 'assign', num: '3', title: 'Assign', text: 'Press Suggest all — the how-to hierarchy proposes a resident per case, with warnings. Accept or override, and use the clinic-backup suggestions.' },
+      { tab: 'preview', num: '4', title: 'Preview & Copy', text: 'The document, exactly in the usual format — Copy formatted and paste.' }
+    ].forEach(function (s) {
+      flow.appendChild(el('div', { class: 'howto-step' }, [
+        el('span', { class: 'howto-num', text: s.num }),
+        el('div', { class: 'howto-step-body' }, [
+          el('div', { class: 'howto-step-title', text: s.title }),
+          el('div', { class: 'howto-step-text', text: s.text })
+        ]),
+        el('button', {
+          type: 'button', class: 'btn btn-small', text: 'Go →',
+          onclick: function () { setTab(s.tab); }
+        })
+      ]));
+    });
+    host.appendChild(flow);
+
+    // 2. What fills itself in vs what you type
+    var av = refCard('What fills itself in — and what you type');
+    av.appendChild(el('div', { class: 'howto-cols' }, [
+      el('div', { class: 'howto-col' }, [
+        el('h3', { text: 'Fills itself in' }),
+        bulletList([
+          'Rosters & block assignments for every resident',
+          'Surg 1–5 roles',
+          'WER & Jeff/Cooper consult coverage',
+          'Clinic staffing',
+          'Cooper buddies (from the buddy call schedule)',
+          'Special clinic days (Bilyk, Wasserman, …)'
+        ])
+      ]),
+      el('div', { class: 'howto-col' }, [
+        el('h3', { text: 'You type' }),
+        bulletList([
+          'Cases from the EMRs',
+          'Clinic patient counts',
+          'Night float',
+          'Add-ons (call coverage)',
+          'Vacation',
+          'Lectures & events'
+        ])
+      ])
+    ]));
+    av.appendChild(el('p', { class: 'field-hint howto-note', text: 'Several EMRs, no interfaces — the case list is deliberately manual.' }));
+    host.appendChild(av);
+
+    // 3. The rules in 30 seconds — condensed chains (pulled from SCHED_DATA)
+    var rules = refCard('The rules in 30 seconds');
+    rules.appendChild(bulletList([
+      'Scheduled cornea → Surg 3. Scheduled glaucoma → Surg 4.',
+      'Cataracts → ' + chainText('scheduledCataract', 'Surg 1 → Surg 5 → Wills OR') + ' (per the lounge-wall block schedule).',
+      'Peds → ' + chainText('peds', 'junior on Peds OR → free junior → Surg 4 → Surg 3') + '.',
+      'Trauma → Surg 2 first (unless corneal tissue is needed — then cornea).',
+      'Everything else, chronologically: ' + chainText('remaining', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + '.',
+      'Clinic coverage: ' + chainText('clinicCoverage', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 → Wills OR → Retina') + '.'
+    ], 'howto-rules'));
+    rules.appendChild(el('div', { class: 'howto-foot' }, [
+      el('span', { class: 'field-hint', text: 'Full chains, notes, and the block grids live in the Reference tab.' }),
+      el('button', {
+        type: 'button', class: 'btn btn-small', text: 'Open Reference',
+        onclick: function () { setTab('reference'); }
+      })
+    ]));
+    host.appendChild(rules);
+
+    // 4. Tips for new schedulers — from the how-to deck
+    var tips = refCard('Tips for new schedulers');
+    tips.appendChild(bulletList([
+      'Check the Google Calendar for lectures and vacations first — before anything else.',
+      'Surg 3 and Surg 4 should reach out to the attendings about their scheduled cases beforehand.',
+      'The schedule is built the evening before — expect late changes and add-ons.',
+      'Surg 2 is the boss — give them some grace.'
+    ]));
+    if (data().quote) tips.appendChild(el('p', { class: 'ref-quote howto-quote', text: data().quote }));
+    host.appendChild(tips);
   }
 
   /* ------------------------------------------------------------------ */
@@ -1359,6 +1601,88 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* Home landing view                                                   */
+  /* ------------------------------------------------------------------ */
+
+  function savedDayISOs() {
+    return lsKeys()
+      .filter(function (k) { return k.indexOf(LS_PREFIX) === 0; })
+      .map(function (k) { return k.slice(LS_PREFIX.length); })
+      .filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); })
+      .sort();
+  }
+
+  // Big home button: 'Create Surg Schedule →', or 'Open schedule for M/D/YY'
+  // with a 'saved draft' hint when a draft already exists for the chosen date.
+  function updateHomeCreate() {
+    var hd = $('homeDate');
+    var btn = $('btnHomeCreate');
+    var hint = $('homeDraftHint');
+    if (!hd || !btn) return;
+    var v = hd.value;
+    var hasDraft = !!(v && lsGet(LS_PREFIX + v));
+    if (hasDraft) {
+      btn.textContent = 'Open schedule for ' + fmtMDYY(parseISO(v));
+      if (hint) {
+        hint.textContent = 'saved draft — picks up right where you left off';
+        hint.classList.remove('hidden');
+      }
+    } else {
+      btn.textContent = 'Create Surg Schedule →';
+      if (hint) {
+        hint.textContent = '';
+        hint.classList.add('hidden');
+      }
+    }
+  }
+
+  function renderHome() {
+    var hd = $('homeDate');
+    if (hd && !hd.value) hd.value = tomorrowISO();
+    updateHomeCreate();
+    var host = $('homeRecent');
+    if (!host) return;
+    clearNode(host);
+    var dates = savedDayISOs();
+    dates.reverse();
+    dates = dates.slice(0, 4);
+    if (!dates.length) {
+      host.classList.add('hidden');
+      return;
+    }
+    host.classList.remove('hidden');
+    host.appendChild(el('span', { class: 'home-recent-label', text: 'Recent days' }));
+    dates.forEach(function (dISO) {
+      var d = parseISO(dISO);
+      host.appendChild(el('button', {
+        type: 'button', class: 'chip chip-recent',
+        text: WEEKDAY_NAMES[d.getDay()].slice(0, 3) + ' ' + fmtMDYY(d),
+        onclick: function () { enterApp(dISO); }
+      }));
+    });
+  }
+
+  function enterApp(dateISO, tab) {
+    var dp = $('datePicker');
+    if (dp) dp.value = dateISO;
+    document.body.classList.remove('home-active');
+    setDate(dateISO);
+    setTab(tab || 'roster');
+    if (!tab || tab === 'roster') {
+      toast('Roster built for ' + App.roster.weekdayLabel + ' ' + fmtMDYY(parseISO(dateISO)) + ' — manual entries kept');
+    }
+  }
+
+  // Brand click in the header — back to Home. Nothing is lost: state saved.
+  function goHome() {
+    saveNow();
+    var hd = $('homeDate');
+    if (hd && App.state) hd.value = App.state.date;
+    document.body.classList.add('home-active');
+    renderHome();
+  }
+
+  /* ------------------------------------------------------------------ */
   /* tabs + boot                                                         */
   /* ------------------------------------------------------------------ */
 
@@ -1376,6 +1700,7 @@
     if (tab === 'cases') renderCasesTab();
     if (tab === 'assign') renderAssignTab();
     if (tab === 'preview') renderPreview();
+    // 'howto' and 'reference' are static — rendered once at boot.
   }
 
   function renderAll() {
@@ -1441,16 +1766,50 @@
       });
     });
 
+    // Home view + brand-click-returns-home
+    var brand = $('btnBrandHome');
+    if (brand) brand.addEventListener('click', goHome);
+    var homeDate = $('homeDate');
+    if (homeDate) {
+      homeDate.addEventListener('change', updateHomeCreate);
+      homeDate.addEventListener('input', updateHomeCreate);
+    }
+    var btnHomeCreate = $('btnHomeCreate');
+    if (btnHomeCreate) {
+      btnHomeCreate.addEventListener('click', function () {
+        enterApp((homeDate && homeDate.value) || tomorrowISO());
+      });
+    }
+    var btnHomeHowto = $('btnHomeHowto');
+    if (btnHomeHowto) {
+      btnHomeHowto.addEventListener('click', function () {
+        enterApp((homeDate && homeDate.value) || tomorrowISO(), 'howto');
+      });
+    }
+    var btnHomeReference = $('btnHomeReference');
+    if (btnHomeReference) {
+      btnHomeReference.addEventListener('click', function () {
+        enterApp((homeDate && homeDate.value) || tomorrowISO(), 'reference');
+      });
+    }
+
     window.addEventListener('beforeunload', saveNow);
 
     renderReference();
+    renderHowto();
     setDate(initial);
+
+    // Land on Home (body starts with .home-active from the markup).
+    if (homeDate) homeDate.value = initial;
+    renderHome();
   }
 
   App.setDate = setDate;
   App.setTab = setTab;
   App.saveNow = saveNow;
   App.exportDay = exportDay;
+  App.enterApp = enterApp;
+  App.goHome = goHome;
   window.App = App;
 
   if (document.readyState === 'loading') {

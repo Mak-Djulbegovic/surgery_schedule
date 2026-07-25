@@ -63,12 +63,12 @@
 
   function buddyPart(b, sess) {
     if (!b || !trim(b.name)) return '';
-    var t = trim(b.name);
+    var t = trim(b.name) + ' ' + sess;
     if (trim(b.note)) t += ' (' + trim(b.note) + ')';
-    return t + ' ' + sess;
+    return t;
   }
 
-  // 'Illiano + buddy [Camacho AM | DeSimone PM]'
+  // 'Illiano + buddy [Camacho AM (private glaucoma) | DeSimone PM (retina)]'
   function cooperText(roster, day) {
     var cooper = (roster.cooperConsults || []);
     if (!cooper.length) return '';
