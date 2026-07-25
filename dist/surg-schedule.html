@@ -1,0 +1,4497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Surg Schedule Builder</title>
+<style>
+/* Surg Schedule Builder — clean clinical styling.
+   System fonts, 14px base, muted PGY accents, amber warnings, red unassigned. */
+
+:root {
+  --bg: #f4f6f8;
+  --card: #ffffff;
+  --border: #dfe4ea;
+  --border-soft: #ebeef2;
+  --text: #1d2733;
+  --muted: #64707e;
+  --faint: #8b96a3;
+  --accent: #16639e;
+  --accent-soft: #e7f0f8;
+  --accent-border: #b9d3e6;
+  --amber-text: #8f5f0a;
+  --amber-bg: #fdf4dd;
+  --amber-border: #efd9a4;
+  --red-text: #b3261e;
+  --red-bg: #fdecea;
+  --red-border: #f2c1bd;
+  --green-text: #196c43;
+  --green-bg: #e7f4ec;
+  --green-border: #bcdfca;
+  --pgy2: #0d7a6f;
+  --pgy2-bg: #e5f4f1;
+  --pgy2-border: #a7d6cf;
+  --pgy3: #245ea8;
+  --pgy3-bg: #e8effa;
+  --pgy3-border: #b3c9e8;
+  --pgy4: #6b4aa0;
+  --pgy4-bg: #efe9f8;
+  --pgy4-border: #cabde5;
+  --radius: 8px;
+  --shadow: 0 1px 2px rgba(24, 39, 58, 0.06), 0 1px 1px rgba(24, 39, 58, 0.04);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg);
+}
+
+button { font: inherit; color: inherit; }
+
+/* ---------------- header ---------------- */
+
+.app-header {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 20px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  align-items: flex-start;
+}
+
+/* The brand block is a button — clicking it returns to the Home view. */
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  border: none; background: none; padding: 2px 6px 2px 2px; margin: -2px 0 -2px -2px;
+  border-radius: 9px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.brand:hover { background: var(--accent-soft); }
+.brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.brand-mark {
+  width: 38px; height: 38px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.brand-text { display: flex; flex-direction: column; }
+.brand-title { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); }
+.brand-sub { font-size: 12px; color: var(--muted); }
+
+.header-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 16px;
+  flex: 1;
+  min-width: 0;
+}
+
+.date-field { display: inline-flex; flex-direction: column; gap: 2px; }
+.field-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+}
+
+input[type="date"] {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  color: var(--text);
+  background: #fff;
+}
+
+.day-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-bottom: 3px; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.chip-day { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+.chip-task { background: var(--pgy2-bg); border-color: var(--pgy2-border); color: var(--pgy2); }
+.chip-special { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-text); }
+
+.header-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; padding-bottom: 1px; }
+
+/* ---------------- Home landing view ---------------- */
+
+/* .home-active on <body> = landing mode: only the hero card is visible. */
+.home-view { display: none; }
+body.home-active .app-header,
+body.home-active .tabbar,
+body.home-active .app-main { display: none; }
+body.home-active .home-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: 28px 16px;
+}
+
+.home-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 14px 40px rgba(24, 39, 58, 0.10), var(--shadow);
+  max-width: 560px;
+  width: 100%;
+  padding: 38px 34px 30px;
+  text-align: center;
+}
+
+.home-mark { width: 54px; height: 54px; border-radius: 14px; margin-bottom: 14px; }
+.home-title { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.home-tagline { color: var(--muted); font-size: 14px; margin: 6px auto 24px; max-width: 400px; }
+
+.home-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  justify-content: center;
+  align-items: flex-end;
+}
+.home-date-field { text-align: left; }
+.home-date-field input { font-size: 15px; padding: 8px 10px; }
+.home-cta { font-size: 15px; padding: 9px 20px; border-radius: 8px; }
+.home-draft { flex-basis: 100%; margin: 0; color: var(--green-text); font-weight: 600; }
+
+.home-links {
+  margin-top: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  justify-content: center;
+  align-items: center;
+}
+.home-dot { color: var(--faint); }
+
+.btn-link {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.btn-link:hover { text-decoration: underline; }
+
+.home-recent {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+.home-recent-label {
+  flex-basis: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+}
+.chip-recent { cursor: pointer; }
+.chip-recent:hover { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+
+/* ---------------- buttons ---------------- */
+
+.btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 7px;
+  padding: 7px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+.btn:hover { background: #f3f6f9; border-color: #c9d2dc; }
+.btn:active { background: #e9eef3; }
+
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { background: #135587; border-color: #135587; }
+.btn-primary:active { background: #104a75; }
+
+.btn-danger { color: var(--red-text); border-color: var(--red-border); }
+.btn-danger:hover { background: var(--red-bg); border-color: var(--red-border); }
+
+.btn-small { padding: 4px 9px; font-size: 12px; border-radius: 6px; }
+
+.btn-icon {
+  border: none; background: none;
+  cursor: pointer;
+  color: var(--faint);
+  padding: 2px 5px;
+  border-radius: 5px;
+  font-size: 13px;
+  line-height: 1;
+}
+.btn-icon:hover { background: var(--border-soft); color: var(--text); }
+.btn-icon.danger:hover { background: var(--red-bg); color: var(--red-text); }
+
+/* ---------------- tabs ---------------- */
+
+.tabbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  gap: 2px;
+  padding: 0 16px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabbar::-webkit-scrollbar { display: none; }
+.tabbar-spacer { flex: 1 0 8px; }
+.tab-update { align-self: center; margin: 6px 0; white-space: nowrap; }
+
+.tab {
+  border: none;
+  background: none;
+  padding: 11px 14px 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ---------------- layout ---------------- */
+
+.app-main { padding: 18px 20px 60px; max-width: 1380px; margin: 0 auto; }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+.layout-2col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 390px;
+  gap: 16px;
+  align-items: start;
+}
+.col { min-width: 0; }
+.col-side { display: flex; flex-direction: column; gap: 16px; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.col .card { margin-bottom: 0; }
+.col > .card { margin-bottom: 16px; }
+.col > .card:last-child { margin-bottom: 0; }
+
+.card-lite {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+
+.card h2 {
+  font-size: 14.5px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: -0.005em;
+}
+.h-note { font-size: 12px; font-weight: 500; color: var(--faint); margin-left: 6px; }
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.card-head h2 { margin-bottom: 0; }
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.toolbar-note { font-size: 12.5px; color: var(--faint); }
+
+.banner {
+  background: var(--amber-bg);
+  border: 1px solid var(--amber-border);
+  color: var(--amber-text);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.hidden { display: none !important; }
+
+.empty-note { color: var(--faint); font-size: 13px; padding: 4px 0; }
+
+/* ---------------- forms ---------------- */
+
+input[type="text"], input[type="number"], textarea, select {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text);
+  background: #fff;
+  max-width: 100%;
+}
+input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus, input[type="date"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(22, 99, 158, 0.14);
+}
+textarea { width: 100%; resize: vertical; }
+
+.field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 12px; }
+.field:last-child { margin-bottom: 0; }
+.field-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.field-hint { font-size: 12px; color: var(--faint); }
+
+/* ---------------- badges & chips ---------------- */
+
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  vertical-align: 1px;
+}
+.badge-am { background: var(--accent-soft); color: var(--accent); }
+.badge-pm { background: #efe9f8; color: var(--pgy4); }
+.badge-addon { background: var(--amber-bg); color: var(--amber-text); border: 1px solid var(--amber-border); }
+.badge-tm { background: var(--pgy2-bg); color: var(--pgy2); border: 1px solid var(--pgy2-border); }
+.badge-cat { background: var(--border-soft); color: var(--muted); }
+
+.name-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 9px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+.name-chip.no-x { padding-right: 9px; }
+.name-chip.pgy2 { background: var(--pgy2-bg); border-color: var(--pgy2-border); color: var(--pgy2); }
+.name-chip.pgy3 { background: var(--pgy3-bg); border-color: var(--pgy3-border); color: var(--pgy3); }
+.name-chip.pgy4 { background: var(--pgy4-bg); border-color: var(--pgy4-border); color: var(--pgy4); }
+.name-chip .btn-icon { font-size: 12px; padding: 1px 4px; }
+
+.case-chip {
+  display: inline-block;
+  background: var(--border-soft);
+  color: var(--muted);
+  border-radius: 5px;
+  padding: 1px 7px;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 2px 3px 2px 0;
+}
+
+/* ---------------- tables ---------------- */
+
+.table-scroll { overflow-x: auto; }
+
+table.tbl { border-collapse: collapse; width: 100%; }
+.tbl th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.tbl td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: top;
+}
+.tbl tr:last-child td { border-bottom: none; }
+
+.tbl .group-row td {
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--border);
+}
+.group-row.pgy2 td { background: var(--pgy2-bg); color: var(--pgy2); border-left: 3px solid var(--pgy2); }
+.group-row.pgy3 td { background: var(--pgy3-bg); color: var(--pgy3); border-left: 3px solid var(--pgy3); }
+.group-row.pgy4 td { background: var(--pgy4-bg); color: var(--pgy4); border-left: 3px solid var(--pgy4); }
+
+.res-name { font-weight: 600; white-space: nowrap; }
+.res-name.pgy2 { color: var(--pgy2); }
+.res-name.pgy3 { color: var(--pgy3); }
+.res-name.pgy4 { color: var(--pgy4); }
+.res-block { color: var(--faint); font-size: 12px; white-space: nowrap; }
+
+.cell-text { font-size: 13.5px; }
+.cell-text.is-surg { font-weight: 700; color: var(--accent); }
+.cell-note { font-size: 11.5px; color: var(--faint); font-style: italic; margin-top: 1px; }
+
+/* ---------------- case sections (details cards) ---------------- */
+
+.case-section > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+}
+.case-section > summary::-webkit-details-marker { display: none; }
+.case-section > summary::before { content: '▸'; color: var(--faint); font-size: 13px; flex: none; }
+.case-section[open] > summary::before { content: '▾'; }
+.case-section[open] > summary { margin-bottom: 12px; }
+.case-summary-title { font-weight: 700; font-size: 14.5px; letter-spacing: -0.005em; }
+.case-summary .btn { margin-left: auto; }
+
+.count-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--border-soft);
+  border-radius: 999px;
+  padding: 1px 9px;
+  white-space: nowrap;
+}
+
+.case-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+
+.case-card {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 64px 64px 84px minmax(120px, 150px) max-content max-content;
+  gap: 8px 10px;
+  align-items: end;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.case-card:last-child { margin-bottom: 0; }
+
+.mini-field { display: block; min-width: 0; }
+.mini-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+.mini-field input, .mini-field select { width: 100%; }
+.cf-notes { grid-column: 1 / -1; }
+
+.pill-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: #fff;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.pill-check input { margin: 0; accent-color: var(--amber-text); }
+.pill-check.on { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-text); }
+
+.cf-pill, .case-actions { align-self: end; padding-bottom: 3px; }
+.case-actions { white-space: nowrap; text-align: right; }
+
+/* ---------------- summary list ---------------- */
+
+.summary-list { display: flex; flex-direction: column; gap: 7px; }
+/* --- Today at a glance ------------------------------------------------ */
+.glance-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.glance-head h2 { margin-right: auto; }
+.glance-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.glance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 10px;
+  margin: 10px 0 12px;
+}
+.glance-tile {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+.glance-role {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--faint);
+}
+.glance-name { font-size: 17px; font-weight: 700; margin: 2px 0; }
+.glance-sess { font-size: 12px; font-weight: 600; color: var(--amber-text); margin-bottom: 2px; }
+.glance-sub { font-size: 11.5px; color: var(--faint); line-height: 1.35; }
+.glance-row {
+  display: flex; flex-wrap: wrap; gap: 6px 24px;
+  padding-top: 10px; border-top: 1px solid var(--border-soft);
+}
+.glance-kv { font-size: 13.5px; }
+.glance-kv .k {
+  color: var(--faint); font-weight: 600; margin-right: 6px;
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+
+/* --- collapsible full-roster card ------------------------------------ */
+.collapse-card > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 15px;
+  list-style: none;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.collapse-card > summary::-webkit-details-marker { display: none; }
+.collapse-card > summary::before { content: '▸'; color: var(--faint); font-size: 13px; }
+.collapse-card[open] > summary::before { content: '▾'; }
+.collapse-card[open] > summary { margin-bottom: 10px; }
+
+/* --- day details grid ------------------------------------------------- */
+.manual-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px 22px;
+  align-items: start;
+}
+.manual-grid .field-wide { grid-column: 1 / -1; }
+
+/* --- header more-menu ------------------------------------------------- */
+.more-menu { position: relative; }
+.more-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 12px;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--card);
+  user-select: none;
+}
+.more-menu > summary::-webkit-details-marker { display: none; }
+.more-menu > summary:hover { background: var(--bg); }
+.menu-pop {
+  position: absolute; right: 0; top: calc(100% + 6px);
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(29, 39, 51, 0.16);
+  padding: 6px; display: flex; flex-direction: column; gap: 4px;
+  min-width: 195px; z-index: 40;
+}
+.menu-pop .btn { text-align: left; }
+
+.tab-num {
+  display: inline-block;
+  min-width: 17px; height: 17px; line-height: 17px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--border-soft);
+  color: var(--faint);
+  font-size: 11px; font-weight: 700; text-align: center;
+}
+.tab.active .tab-num { background: var(--accent); color: #fff; }
+
+.summary-item { display: flex; gap: 8px; align-items: baseline; }
+.summary-key {
+  flex: none;
+  width: 118px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.summary-val { font-weight: 600; min-width: 0; }
+.summary-val .sub { font-weight: 500; color: var(--faint); font-size: 12px; }
+
+/* ---------------- add-ons & buddies ---------------- */
+
+.addon-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.addon-row input[type="text"] { flex: 1; min-width: 0; }
+.addon-row select { flex: none; width: 132px; }
+
+.buddy-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+.buddy-row .buddy-session {
+  flex: none; width: 28px;
+  font-size: 11px; font-weight: 700; color: var(--faint);
+}
+.buddy-row select { flex: none; width: 132px; }
+.buddy-row input[type="text"] { flex: 1; min-width: 120px; }
+
+/* ---------------- clinics ---------------- */
+
+/* Aligned on a grid: [label+session 170px] [staff chips 1fr] [count 90px] [note 1fr] */
+.clinic-row {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1.2fr) 90px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 10px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.clinic-row:last-child { border-bottom: none; }
+.clinic-label { font-weight: 600; min-width: 0; }
+.clinic-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
+.clinic-add { width: 108px; font-size: 12px; padding: 3px 5px; }
+.clinic-count { width: 100%; }
+.clinic-extra { width: 100%; }
+
+/* ---------------- assign tab ---------------- */
+
+.assign-filters { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-chip:hover { border-color: #c9d2dc; color: var(--text); }
+.filter-chip .filter-count {
+  background: var(--border-soft);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+}
+.filter-chip.active { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+.filter-chip.active .filter-count { background: var(--accent); color: #fff; }
+
+/* compact one-line rows for assigned / private cases */
+.assign-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.assign-row .row-check { color: var(--green-text); font-weight: 700; flex: none; }
+.assign-row .row-check.none { color: var(--faint); }
+.assign-row .row-title { font-weight: 600; }
+.assign-row .row-arrow { color: var(--faint); }
+.assign-row .row-assigned { font-weight: 700; }
+.assign-row .row-meta { color: var(--faint); font-size: 12px; }
+.assign-row .row-edit { margin-left: auto; }
+
+.assign-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.assign-empty .empty-note { padding: 0; }
+.assign-collapse { margin-left: auto; }
+
+.assign-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 13px 16px;
+  margin-bottom: 12px;
+}
+.assign-card:last-child { margin-bottom: 0; }
+
+.assign-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; margin-bottom: 8px; }
+.assign-title { font-weight: 700; font-size: 14px; }
+.assign-meta { font-size: 12px; color: var(--faint); }
+
+.sugg-box {
+  border: 1px solid var(--accent-border);
+  background: var(--accent-soft);
+  border-radius: 7px;
+  padding: 8px 11px;
+  margin-bottom: 9px;
+}
+.sugg-box.sugg-none { border-color: var(--border); background: var(--border-soft); }
+.sugg-box.sugg-accepted { border-color: var(--green-border); background: var(--green-bg); }
+.sugg-name { font-weight: 700; }
+.sugg-reason { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+.sugg-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 7px; }
+.sugg-actions select { font-size: 12.5px; padding: 4px 6px; max-width: 260px; }
+
+.warn-line {
+  display: block;
+  font-size: 12.5px;
+  color: var(--amber-text);
+  background: var(--amber-bg);
+  border: 1px solid var(--amber-border);
+  border-radius: 6px;
+  padding: 4px 9px;
+  margin-top: 5px;
+}
+
+.unassigned-text { color: var(--red-text); font-weight: 700; }
+.cover-suggest {
+  display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+  margin: 8px 0; padding: 8px 10px;
+  background: #fdf6e7; border: 1px solid #ecd9a8; border-radius: 6px;
+  font-size: 13px; color: #7a5c12;
+}
+.cover-text { flex: 1 1 260px; }
+.covnote { display: block; width: 100%; margin-top: 8px; font-size: 13px; }
+.assign-manual { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.assign-manual label { font-size: 12px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.assign-manual select { width: 138px; }
+/* label + select wrap as one unit — a label can never be split from its control */
+.assign-pair { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+.load-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
+.load-row:last-child { border-bottom: none; }
+.load-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.load-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--border-soft);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+.load-count.hot { background: var(--amber-bg); color: var(--amber-text); }
+.load-role { font-size: 12px; color: var(--muted); }
+
+.coverage-list { margin: 0; padding-left: 22px; }
+.coverage-list li { padding: 2.5px 0; }
+.coverage-src { color: var(--faint); font-size: 12px; }
+
+/* ---------------- preview ---------------- */
+
+.document {
+  max-width: 780px;
+  padding: 26px 32px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.document b { font-weight: 700; }
+
+/* ---------------- how-to ---------------- */
+
+.howto-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.howto-step:last-child { border-bottom: none; padding-bottom: 2px; }
+.howto-num {
+  flex: none;
+  width: 26px; height: 26px; line-height: 26px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  margin-top: 1px;
+}
+.howto-step-body { flex: 1; min-width: 0; }
+.howto-step-title { font-weight: 700; }
+.howto-step-text { color: var(--muted); font-size: 13px; margin-top: 1px; }
+.howto-step .btn { flex: none; align-self: center; }
+
+.howto-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; }
+.howto-col h3 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  margin-bottom: 6px;
+}
+.howto-note { margin-top: 12px; }
+.howto-rules li { padding: 3px 0; }
+.howto-foot { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.howto-quote { margin: 12px 2px 0; }
+
+/* ---------------- reference ---------------- */
+
+.ref-note-list { padding-left: 20px; }
+.ref-note-list li { padding: 2px 0; }
+.ref-quote { font-style: italic; color: var(--muted); font-size: 15px; margin: 2px 2px 14px; }
+.ref-para { margin: 0; line-height: 1.5; }
+.grid-tbl td { font-size: 12.5px; }
+.grid-tbl .g-line { white-space: nowrap; }
+.grid-tbl .g-line + .g-line { margin-top: 2px; }
+.grid-tbl { min-width: 720px; }
+.blocks-tbl td, .blocks-tbl th { text-align: center; }
+.blocks-tbl td:first-child, .blocks-tbl th:first-child { text-align: left; white-space: nowrap; }
+.blocks-tbl { min-width: 640px; }
+.blocks-tbl td.tm { background: var(--pgy2-bg); color: var(--pgy2); font-weight: 700; border-radius: 4px; }
+.grid-notes { font-size: 12.5px; color: var(--muted); margin-top: 10px; padding-left: 20px; }
+.grid-notes li { padding: 1.5px 0; }
+
+/* ---------------- toast ---------------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%) translateY(14px);
+  background: #223042;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 18px;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(16, 27, 40, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+  z-index: 90;
+  max-width: min(92vw, 560px);
+  text-align: center;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.toast-err { background: #7c2320; }
+
+/* ---------------- responsive ---------------- */
+
+@media (max-width: 800px) {
+  .app-header { padding: 12px 14px 10px; }
+  .header-controls { align-items: stretch; flex-direction: column; flex-basis: 100%; }
+  .header-actions { margin-left: 0; }
+  .layout-2col { grid-template-columns: 1fr; }
+  .app-main { padding: 14px 12px 60px; }
+  .clinic-row { grid-template-columns: 1fr; gap: 6px; }
+  .summary-key { width: 96px; }
+  .document { padding: 18px 16px; }
+  .home-card { padding: 28px 20px 24px; }
+  .howto-cols { grid-template-columns: 1fr; }
+}
+
+/* 820px (not 720px): the 7-column case-card row needs ~780px of viewport
+   (fixed/max-content columns + gaps + main/card/case-card padding), so the
+   old 720px collapse left a 721–~770px band with page-level horizontal
+   scroll on Cases & Clinics. 820px covers that band with margin. */
+@media (max-width: 820px) {
+  .case-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cf-surgeon { grid-column: 1 / -1; }
+  .cf-pill, .case-actions { padding-bottom: 0; }
+}
+
+</style>
+</head>
+<body class="home-active">
+
+<div class="home-view" id="homeView">
+  <div class="home-card">
+    <div class="home-hero">
+      <span class="brand-mark home-mark" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+      </span>
+      <h1 class="home-title">Surg Schedule Builder</h1>
+      <p class="home-tagline">Builds the daily surgery schedule from the block schedules — you add the cases.</p>
+    </div>
+    <div class="home-form">
+      <label class="date-field home-date-field">
+        <span class="field-label">Schedule date</span>
+        <input type="date" id="homeDate">
+      </label>
+      <button type="button" class="btn btn-primary home-cta" id="btnHomeCreate">Create Surg Schedule →</button>
+      <p class="field-hint home-draft hidden" id="homeDraftHint"></p>
+    </div>
+    <div class="home-links">
+      <button type="button" class="btn-link" id="btnHomeHowto">How it works</button>
+      <span class="home-dot" aria-hidden="true">·</span>
+      <button type="button" class="btn-link" id="btnHomeReference">Block schedule reference</button>
+    </div>
+    <div class="home-recent hidden" id="homeRecent"></div>
+  </div>
+</div>
+
+<header class="app-header">
+  <button type="button" class="brand" id="btnBrandHome" title="Home">
+    <span class="brand-mark" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+    </span>
+    <span class="brand-text">
+      <span class="brand-title">Surg Schedule Builder</span>
+      <span class="brand-sub" id="ayLabel"></span>
+    </span>
+  </button>
+  <div class="header-controls">
+    <label class="date-field">
+      <span class="field-label">Schedule date</span>
+      <input type="date" id="datePicker">
+    </label>
+    <div class="day-chips" id="dayChips"></div>
+    <div class="header-actions">
+      <button type="button" class="btn btn-primary" id="btnCreate">Create Surg Schedule</button>
+      <details class="more-menu" id="moreMenu">
+        <summary title="More actions">⋯</summary>
+        <div class="menu-pop">
+          <button type="button" class="btn" id="btnYesterday">Start from yesterday</button>
+          <button type="button" class="btn btn-danger" id="btnClear">Clear day</button>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>
+
+<nav class="tabbar" id="tabbar" role="tablist" aria-label="Sections">
+  <button type="button" class="tab active" data-tab="roster" role="tab"><span class="tab-num">1</span>Day Roster</button>
+  <button type="button" class="tab" data-tab="cases" role="tab"><span class="tab-num">2</span>Cases &amp; Clinics</button>
+  <button type="button" class="tab" data-tab="assign" role="tab"><span class="tab-num">3</span>Assign</button>
+  <button type="button" class="tab" data-tab="preview" role="tab"><span class="tab-num">4</span>Preview &amp; Copy</button>
+  <button type="button" class="tab" data-tab="howto" role="tab">How-to</button>
+  <button type="button" class="tab" data-tab="reference" role="tab">Reference</button>
+  <span class="tabbar-spacer"></span>
+  <button type="button" class="btn btn-small btn-primary tab-update" id="btnUpdate"
+    title="Save everything, recompute the roster, and refresh Preview &amp; Copy">↻ Update</button>
+</nav>
+
+<main class="app-main">
+  <div id="dayBanner" class="banner hidden"></div>
+
+  <section class="panel active" id="panel-roster">
+    <div class="card glance-card">
+      <div class="glance-head">
+        <h2>Today at a glance <span class="h-note">auto-generated from the block schedule</span></h2>
+        <div class="glance-chips" id="glanceChips"></div>
+      </div>
+      <div id="rosterSummary"></div>
+    </div>
+    <div class="card">
+      <h2>Day details <span class="h-note">night float, add-ons, vacation — saved automatically</span></h2>
+      <div id="manualInputs" class="manual-grid"></div>
+    </div>
+    <details class="card collapse-card">
+      <summary>Full resident roster <span class="h-note">every resident's AM/PM block assignment for this date</span></summary>
+      <div id="rosterGrid"></div>
+    </details>
+  </section>
+
+  <section class="panel" id="panel-cases">
+    <div id="caseSections"></div>
+    <div class="card">
+      <h2>Clinics <span class="h-note">patient counts come from the EMRs — enter manually</span></h2>
+      <div id="clinicRows"></div>
+    </div>
+    <div class="card">
+      <h2>Add-ons <span class="h-note">printed at the end of the copied schedule — also editable on Day Roster</span></h2>
+      <div id="addOnsCases"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-assign">
+    <div class="toolbar card-lite">
+      <button type="button" class="btn btn-primary" id="btnSuggestAll">Suggest all</button>
+      <button type="button" class="btn" id="btnAcceptAll">Accept all suggestions</button>
+      <span class="assign-filters" id="assignFilters"></span>
+      <span class="toolbar-note">Suggestions never auto-assign — accept per case, or all at once.</span>
+    </div>
+    <div class="layout-2col">
+      <div class="col">
+        <div id="assignCases"></div>
+      </div>
+      <div class="col col-side">
+        <div class="card">
+          <h2>Resident load</h2>
+          <div id="loadPanel"></div>
+        </div>
+        <div class="card">
+          <h2>PM clinic coverage chain</h2>
+          <div id="coveragePanel"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-preview">
+    <div class="toolbar card-lite">
+      <button type="button" class="btn btn-primary" id="btnCopyHTML">Copy formatted</button>
+      <button type="button" class="btn" id="btnCopyText">Copy plain text</button>
+      <button type="button" class="btn" id="btnCopyAddons">Copy add-ons only</button>
+      <span class="toolbar-note">Paste straight into email or chat — formatting is preserved.</span>
+    </div>
+    <div class="document card" id="previewDoc"></div>
+  </section>
+
+  <section class="panel" id="panel-howto">
+    <div id="howtoBody"></div>
+  </section>
+
+  <section class="panel" id="panel-reference">
+    <div id="referenceBody"></div>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+/*
+ * Block schedule data — AY 2026–2027
+ * Transcribed from the residency block schedule PDF and the
+ * "How to Surgical Schedule" document.
+ *
+ * Naming: the PDF calls the classes First/Second/Third Year; in the app we use
+ * PGY-2 / PGY-3 / PGY-4 respectively.
+ *
+ * Override rules: { block, day, session, nth: [..], months: [..], set, note }
+ *   - nth: occurrence of that weekday within the month (1–5)
+ *   - months: 1–12 calendar months the rule applies to (omit = all)
+ *   - set: replacement assignment text (omit = note-only, keeps base text)
+ */
+
+const SCHED_DATA = {
+  ayLabel: 'AY 2026–2027',
+  ayStart: '2026-07-20',
+  ayEnd: '2027-06-30',
+  weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+
+  years: {
+    pgy2: {
+      key: 'pgy2',
+      label: 'PGY-2 (First Year)',
+      short: 'PGY-2',
+      residents: ['Ransone', 'Illiano', 'Patel', 'Marshall', 'Teng', 'Momenaei', 'Alvarez', 'Hamou'],
+      taskmasterBlocks: [2, 5],
+      blockRanges: [
+        { start: '2026-07-20', end: '2026-08-30', blocks: { Ransone: 5, Illiano: 1, Patel: 4, Marshall: 6, Teng: 7, Momenaei: 3, Alvarez: 8, Hamou: 2 } },
+        { start: '2026-08-31', end: '2026-10-11', blocks: { Ransone: 6, Illiano: 2, Patel: 5, Marshall: 7, Teng: 8, Momenaei: 4, Alvarez: 1, Hamou: 3 } },
+        { start: '2026-10-12', end: '2026-11-22', blocks: { Ransone: 7, Illiano: 3, Patel: 6, Marshall: 8, Teng: 1, Momenaei: 5, Alvarez: 2, Hamou: 4 } },
+        { start: '2026-11-23', end: '2027-01-17', blocks: { Ransone: 8, Illiano: 4, Patel: 7, Marshall: 1, Teng: 2, Momenaei: 6, Alvarez: 3, Hamou: 5 } },
+        { start: '2027-01-18', end: '2027-02-28', blocks: { Ransone: 1, Illiano: 5, Patel: 8, Marshall: 2, Teng: 3, Momenaei: 7, Alvarez: 4, Hamou: 6 } },
+        { start: '2027-03-01', end: '2027-04-11', blocks: { Ransone: 2, Illiano: 6, Patel: 1, Marshall: 3, Teng: 4, Momenaei: 8, Alvarez: 5, Hamou: 7 } },
+        { start: '2027-04-12', end: '2027-05-23', blocks: { Ransone: 3, Illiano: 7, Patel: 2, Marshall: 4, Teng: 5, Momenaei: 1, Alvarez: 6, Hamou: 8 } },
+        { start: '2027-05-24', end: '2027-06-30', blocks: { Ransone: 4, Illiano: 8, Patel: 3, Marshall: 5, Teng: 6, Momenaei: 2, Alvarez: 7, Hamou: 1 } }
+      ],
+      grid: {
+        1: {
+          mon: { am: 'Cooper Consults', pm: 'Cooper Consults' },
+          tue: { am: 'Cooper Consults', pm: 'Cooper Consults' },
+          wed: { am: 'Cooper Consults', pm: 'Cooper Consults' },
+          thu: { am: 'Cooper Clinic', pm: 'Cooper Clinic' },
+          fri: { am: 'Cooper Consults', pm: 'Cooper Consults' }
+        },
+        2: {
+          mon: { am: 'CPEC', pm: 'CPEC' },
+          tue: { am: 'CPEC', pm: 'CPEC' },
+          wed: { am: 'ER', pm: 'ER' },
+          thu: { am: 'CPEC', pm: 'CPEC' },
+          fri: { am: 'CPEC', pm: 'CPEC' }
+        },
+        3: {
+          mon: { am: 'Peds', pm: 'CPEC' },
+          tue: { am: 'Peds', pm: 'CPEC' },
+          wed: { am: 'Peds OR', pm: 'Cornea' },
+          thu: { am: 'Cornea', pm: 'Peds' },
+          fri: { am: 'Peds', pm: 'Cornea' }
+        },
+        4: {
+          mon: { am: 'Path', pm: 'ER' },
+          tue: { am: 'Path', pm: 'ER' },
+          wed: { am: 'Path', pm: 'ER' },
+          thu: { am: 'Path', pm: 'ER' },
+          fri: { am: 'Path', pm: 'ER' }
+        },
+        5: {
+          mon: { am: 'Uveitis', pm: 'Glaucoma' },
+          tue: { am: 'Retina', pm: 'Glaucoma' },
+          wed: { am: 'Retina', pm: 'Glaucoma' },
+          thu: { am: 'CPEC', pm: 'Glaucoma' },
+          fri: { am: 'Glaucoma Lasers', pm: 'PT' }
+        },
+        6: {
+          mon: { am: 'CPEC', pm: 'Plastics' },
+          tue: { am: 'Plastics OR', pm: 'Plastics' },
+          wed: { am: 'CPEC', pm: 'Plastics' },
+          thu: { am: 'Plastics', pm: 'Plastics OR' },
+          fri: { am: 'CPEC', pm: 'Plastics' }
+        },
+        7: {
+          mon: { am: 'Neuro', pm: 'Neuro' },
+          tue: { am: 'Neuro', pm: 'Neuro' },
+          wed: { am: 'Neuro', pm: 'CPEC' },
+          thu: { am: 'Neuro', pm: 'Neuro' },
+          fri: { am: 'Neuro', pm: 'CPEC' }
+        },
+        8: {
+          mon: { am: 'ER', pm: 'ER' },
+          tue: { am: 'ER', pm: 'ER' },
+          wed: { am: 'CPEC', pm: 'CPEC' },
+          thu: { am: 'ER', pm: 'ER' },
+          fri: { am: 'ER', pm: 'ER' }
+        }
+      },
+      overrides: [
+        // Block 1: Cooper clinic 1st Wednesday and 4th Tuesday AM
+        { block: 1, day: 'tue', session: 'am', nth: [4], set: 'Cooper Clinic', note: 'Cooper clinic 4th Tuesday AM' },
+        { block: 1, day: 'wed', session: 'am', nth: [1], set: 'Cooper Clinic', note: 'Cooper clinic 1st Wednesday AM' },
+        { block: 1, day: 'wed', session: 'am', note: 'Benson if not seeing consults' },
+        // Block 3: Peds OR 4th Tues and 1st and 5th Fri of the month
+        { block: 3, day: 'tue', session: 'am', nth: [4], set: 'Peds OR', note: 'Peds OR 4th Tuesday' },
+        { block: 3, day: 'fri', session: 'am', nth: [1, 5], set: 'Peds OR', note: 'Peds OR 1st and 5th Friday' },
+        // Block 3 Wed AM: Abendroth (Stadium) 3rd Wed; cover Peds clinic 1st Wed during ROP rounds
+        { block: 3, day: 'wed', session: 'am', nth: [3], set: 'Stadium OR (Abendroth)', note: 'Abendroth 3rd Wednesday' },
+        { block: 3, day: 'wed', session: 'am', nth: [1], set: 'Peds', note: 'Cover Peds clinic 1st Wed while the 2nd year is in ROP Rounds' },
+        // Block 3 Thu PM: OR (often Cornea cases) 2nd, 4th, and 5th Thu
+        { block: 3, day: 'thu', session: 'pm', nth: [2, 4, 5], set: 'OR', note: 'OR (often Cornea cases) 2nd, 4th, and 5th Thursday' },
+        // Block 4: Oncology alternate Mon/Tue odd/even weeks (1st, 3rd, 5th Mon; 2nd, 4th Tue)
+        { block: 4, day: 'mon', session: 'am', nth: [1, 3, 5], set: 'Oncology', note: 'Oncology 1st, 3rd, 5th Monday' },
+        { block: 4, day: 'tue', session: 'am', nth: [2, 4], set: 'Oncology', note: 'Oncology 2nd, 4th Tuesday' },
+        { block: 4, day: 'tue', session: 'am', nth: [4], note: 'Tumor Conference every 4th Tuesday at 6:45am' },
+        { block: 4, day: 'thu', session: 'am', note: 'Med student teaching weekly 8:30–9:30am' },
+        { block: 4, day: 'fri', session: 'am', note: 'Med student teaching weekly 8:30–9:30am' },
+        // Block 6 Thu: Stadium OR (Marous) 3rd Thu Jan/Mar/May/Jul; Carrasco AM clinic 3rd Thu Dec/Feb/Apr/Jun; Bilyk clinic when not in OR
+        { block: 6, day: 'thu', session: 'am', nth: [3], months: [1, 3, 5, 7], set: 'Stadium OR (Marous)', note: 'Stadium OR Marous AM/PM 3rd Thursday Jan/Mar/May/Jul' },
+        { block: 6, day: 'thu', session: 'pm', nth: [3], months: [1, 3, 5, 7], set: 'Stadium OR (Marous)', note: 'Stadium OR Marous AM/PM 3rd Thursday Jan/Mar/May/Jul' },
+        { block: 6, day: 'thu', session: 'am', nth: [3], months: [12, 2, 4, 6], set: 'Carrasco Clinic', note: 'Carrasco AM clinic 3rd Thursday Dec/Feb/Apr/Jun' },
+        { block: 6, day: 'thu', session: 'am', note: 'Bilyk Clinic when not in OR' },
+        { block: 6, day: 'thu', session: 'pm', note: 'Bilyk Clinic when not in OR' },
+        { block: 6, day: 'thu', session: 'pm', note: 'May be Plastics clinic when there are no OR cases' }
+      ],
+      gridNotes: [
+        'Blocks 2 & 5: Taskmaster',
+        'Block 1: Benson if not seeing consults; Cooper clinic 1st Wednesday and 4th Tuesday AM',
+        'Block 3: Peds OR 4th Tues and 1st and 5th Fri; Abendroth 3rd Wed (otherwise Peds OR, except covering Peds clinic 1st Wed during ROP Rounds); Thu PM OR (often Cornea cases) 2nd, 4th, and 5th Thu',
+        'Block 4: Oncology alternates Mon/Tue odd/even weeks (1st, 3rd, 5th Mon; 2nd, 4th Tue); Tumor Conference 4th Tues 6:45am; med student teaching weekly 8:30–9:30am',
+        'Block 6: Stadium OR Marous AM/PM 3rd Thursday Jan/Mar/May/Jul; Carrasco AM clinic 3rd Thursday Dec/Feb/Apr/Jun; Bilyk Clinic when not in OR'
+      ]
+    },
+
+    pgy3: {
+      key: 'pgy3',
+      label: 'PGY-3 (Second Year)',
+      short: 'PGY-3',
+      residents: ['DeSimone', 'Camacho', 'Parekh', 'Cotton', 'Nahar', 'Williamson', 'Tang', 'Perez'],
+      taskmasterBlocks: [],
+      blockRanges: [
+        { start: '2026-07-20', end: '2026-08-30', blocks: { DeSimone: 8, Camacho: 5, Parekh: 2, Cotton: 1, Nahar: 4, Williamson: 3, Tang: 7, Perez: 6 } },
+        { start: '2026-08-31', end: '2026-10-11', blocks: { DeSimone: 1, Camacho: 6, Parekh: 3, Cotton: 2, Nahar: 5, Williamson: 4, Tang: 8, Perez: 7 } },
+        { start: '2026-10-12', end: '2026-11-22', blocks: { DeSimone: 2, Camacho: 7, Parekh: 4, Cotton: 3, Nahar: 6, Williamson: 5, Tang: 1, Perez: 8 } },
+        { start: '2026-11-23', end: '2027-01-17', blocks: { DeSimone: 3, Camacho: 8, Parekh: 5, Cotton: 4, Nahar: 7, Williamson: 6, Tang: 2, Perez: 1 } },
+        { start: '2027-01-18', end: '2027-02-28', blocks: { DeSimone: 4, Camacho: 1, Parekh: 6, Cotton: 5, Nahar: 8, Williamson: 7, Tang: 3, Perez: 2 } },
+        { start: '2027-03-01', end: '2027-04-11', blocks: { DeSimone: 5, Camacho: 2, Parekh: 7, Cotton: 6, Nahar: 1, Williamson: 8, Tang: 4, Perez: 3 } },
+        { start: '2027-04-12', end: '2027-05-23', blocks: { DeSimone: 6, Camacho: 3, Parekh: 8, Cotton: 7, Nahar: 2, Williamson: 1, Tang: 5, Perez: 4 } },
+        { start: '2027-05-24', end: '2027-06-30', blocks: { DeSimone: 7, Camacho: 4, Parekh: 1, Cotton: 8, Nahar: 3, Williamson: 2, Tang: 6, Perez: 5 } }
+      ],
+      grid: {
+        1: {
+          mon: { am: 'Jeff Consults', pm: 'Jeff Consults' },
+          tue: { am: 'Jeff Consults', pm: 'Jeff Consults' },
+          wed: { am: 'Jeff Consults', pm: 'Jeff Consults' },
+          thu: { am: 'Jeff Consults', pm: 'Jeff Consults' },
+          fri: { am: 'Jeff Consults', pm: 'Jeff Consults' }
+        },
+        2: {
+          mon: { am: 'Peds', pm: 'Peds' },
+          tue: { am: 'CPEC', pm: 'Peds' },
+          wed: { am: 'Peds', pm: 'Peds' },
+          thu: { am: 'Peds', pm: 'Peds' },
+          fri: { am: 'Peds', pm: 'CPEC' }
+        },
+        3: {
+          mon: { am: 'CPEC', pm: 'Cornea' },
+          tue: { am: 'Wills OR', pm: 'Wills OR' },
+          wed: { am: 'Private Cornea', pm: 'Cornea' },
+          thu: { am: 'Cornea', pm: 'CPEC' },
+          fri: { am: 'CPEC', pm: 'Cornea' }
+        },
+        4: {
+          mon: { am: 'ER', pm: 'ER' },
+          tue: { am: 'ER', pm: 'ER' },
+          wed: { am: 'ER', pm: 'ER' },
+          thu: { am: 'Cooper Clinic', pm: 'CPEC' },
+          fri: { am: 'Cooper OR', pm: 'PT' }
+        },
+        5: {
+          mon: { am: 'Glaucoma OR / Plastics OR', pm: 'Glaucoma' },
+          tue: { am: 'Wills OR', pm: 'Glaucoma' },
+          wed: { am: 'Private Glaucoma', pm: 'Plastics' },
+          thu: { am: 'CPEC', pm: 'Glaucoma' },
+          fri: { am: 'Glaucoma Lasers', pm: 'Plastics' }
+        },
+        6: {
+          mon: { am: 'CPEC', pm: 'CPEC' },
+          tue: { am: 'CPEC', pm: 'CPEC' },
+          wed: { am: 'CPEC', pm: 'CPEC' },
+          thu: { am: 'Surg 6', pm: 'Surg 6' },
+          fri: { am: 'CPEC', pm: 'PT' }
+        },
+        7: {
+          mon: { am: 'Day Float', pm: 'Day Float' },
+          tue: { am: 'Day Float', pm: 'Day Float' },
+          wed: { am: 'Day Float', pm: 'Day Float' },
+          thu: { am: 'Day Float', pm: 'Day Float' },
+          fri: { am: 'Day Float', pm: 'Day Float' }
+        },
+        8: {
+          mon: { am: 'Retina Private', pm: 'Retina Private' },
+          tue: { am: 'Uveitis', pm: 'Retina' },
+          wed: { am: 'Neuro', pm: 'Retina' },
+          thu: { am: 'ER', pm: 'ER' },
+          fri: { am: 'ER', pm: 'ER' }
+        }
+      },
+      overrides: [
+        // Block 2: ROP Rounds 1st Wed (1st year covers Peds clinic); Peds OR 3rd Fri
+        { block: 2, day: 'wed', session: 'am', nth: [1], set: 'ROP Rounds', note: 'ROP Rounds 1st Wednesday (then return to clinic so 1st year can go to Peds OR)' },
+        { block: 2, day: 'fri', session: 'am', nth: [3], set: 'Peds OR', note: 'Peds OR 3rd Friday' },
+        // Block 3: Tue Wills cataracts with the third year (Surg 5) at Stadium
+        { block: 3, day: 'tue', session: 'am', note: 'Wills cataract cases with Third Year (Surg 5) at Stadium' },
+        { block: 3, day: 'tue', session: 'pm', note: 'Wills cataract cases with Third Year (Surg 5) at Stadium' },
+        // Block 5: Mon alternates Glaucoma OR / Plastics OR every other week
+        { block: 5, day: 'mon', session: 'am', note: 'Alternate Glaucoma OR and Plastics OR every other week' },
+        // Block 5: Tue Wills cataracts with the third year (Surg 1)
+        { block: 5, day: 'tue', session: 'am', note: 'Wills cataract cases with Third Year (Surg 1)' },
+        // Block 5: Plastics OR the 4th Wed
+        { block: 5, day: 'wed', session: 'pm', nth: [4], set: 'Plastics OR', note: 'Plastics OR the 4th Wednesday' },
+        // Block 6: Surg 6 role
+        { block: 6, day: 'thu', session: 'am', note: 'Surg 6: shadow Surg 1/5 or Anhalt cases; otherwise backup for OR at Wills, JHN, or Gibbon + subspecialty cases' },
+        { block: 6, day: 'thu', session: 'pm', note: 'Surg 6: shadow Surg 1/5 or Anhalt cases; otherwise backup for OR at Wills, JHN, or Gibbon + subspecialty cases' },
+        // Block 6: Fri AM cataract evaluations and surgical post-op clinic
+        { block: 6, day: 'fri', session: 'am', note: 'Cataract evaluations and surgical post-op clinic' }
+      ],
+      gridNotes: [
+        'Block 2: ROP Rounds 1st Wed (then return to clinic so 1st year can go to Peds OR); Peds OR 3rd Fri',
+        'Block 3: Tue = Wills cataract cases with Third Year (Surg 5) at Stadium',
+        'Block 5: Mon alternates Glaucoma OR and Plastics OR every other week; Tue = Wills cataract cases with Third Year (Surg 1); Plastics OR the 4th Wed',
+        'Block 6: Surg 6 shadows Surg 1/5 or Anhalt cases; otherwise backup for OR at Wills, JHN, or Gibbon + subspecialty cases; Fri AM = cataract evals and surgical post-op clinic'
+      ]
+    },
+
+    pgy4: {
+      key: 'pgy4',
+      label: 'PGY-4 (Third Year)',
+      short: 'PGY-4',
+      residents: ['Bair', 'Aguwa', 'Samuel', 'Wibbelsman', 'Calotti', 'Djulbegovic', 'Cheng', 'Shields'],
+      taskmasterBlocks: [],
+      blockRanges: [
+        { start: '2026-07-20', end: '2026-08-09', blocks: { Bair: 3, Aguwa: 6, Samuel: 4, Wibbelsman: 5, Calotti: 8, Djulbegovic: 2, Cheng: 1, Shields: 7 } },
+        { start: '2026-08-10', end: '2026-08-30', blocks: { Bair: 4, Aguwa: 7, Samuel: 5, Wibbelsman: 6, Calotti: 1, Djulbegovic: 3, Cheng: 2, Shields: 8 } },
+        { start: '2026-08-31', end: '2026-09-20', blocks: { Bair: 5, Aguwa: 8, Samuel: 6, Wibbelsman: 7, Calotti: 2, Djulbegovic: 4, Cheng: 3, Shields: 1 } },
+        { start: '2026-09-21', end: '2026-10-11', blocks: { Bair: 6, Aguwa: 1, Samuel: 7, Wibbelsman: 8, Calotti: 3, Djulbegovic: 5, Cheng: 4, Shields: 2 } },
+        { start: '2026-10-12', end: '2026-11-01', blocks: { Bair: 7, Aguwa: 2, Samuel: 8, Wibbelsman: 1, Calotti: 4, Djulbegovic: 6, Cheng: 5, Shields: 3 } },
+        { start: '2026-11-02', end: '2026-11-22', blocks: { Bair: 8, Aguwa: 3, Samuel: 1, Wibbelsman: 2, Calotti: 5, Djulbegovic: 7, Cheng: 6, Shields: 4 } },
+        { start: '2026-11-23', end: '2026-12-13', blocks: { Bair: 1, Aguwa: 4, Samuel: 2, Wibbelsman: 3, Calotti: 6, Djulbegovic: 8, Cheng: 7, Shields: 5 } },
+        { start: '2026-12-14', end: '2027-01-17', blocks: { Bair: 2, Aguwa: 5, Samuel: 3, Wibbelsman: 4, Calotti: 7, Djulbegovic: 1, Cheng: 8, Shields: 6 } },
+        { start: '2027-01-18', end: '2027-02-07', blocks: { Bair: 3, Aguwa: 6, Samuel: 4, Wibbelsman: 5, Calotti: 8, Djulbegovic: 2, Cheng: 1, Shields: 7 } },
+        { start: '2027-02-08', end: '2027-02-28', blocks: { Bair: 4, Aguwa: 7, Samuel: 5, Wibbelsman: 6, Calotti: 1, Djulbegovic: 3, Cheng: 2, Shields: 8 } },
+        { start: '2027-03-01', end: '2027-03-21', blocks: { Bair: 5, Aguwa: 8, Samuel: 6, Wibbelsman: 7, Calotti: 2, Djulbegovic: 4, Cheng: 3, Shields: 1 } },
+        { start: '2027-03-22', end: '2027-04-11', blocks: { Bair: 6, Aguwa: 1, Samuel: 7, Wibbelsman: 8, Calotti: 3, Djulbegovic: 5, Cheng: 4, Shields: 2 } },
+        { start: '2027-04-12', end: '2027-05-02', blocks: { Bair: 7, Aguwa: 2, Samuel: 8, Wibbelsman: 1, Calotti: 4, Djulbegovic: 6, Cheng: 5, Shields: 3 } },
+        { start: '2027-05-03', end: '2027-05-23', blocks: { Bair: 8, Aguwa: 3, Samuel: 1, Wibbelsman: 2, Calotti: 5, Djulbegovic: 7, Cheng: 6, Shields: 4 } },
+        { start: '2027-05-24', end: '2027-06-13', blocks: { Bair: 1, Aguwa: 4, Samuel: 2, Wibbelsman: 3, Calotti: 6, Djulbegovic: 8, Cheng: 7, Shields: 5 } },
+        { start: '2027-06-14', end: '2027-06-30', blocks: { Bair: 2, Aguwa: 5, Samuel: 3, Wibbelsman: 4, Calotti: 7, Djulbegovic: 1, Cheng: 8, Shields: 6 } }
+      ],
+      grid: {
+        1: {
+          mon: { am: 'CPEC', pm: 'CPEC' },
+          tue: { am: 'CPEC', pm: 'CPEC' },
+          wed: { am: 'Surg 1', pm: 'Surg 1' },
+          thu: { am: 'CPEC', pm: 'CPEC' },
+          fri: { am: 'Surg 1', pm: 'Surg 1' }
+        },
+        2: {
+          mon: { am: 'CPEC', pm: 'CPEC' },
+          tue: { am: 'Surg 1', pm: 'Surg 1' },
+          wed: { am: 'CPEC', pm: 'CPEC' },
+          thu: { am: 'Surg 1', pm: 'Surg 1' },
+          fri: { am: 'CPEC', pm: 'CPEC' }
+        },
+        3: {
+          mon: { am: 'Surg 4', pm: 'Surg 4' },
+          tue: { am: 'Surg 4', pm: 'Glaucoma' },
+          wed: { am: 'Surg 4', pm: 'Glaucoma' },
+          thu: { am: 'Surg 4', pm: 'Glaucoma' },
+          fri: { am: 'Surg 4', pm: 'Surg 4' }
+        },
+        4: {
+          mon: { am: 'Surg 1', pm: 'Surg 1' },
+          tue: { am: 'CPEC', pm: 'CPEC' },
+          wed: { am: 'Retina', pm: 'Retina' },
+          thu: { am: 'Retina OR', pm: 'Retina OR' },
+          fri: { am: 'Retina', pm: 'Retina' }
+        },
+        5: {
+          mon: { am: 'Surg 2', pm: 'Surg 2' },
+          tue: { am: 'Surg 2', pm: 'Surg 2' },
+          wed: { am: 'Surg 5', pm: 'Surg 5' },
+          thu: { am: 'Surg 5', pm: 'Surg 5' },
+          fri: { am: 'CPEC', pm: 'CPEC' }
+        },
+        6: {
+          mon: { am: 'Surg 3', pm: 'Cornea' },
+          tue: { am: 'Surg 3', pm: 'Surg 3' },
+          wed: { am: 'Surg 3', pm: 'Cornea' },
+          thu: { am: 'Surg 3', pm: 'CPEC' },
+          fri: { am: 'Surg 3', pm: 'Cornea' }
+        },
+        7: {
+          mon: { am: 'Wills OR', pm: 'Wills OR' },
+          tue: { am: 'Wills OR', pm: 'Wills OR' },
+          wed: { am: 'CPEC', pm: 'CPEC' },
+          thu: { am: 'Cooper Clinic', pm: 'Cooper Clinic' },
+          fri: { am: 'Cooper OR', pm: 'Cooper OR' }
+        },
+        8: {
+          mon: { am: 'Surg 5', pm: 'Surg 5' },
+          tue: { am: 'Surg 5', pm: 'Surg 5' },
+          wed: { am: 'Surg 2', pm: 'Surg 2' },
+          thu: { am: 'Surg 2', pm: 'Surg 2' },
+          fri: { am: 'Surg 2', pm: 'Surg 2' }
+        }
+      },
+      overrides: [
+        // Block 4: Tabas cataracts 3rd Wednesday; Dunn cataracts every 4th Friday
+        { block: 4, day: 'wed', session: 'am', nth: [3], set: 'Tabas Cataracts', note: 'Tabas cataracts 3rd Wednesday' },
+        { block: 4, day: 'wed', session: 'pm', nth: [3], set: 'Tabas Cataracts', note: 'Tabas cataracts 3rd Wednesday' },
+        { block: 4, day: 'fri', session: 'am', nth: [4], set: 'Dunn Cataracts', note: 'Dunn cataracts every 4th Friday' },
+        { block: 4, day: 'fri', session: 'pm', nth: [4], set: 'Dunn Cataracts', note: 'Dunn cataracts every 4th Friday' },
+        // Block 5: Tue — if no cases, then Oncology 2nd and 4th
+        { block: 5, day: 'tue', session: 'am', nth: [2, 4], note: 'If no cases, then Oncology (2nd and 4th Tue)' },
+        { block: 5, day: 'tue', session: 'pm', nth: [2, 4], note: 'If no cases, then Oncology (2nd and 4th Tue)' },
+        // Block 7: Markovitz Cherry Hill PM cases 4th Tuesday
+        { block: 7, day: 'tue', session: 'pm', nth: [4], note: 'Markovitz Cherry Hill PM cases 4th Tuesday' },
+        // Block 8: Thu — if no cases, then observe refractive
+        { block: 8, day: 'thu', session: 'am', note: 'If no cases, then observe refractive' },
+        { block: 8, day: 'thu', session: 'pm', note: 'If no cases, then observe refractive' }
+      ],
+      gridNotes: [
+        'Surg 1 and 5 = Cataracts',
+        'Surg 2 = Trauma / Cataracts; cover Cornea/Glaucoma if Surg 3/4 has PM cases',
+        'Surg 3 = Cornea / Trauma needing graft / Peds',
+        'Surg 4 = Glaucoma / Peds / Plastics',
+        'Block 4: Tabas cataracts 3rd Wednesday; Dunn cataracts every 4th Friday',
+        'Block 5: Tue — if no cases, then Oncology 2nd and 4th',
+        'Block 7: Markovitz Cherry Hill PM cases 4th Tuesday',
+        'Block 8: Thu — if no cases, then observe refractive'
+      ]
+    }
+  },
+
+  surgRoleMeta: {
+    'Surg 1': 'Cataracts',
+    'Surg 2': 'Trauma / Cataracts; covers Cornea/Glaucoma clinic if Surg 3/4 has PM cases. Surg 2 is the boss.',
+    'Surg 3': 'Cornea / Trauma needing graft / Peds',
+    'Surg 4': 'Glaucoma / Peds / Plastics',
+    'Surg 5': 'Cataracts',
+    'Surg 6': 'PGY-3 (block 6, Thu): shadow Surg 1/5 or Anhalt cases; otherwise OR backup at Wills, JHN, or Gibbon'
+  },
+
+  // Case-assignment hierarchy from the "How to Surgical Schedule" doc.
+  // Chain entries are either Surg roles, or special tokens:
+  //   PEDS_OR_JUNIOR   = 1st or 2nd year on Peds OR that day
+  //   PLASTICS_OR_PGY2 = 1st year on Plastics OR that day
+  //   FREE_JUNIOR      = free/willing 1st or 2nd year at the discretion of Surg 2
+  //   COOPER           = Cooper Consults resident
+  //   WILLS_OR         = resident on Wills OR block
+  //   RETINA           = resident on Retina block
+  hierarchy: {
+    scheduledCataract: { label: 'Scheduled cataracts', chain: ['Surg 1', 'Surg 5', 'WILLS_OR'], note: 'Assign per the surgical block schedule on the lounge wall; check NextGen and Cerner to delineate service vs private. PGY-3s join Wills OR cataracts Tue/Thu.' },
+    addOnCataract: { label: 'Overflow / add-on cataracts', chain: ['Surg 2', 'Surg 1', 'Surg 5', 'WILLS_OR'], note: 'Surg 2 is the first to get overflow cataracts if available.' },
+    scheduledCornea: { label: 'Scheduled cornea', chain: ['Surg 3'], note: 'Surg 3 should know scheduled cases and reach out to the operating attending beforehand.' },
+    scheduledGlaucoma: { label: 'Scheduled glaucoma', chain: ['Surg 4'], note: 'Surg 4 should know scheduled cases and reach out to the operating attending beforehand.' },
+    addOnCornea: { label: 'Add-on cornea (incl. trauma requiring tissue)', chain: ['Surg 3', 'Surg 2'], note: 'Emergent PKP / ruptures needing new corneal tissue go to cornea; Surg 2 next up if the subspecialty resident is not available.' },
+    addOnGlaucoma: { label: 'Add-on glaucoma', chain: ['Surg 4', 'Surg 2'], note: 'Tubes go to glaucoma; Surg 2 next up if the subspecialty resident is not available.' },
+    scheduledPlastics: { label: 'Scheduled plastics (incl. Gibbon/JHN)', chain: ['PLASTICS_OR_PGY2', 'FREE_JUNIOR', 'Surg 4', 'Surg 2'], note: 'Run the master daily schedule for JHN/Gibbon and specifically check for combo cases with Wills attendings.' },
+    peds: { label: 'Peds', chain: ['PEDS_OR_JUNIOR', 'FREE_JUNIOR', 'Surg 4', 'Surg 3'], note: 'Strabismus requires a resident — juniors on Peds get priority; schedule a senior backup if cases may run into evening clinic. Non-strab peds cases do not require coverage but attendings prefer one. If short, check with the Peds fellow.' },
+    traumaPlasticsAddOn: { label: 'Trauma and plastics add-ons', chain: ['PLASTICS_OR_JUNIOR', 'Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'], note: 'The junior on Plastics OR takes only TABs and add-on outpatient plastics; trauma goes to Surg 2 first (unless corneal tissue is needed — then cornea).' },
+    jhnAddOn: { label: 'Add-ons at JHN/Gibbon/Jeff Surgicenter', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'], note: 'Add-on cases at JHN/Gibbon/JSC go to Surg 2 first if available.' },
+    remaining: { label: 'Remaining cases (chronological order)', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'] },
+    clinicCoverage: { label: 'Clinic coverage', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5', 'WILLS_OR', 'RETINA'], note: 'The PM clinic manager is helpful with clinic assignments.' }
+  },
+
+  schedulingNotes: [
+    'Surg 2 is the boss. Give them some grace when things get busy.',
+    'Surg 2 is first for trauma (not requiring corneal tissue).',
+    'Add-on cases at Wills go to the resident on the subspecialty block if available (tubes → glaucoma; emergent PKP / ruptures requiring new corneal tissue → cornea); Surg 2 next up if the subspecialty resident is not available.',
+    'Add-on cases at JHN/Gibbon/Jeff Surgicenter go to Surg 2 first if available.',
+    'Surg 2 is the first to get overflow cataracts if available.',
+    'Strabismus cases require a resident — 1st and 2nd years on Peds get priority, but schedule a senior backup if cases may run over into evening clinic.',
+    'Other peds cases (non-strab) do not require resident coverage, but attendings prefer to have one.',
+    'Ayres pterygiums require a resident.',
+    'JP Dunn cases are service at the START of the year (first and fourth Fridays).',
+    'Enucleations / eviscerations / TABs / lid procedures can go to free 1st and 2nd years.',
+    'If the patient has not rolled back to the OR by 4:30, it can be passed to the call person.',
+    'For urgent call-outs or coverage issues (especially during MYF, AAO, etc.), involve the chiefs.'
+  ],
+
+  postOpNotes: [
+    'The operating third year is responsible for cataract post-ops until POM1.',
+    'Subspecialty plastics, cornea, and glaucoma post-ops: about 1 week if uncomplicated — may be attending dependent.',
+    'Keep a tight schedule of your post-ops — a common point of contention with clinic managers, and patients sometimes show up at random times/days/weeks.'
+  ],
+
+  caseSourcesNote: 'Which cases am I actually doing? Compare all three and take the overlap: the NextGen "CPEC surgery" filter (probably the most accurate, but sometimes not), the CPEC surgical block schedule on the lounge wall (the key — NextGen occasionally lists cases under the wrong resident), and the packets (mildly accurate).',
+
+  cataractPrep: [
+    'Do lens calcs and send to the attending 1 week before surgery (consider the NextGen surgical sign-up template).',
+    'Put the lens order request in Cerner at least 3 days before the surgical date.',
+    'Call patients before surgery — especially monovision, near aim, missing testing, or high-maintenance (a Google Voice number helps).',
+    'Prepare copies of post-op drop instructions (for Stadium and Cherry Hill).',
+    'Make sure the POD1 visit is scheduled at a time you can actually see them.',
+    'Bring your hard drive and packets on the day of surgery (packets live in Kris Davis’ office in CPEC; the cover page is the lens order sheet).',
+    'Cherry Hill (Markovitz): Loida emails packets with the IOL Master; do calcs from ModMed (first-eye “green sheet” under attachments); send calcs to Markovitz; fax the lens selection sheet to Cherry Hill.',
+    'Cooper (Markovitz): send calcs to Markovitz; no fax needed — lenses are sent to Cooper in advance; bring any torics from Wills (multiple options if between lenses).',
+    'Stadium: same prep as other Wills cases; fax lens selection sheets at least 3 days ahead — longer for non-standard lenses (high torics, unusual powers).'
+  ],
+
+  quote: '“The Surg schedule makes itself, Surg 2 just enforces it.” — Pat Rapuano',
+
+  // Attending clinic patterns (2nd-year page): shown as day-context info.
+  specialClinics: [
+    { label: 'Bilyk Clinic', day: 'tue', session: 'pm', nth: [1, 2, 4] },
+    { label: 'Bilyk Clinic', day: 'wed', session: 'pm', nth: [1, 3, 4] },
+    { label: 'Bilyk Clinic', day: 'thu', session: 'pm', nth: [4] },
+    { label: 'Bilyk Clinic', day: 'fri', session: 'pm', nth: [3] },
+    { label: 'Pemphigoid Clinic', day: 'fri', session: 'all', nth: [3] },
+    { label: 'Wasserman Clinic', day: 'thu', session: 'pm', nth: [3] },
+    { label: 'Schnall Clinic', day: 'fri', session: 'am', nth: [2, 4] }
+  ],
+
+  // Cooper buddy call — from the "Cooper Buddy Call 2026-2027" PDF.
+  buddyCall: {
+    note: 'Cooper buddy call — senior buddy for the Cooper consult PGY-2. Runs during BLOCK 1 ONLY (7/20 – 8/30); outside that window there is no buddy. The weekly template shows which rotation the buddy is pulled from.',
+    template: {
+      am: { mon: 'Retina', tue: 'Wills OR (B3)', wed: 'Private Glaucoma', thu: 'Cooper', fri: 'Cooper OR' },
+      pm: { mon: 'Retina', tue: 'Wills OR (B3)', wed: 'Retina', thu: 'Cooper (PGY-4)', fri: 'PT (B6)' }
+    },
+    ranges: [
+      {
+        start: '2026-07-20', end: '2026-08-09',
+        am: { mon: 'DeSimone', tue: 'Williamson', wed: 'Camacho', thu: 'Nahar', fri: 'Nahar' },
+        pm: { mon: 'DeSimone', tue: 'Williamson', wed: 'DeSimone', thu: 'Shields', fri: 'Perez' }
+      },
+      {
+        start: '2026-08-10', end: '2026-08-30',
+        am: { mon: 'DeSimone', tue: 'Williamson', wed: 'Camacho', thu: 'Nahar', fri: 'Nahar' },
+        pm: { mon: 'DeSimone', tue: 'Williamson', wed: 'DeSimone', thu: 'Aguwa', fri: 'Perez' }
+      }
+    ]
+  }
+};
+
+if (typeof window !== 'undefined') window.SCHED_DATA = SCHED_DATA;
+if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA;
+
+</script>
+<script>
+/*
+ * engine.js — pure schedule-resolution logic (no DOM).
+ * Exposes window.Engine in the browser and module.exports in Node.
+ *
+ * All date parsing is LOCAL: 'YYYY-MM-DD' is split manually into
+ * new Date(y, m-1, d). Never new Date('YYYY-MM-DD') (UTC, shifts weekday).
+ */
+(function () {
+  'use strict';
+
+  var WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  var WEEKDAY_LABELS = {
+    sun: 'Sunday', mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday',
+    thu: 'Thursday', fri: 'Friday', sat: 'Saturday'
+  };
+  var ISO_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+  var SURG_RE = /^Surg (\d+)$/;
+  var OR_RE = /\bOR\b/; // case-sensitive word 'OR' → OR-type block
+  var NON_CLINIC = { 'CPEC': true, 'ER': true, 'PT': true, 'Jeff Consults': true, 'Cooper Consults': true, 'Day Float': true };
+
+  function getData(data) {
+    if (data) return data;
+    if (typeof window !== 'undefined' && window.SCHED_DATA) return window.SCHED_DATA;
+    if (typeof module !== 'undefined' && module.exports && typeof require === 'function') {
+      return require('./data.js');
+    }
+    throw new Error('Engine: SCHED_DATA not available');
+  }
+
+  // 'YYYY-MM-DD' → local Date
+  function parseISO(iso) {
+    var m = ISO_RE.exec(String(iso));
+    if (!m) throw new Error('Engine: bad ISO date "' + iso + '" (want YYYY-MM-DD)');
+    return new Date(+m[1], +m[2] - 1, +m[3]);
+  }
+
+  // Occurrence index (1–5) of this date's weekday within its month.
+  function nthWeekdayOfMonth(date) {
+    var d = (date instanceof Date) ? date : parseISO(date);
+    return Math.floor((d.getDate() - 1) / 7) + 1;
+  }
+
+  // The blockRanges entry containing dateISO (ISO string compare works).
+  function findBlockRange(yearData, dateISO) {
+    var ranges = yearData.blockRanges;
+    for (var i = 0; i < ranges.length; i++) {
+      if (ranges[i].start <= dateISO && dateISO <= ranges[i].end) return ranges[i];
+    }
+    return null;
+  }
+
+  function ruleMatches(rule, block, weekdayKey, session, nth, month) {
+    if (rule.block !== block) return false;
+    if (rule.day !== weekdayKey) return false;
+    if (rule.session !== session) return false;
+    if (rule.nth && rule.nth.indexOf(nth) === -1) return false;
+    if (rule.months && rule.months.indexOf(month) === -1) return false;
+    return true;
+  }
+
+  // Base grid text + overrides (applied in array order) → { text, notes }
+  function resolveCell(yearData, block, weekdayKey, session, nth, month) {
+    var row = yearData.grid[block];
+    var base = row && row[weekdayKey];
+    var text = base ? base[session] : '';
+    var notes = [];
+    var rules = yearData.overrides || [];
+    for (var i = 0; i < rules.length; i++) {
+      var rule = rules[i];
+      if (!ruleMatches(rule, block, weekdayKey, session, nth, month)) continue;
+      if (rule.set) text = rule.set;
+      if (rule.note) notes.push(rule.note);
+    }
+    return { text: text, notes: notes };
+  }
+
+  function emptyDay(dateISO, weekdayKey, nth, inYear, isWeekend) {
+    return {
+      date: dateISO,
+      weekdayKey: weekdayKey,
+      weekdayLabel: WEEKDAY_LABELS[weekdayKey],
+      nth: nth,
+      inYear: inYear,
+      isWeekend: isWeekend,
+      residents: [],
+      surg: {},
+      wer: { am: [], pm: [] },
+      jeffConsults: [],
+      cooperConsults: [],
+      dayFloat: [],
+      taskmasters: [],
+      clinics: {},
+      orBlocks: {},
+      specialClinicsToday: [],
+      cooperBuddies: { am: null, pm: null, templateAM: null, templatePM: null }
+    };
+  }
+
+  function pushUnique(arr, v) {
+    if (arr.indexOf(v) === -1) arr.push(v);
+  }
+
+  function sessionSuffix(session) {
+    if (session === 'am') return ' (AM)';
+    if (session === 'pm') return ' (PM)';
+    return ' (AM/PM)';
+  }
+
+  function resolveDay(dateISO, data) {
+    data = getData(data);
+    var d = parseISO(dateISO);
+    var weekdayKey = WEEKDAY_KEYS[d.getDay()];
+    var nth = nthWeekdayOfMonth(d);
+    var month = d.getMonth() + 1;
+    var inYear = data.ayStart <= dateISO && dateISO <= data.ayEnd;
+    var isWeekend = weekdayKey === 'sat' || weekdayKey === 'sun';
+
+    var day = emptyDay(dateISO, weekdayKey, nth, inYear, isWeekend);
+    if (isWeekend || !inYear) return day;
+
+    var taskmasterEntries = [];
+    var yearKeys = Object.keys(data.years);
+
+    for (var y = 0; y < yearKeys.length; y++) {
+      var yearKey = yearKeys[y];
+      var yearData = data.years[yearKey];
+      var range = findBlockRange(yearData, dateISO);
+      var tmBlocks = yearData.taskmasterBlocks || [];
+
+      for (var r = 0; r < yearData.residents.length; r++) {
+        var name = yearData.residents[r];
+        var block = range && range.blocks ? range.blocks[name] : undefined;
+        if (block === undefined || block === null) continue;
+
+        var am = resolveCell(yearData, block, weekdayKey, 'am', nth, month);
+        var pm = resolveCell(yearData, block, weekdayKey, 'pm', nth, month);
+        var taskmaster = tmBlocks.indexOf(block) !== -1;
+
+        var res = {
+          name: name,
+          year: yearKey,
+          yearLabel: yearData.label,
+          block: block,
+          taskmaster: taskmaster,
+          am: am,
+          pm: pm
+        };
+        day.residents.push(res);
+        if (taskmaster) taskmasterEntries.push({ name: name, block: block });
+
+        // Surg map (any 'Surg N' text — pgy4 gives 1–5, pgy3 block 6 Thu gives 6)
+        var mAm = SURG_RE.exec(am.text);
+        var mPm = SURG_RE.exec(pm.text);
+        if (mAm || mPm) {
+          var n = (mAm || mPm)[1];
+          var entry = day.surg[n];
+          if (!entry || entry.name === name) {
+            if (!entry) entry = day.surg[n] = { name: name, am: false, pm: false, amText: am.text, pmText: pm.text };
+            if (mAm) entry.am = true;
+            if (mPm && (!mAm || mAm[1] === mPm[1])) entry.pm = true;
+          }
+          // odd case: am and pm are different Surg N's
+          if (mAm && mPm && mAm[1] !== mPm[1]) {
+            var n2 = mPm[1];
+            var e2 = day.surg[n2] || (day.surg[n2] = { name: name, am: false, pm: false, amText: am.text, pmText: pm.text });
+            e2.pm = true;
+          }
+        }
+
+        // Session-level groupings
+        var sessions = ['am', 'pm'];
+        for (var s = 0; s < sessions.length; s++) {
+          var session = sessions[s];
+          var text = (session === 'am' ? am : pm).text;
+          if (!text) continue;
+
+          if (text === 'ER') { pushUnique(day.wer[session], name); continue; }
+          if (text === 'Jeff Consults') { pushUnique(day.jeffConsults, name); continue; }
+          if (text === 'Cooper Consults') { pushUnique(day.cooperConsults, name); continue; }
+          if (text === 'Day Float') { pushUnique(day.dayFloat, name); continue; }
+          if (SURG_RE.test(text)) continue; // captured in day.surg
+          if (OR_RE.test(text)) {
+            var ob = day.orBlocks[text] || (day.orBlocks[text] = { am: [], pm: [] });
+            ob[session].push({ name: name, year: yearKey });
+            continue;
+          }
+          if (NON_CLINIC[text]) continue; // CPEC / PT (ER etc. handled above)
+          var cl = day.clinics[text] || (day.clinics[text] = { am: [], pm: [] });
+          cl[session].push({ name: name, year: yearKey });
+        }
+      }
+    }
+
+    // Taskmasters ordered by block number (block 2 before block 5)
+    taskmasterEntries.sort(function (a, b) { return a.block - b.block; });
+    day.taskmasters = taskmasterEntries.map(function (t) { return t.name; });
+
+    // Special clinics matching today's weekday + nth
+    var specials = data.specialClinics || [];
+    for (var i = 0; i < specials.length; i++) {
+      var sc = specials[i];
+      if (sc.day !== weekdayKey) continue;
+      if (sc.nth && sc.nth.indexOf(nth) === -1) continue;
+      day.specialClinicsToday.push(sc.label + sessionSuffix(sc.session));
+    }
+
+    // Cooper buddy call: template rotation by weekday; named buddy from the
+    // range containing this date (ISO string compare), if any. Weekend /
+    // out-of-year days never reach this point and keep all-null values.
+    var bc = data.buddyCall;
+    if (bc) {
+      var tmpl = bc.template || {};
+      day.cooperBuddies.templateAM = (tmpl.am && tmpl.am[weekdayKey]) || null;
+      day.cooperBuddies.templatePM = (tmpl.pm && tmpl.pm[weekdayKey]) || null;
+      var bcRanges = bc.ranges || [];
+      for (var bi = 0; bi < bcRanges.length; bi++) {
+        var br = bcRanges[bi];
+        if (br.start <= dateISO && dateISO <= br.end) {
+          day.cooperBuddies.am = (br.am && br.am[weekdayKey]) || null;
+          day.cooperBuddies.pm = (br.pm && br.pm[weekdayKey]) || null;
+          break;
+        }
+      }
+    }
+
+    return day;
+  }
+
+  var Engine = {
+    parseISO: parseISO,
+    nthWeekdayOfMonth: nthWeekdayOfMonth,
+    findBlockRange: findBlockRange,
+    resolveCell: resolveCell,
+    resolveDay: resolveDay
+  };
+
+  if (typeof window !== 'undefined') window.Engine = Engine;
+  if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
+})();
+
+</script>
+<script>
+/*
+ * assign.js — case → resident suggestion engine.
+ * Defines window.Assign (browser) / module.exports (Node).
+ * Plain script, no ES modules. Loaded after js/data.js.
+ *
+ * Assign.classify(caseObj)          -> hierarchy key string
+ * Assign.suggest(cases, roster)     -> [{ caseId, name, reasons, warnings, alternates }]
+ * Assign.clinicCoverage(roster)     -> [{ name, source }] PM clinic-coverage chain
+ *
+ * All functions accept an optional trailing `data` argument (the SCHED_DATA
+ * object); otherwise they fall back to window.SCHED_DATA / require('./data.js').
+ */
+(function () {
+  'use strict';
+
+  var FREE_JUNIOR_LABEL = "free junior — Surg 2's discretion";
+
+  function getData(data) {
+    if (data) return data;
+    if (typeof window !== 'undefined' && window.SCHED_DATA) return window.SCHED_DATA;
+    if (typeof require !== 'undefined') return require('./data.js');
+    return null;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* classify                                                            */
+  /* ------------------------------------------------------------------ */
+
+  function classify(caseObj) {
+    var cat = (caseObj && caseObj.category) || '';
+    var addOn = !!(caseObj && caseObj.addOn);
+    if (cat === 'peds') return 'peds';
+    // Add-ons at JHN/Gibbon/Jeff Surgicenter go to Surg 2 first.
+    if (addOn && caseObj && caseObj.section === 'jhn') return 'jhnAddOn';
+    if (cat === 'cornea' && addOn) return 'addOnCornea';
+    if (cat === 'glaucoma' && addOn) return 'addOnGlaucoma';
+    if (cat === 'cataract' && addOn) return 'addOnCataract';
+    if (cat === 'trauma' || (cat === 'plastics' && addOn)) return 'traumaPlasticsAddOn';
+    if (cat === 'plastics') return 'scheduledPlastics';
+    if (cat === 'cornea') return 'scheduledCornea';
+    if (cat === 'glaucoma') return 'scheduledGlaucoma';
+    if (cat === 'cataract') return 'scheduledCataract';
+    return 'remaining';
+  }
+
+  function needsResident(caseObj) {
+    return ((caseObj && caseObj.serviceCount) | 0) > 0;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* small helpers                                                       */
+  /* ------------------------------------------------------------------ */
+
+  // First time token in the start text -> number:
+  // '0730' / '7:30' / '730' -> 730; '730, 915 (x1 service)' -> 730;
+  // '0730-0900' -> 730. No H:MM/HMM token -> null.
+  function startNum(caseObj) {
+    var m = /(\d{1,2}):?(\d{2})/.exec(String((caseObj && caseObj.start) || ''));
+    if (!m) return null;
+    return (+m[1]) * 100 + (+m[2]);
+  }
+
+  // normalized 4-char start string (from the same first-token parse) for
+  // chronological string sort; unknown last
+  function startKey(caseObj) {
+    var n = startNum(caseObj);
+    if (n === null) return '9999';
+    return ('0000' + n).slice(-4);
+  }
+
+  function sessionOf(caseObj) {
+    var n = startNum(caseObj);
+    if (n === null) return 'am';
+    return n >= 1230 ? 'pm' : 'am';
+  }
+
+  function spansDay(caseObj) {
+    var n = startNum(caseObj);
+    return n !== null && n <= 730 && ((caseObj.count | 0) >= 4);
+  }
+
+  // A resolved roster cell counts as a "clinic" unless it is Surg N / CPEC /
+  // ER / PT / an OR block / a consult-or-float assignment (mirrors the
+  // engine's clinic-grouping exclusions).
+  function isClinicText(text) {
+    var t = String(text || '').trim();
+    if (!t) return false;
+    if (/^Surg \d/.test(t)) return false;
+    if (t === 'CPEC' || t === 'ER' || t === 'PT') return false;
+    if (t.indexOf('OR') !== -1) return false;
+    if (t === 'Jeff Consults' || t === 'Cooper Consults' || t === 'Day Float') return false;
+    return true;
+  }
+
+  function findResident(roster, name) {
+    var list = (roster && roster.residents) || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].name === name) return list[i];
+    }
+    return null;
+  }
+
+  // People on an OR block (am+pm union by default, dedup, order preserved).
+  function orBlockPeople(roster, key, sessions) {
+    var blk = roster && roster.orBlocks && roster.orBlocks[key];
+    if (!blk) return [];
+    var out = [];
+    var seen = {};
+    (sessions || ['am', 'pm']).forEach(function (sess) {
+      (blk[sess] || []).forEach(function (p) {
+        var name = typeof p === 'string' ? p : p && p.name;
+        if (name && !seen[name]) {
+          seen[name] = true;
+          out.push({ name: name, year: (p && p.year) || '' });
+        }
+      });
+    });
+    return out;
+  }
+
+  function clinicPeople(roster, key, sessions) {
+    var grp = roster && roster.clinics && roster.clinics[key];
+    if (!grp) return [];
+    var out = [];
+    var seen = {};
+    (sessions || ['am', 'pm']).forEach(function (sess) {
+      (grp[sess] || []).forEach(function (p) {
+        var name = typeof p === 'string' ? p : p && p.name;
+        if (name && !seen[name]) {
+          seen[name] = true;
+          out.push({ name: name, year: (p && p.year) || '' });
+        }
+      });
+    });
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* chain token resolution                                              */
+  /* ------------------------------------------------------------------ */
+
+  // -> { label, names: [..], freeJunior?: true }
+  // `sessions` (optional, e.g. ['pm']) restricts which roster sessions the
+  // OR-block / clinic tokens draw from; case chains use both sessions.
+  function resolveToken(token, roster, sessions) {
+    var m = /^Surg (\d)$/.exec(token);
+    if (m) {
+      var slot = roster && roster.surg && roster.surg[m[1]];
+      return { label: token, names: slot && slot.name ? [slot.name] : [] };
+    }
+    if (token === 'PEDS_OR_JUNIOR') {
+      var juniors = orBlockPeople(roster, 'Peds OR').filter(function (p) {
+        return p.year === 'pgy2' || p.year === 'pgy3';
+      });
+      return { label: 'junior on Peds OR', names: juniors.map(function (p) { return p.name; }) };
+    }
+    if (token === 'PLASTICS_OR_PGY2') {
+      var firsts = orBlockPeople(roster, 'Plastics OR').filter(function (p) {
+        return p.year === 'pgy2';
+      });
+      return { label: 'PGY-2 on Plastics OR', names: firsts.map(function (p) { return p.name; }) };
+    }
+    if (token === 'PLASTICS_OR_JUNIOR') {
+      var pj = orBlockPeople(roster, 'Plastics OR').filter(function (p) {
+        return p.year === 'pgy2' || p.year === 'pgy3';
+      });
+      return { label: 'junior on Plastics OR (TABs / outpatient plastics only)', names: pj.map(function (p) { return p.name; }) };
+    }
+    if (token === 'FREE_JUNIOR') {
+      // Can't compute "willing" — never a primary suggestion, only an alternate.
+      return { label: FREE_JUNIOR_LABEL, names: [], freeJunior: true };
+    }
+    if (token === 'COOPER') {
+      var cooper = (roster && roster.cooperConsults) || [];
+      return { label: 'Cooper Consults', names: cooper.length ? [cooper[0]] : [] };
+    }
+    if (token === 'WILLS_OR') {
+      return { label: 'Wills OR', names: orBlockPeople(roster, 'Wills OR', sessions).map(function (p) { return p.name; }) };
+    }
+    if (token === 'RETINA') {
+      var names = [];
+      var seen = {};
+      orBlockPeople(roster, 'Retina OR', sessions).concat(clinicPeople(roster, 'Retina', sessions)).forEach(function (p) {
+        if (!seen[p.name]) { seen[p.name] = true; names.push(p.name); }
+      });
+      return { label: 'Retina', names: names };
+    }
+    return { label: token, names: [] };
+  }
+
+  // Resolve a whole chain into an ordered candidate list.
+  // -> [{ name, via }] real candidates + { freeJunior: true, via } markers.
+  function resolveChain(chain, roster) {
+    var out = [];
+    var seen = {};
+    (chain || []).forEach(function (token) {
+      var r = resolveToken(token, roster);
+      if (r.freeJunior) {
+        out.push({ freeJunior: true, via: r.label });
+        return;
+      }
+      r.names.forEach(function (name) {
+        if (!seen[name]) {
+          seen[name] = true;
+          out.push({ name: name, via: r.label });
+        }
+      });
+    });
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* suggest                                                             */
+  /* ------------------------------------------------------------------ */
+
+  function processGroup(key) {
+    if (key === 'remaining') return 2;
+    if (key === 'addOnCornea' || key === 'addOnGlaucoma' || key === 'addOnCataract' ||
+        key === 'jhnAddOn' || key === 'traumaPlasticsAddOn') return 1;
+    return 0; // peds + scheduled specialty + plastics + cataract
+  }
+
+  function suggest(cases, roster, data) {
+    data = getData(data);
+    var hierarchy = (data && data.hierarchy) || {};
+    var results = [];
+
+    // Load = # of cases per resident this pass (pre-existing manual
+    // assignments count from the start).
+    var load = {};
+    (cases || []).forEach(function (c) {
+      if (c && c.assigned) load[c.assigned] = (load[c.assigned] || 0) + 1;
+    });
+
+    // Process order: peds & scheduled first, then add-ons, then remaining
+    // chronologically (string sort on normalized 24h start).
+    var entries = (cases || []).map(function (c, i) {
+      return { c: c, i: i, key: classify(c) };
+    });
+    entries.sort(function (a, b) {
+      var ga = processGroup(a.key);
+      var gb = processGroup(b.key);
+      if (ga !== gb) return ga - gb;
+      if (ga === 2) {
+        var ka = startKey(a.c);
+        var kb = startKey(b.c);
+        if (ka !== kb) return ka < kb ? -1 : 1;
+      }
+      return a.i - b.i; // stable
+    });
+
+    entries.forEach(function (entry) {
+      var c = entry.c;
+      if (!c) return;
+
+      if (!needsResident(c)) {
+        results.push({
+          caseId: c.id,
+          name: '',
+          reasons: ['private — no resident needed'],
+          warnings: [],
+          alternates: []
+        });
+        return;
+      }
+
+      var hier = hierarchy[entry.key] || { label: entry.key, chain: [] };
+      var chain = hier.chain || [];
+      // The junior on Plastics OR takes only TABs / outpatient plastics
+      // add-ons — real trauma skips them and starts at Surg 2.
+      if (entry.key === 'traumaPlasticsAddOn' && c.category === 'trauma') {
+        chain = chain.filter(function (t) { return t !== 'PLASTICS_OR_JUNIOR'; });
+      }
+      var candidates = resolveChain(chain, roster);
+
+      var primary = null;
+      var alternates = [];
+      var nextName = null;
+      for (var i = 0; i < candidates.length; i++) {
+        var cand = candidates[i];
+        if (cand.freeJunior) {
+          alternates.push(cand.via);
+          continue;
+        }
+        if (!primary) {
+          primary = cand;
+        } else {
+          if (nextName === null) nextName = cand.name;
+          alternates.push(cand.name);
+        }
+      }
+
+      if (!primary) {
+        results.push({
+          caseId: c.id,
+          name: '',
+          reasons: [hier.label + ' — no one in the chain is available today'],
+          warnings: ['No resident resolvable from the hierarchy chain'],
+          alternates: alternates
+        });
+        return;
+      }
+
+      var reasons = [hier.label + ' → ' + primary.via];
+      var warnings = [];
+
+      // Load-balance: still suggest the first choice, but warn.
+      var primaryLoad = load[primary.name] || 0;
+      if (nextName !== null && primaryLoad >= (load[nextName] || 0) + 2) {
+        warnings.push(primary.name + ' already has ' + primaryLoad +
+          ' cases — consider next in chain (' + nextName + ')');
+      }
+
+      // Session conflicts.
+      var sess = sessionOf(c);
+      var spans = spansDay(c);
+      if (spans) {
+        warnings.push('x' + c.count + ' starting ' + c.start + ' — likely spans AM and PM');
+      }
+      var sessions = spans ? ['am', 'pm'] : [sess];
+      var resident = findResident(roster, primary.name);
+      if (resident) {
+        sessions.forEach(function (s) {
+          var cell = resident[s];
+          var text = cell && cell.text;
+          if (isClinicText(text)) {
+            warnings.push(primary.name + ' is in ' + text + ' clinic ' + s.toUpperCase());
+          }
+        });
+      }
+
+      // Count the suggestion toward this pass's load (unless the case already
+      // carries a manual assignment, which was pre-counted above).
+      if (!c.assigned) load[primary.name] = primaryLoad + 1;
+
+      results.push({
+        caseId: c.id,
+        name: primary.name,
+        reasons: reasons,
+        warnings: warnings,
+        alternates: alternates
+      });
+    });
+
+    return results;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* clinicCoverage                                                      */
+  /* ------------------------------------------------------------------ */
+
+  function clinicCoverage(roster, data) {
+    data = getData(data);
+    var chain = (data && data.hierarchy && data.hierarchy.clinicCoverage &&
+      data.hierarchy.clinicCoverage.chain) || [];
+    var out = [];
+    var seen = {};
+    chain.forEach(function (token) {
+      // PM clinic coverage: draw OR-block / clinic tokens from the PM session.
+      var r = resolveToken(token, roster, ['pm']);
+      if (r.freeJunior) return;
+      r.names.forEach(function (name) {
+        if (!seen[name]) {
+          seen[name] = true;
+          out.push({ name: name, source: r.label });
+        }
+      });
+    });
+    return out;
+  }
+
+  // Backup plan per Step 3 of the how-to: when the assigned resident staffs a
+  // PM clinic that this case could pull them out of, the first free name in
+  // the clinic-coverage chain covers the clinic; the next is the 2nd backup.
+  // Returns { clinic, primary: {name, source}, second: {name, source}|null }
+  // or null when no coverage is needed / nobody is free.
+  function backupPlan(caseObj, roster, data, allCases) {
+    var assigned = String((caseObj && caseObj.assigned) || '').replace(/^\s+|\s+$/g, '');
+    if (!assigned) return null;
+    var res = findResident(roster, assigned);
+    if (!res) return null;
+    var pmText = (res.pm && res.pm.text) || '';
+    if (!isClinicText(pmText)) return null;
+    // An AM-only case that won't span the day doesn't threaten the PM clinic.
+    if (sessionOf(caseObj) === 'am' && !spansDay(caseObj)) return null;
+    var busy = {};
+    busy[assigned] = true;
+    (allCases || []).forEach(function (c) {
+      var a = String((c && c.assigned) || '').replace(/^\s+|\s+$/g, '');
+      if (a) busy[a] = true;
+    });
+    var chain = clinicCoverage(roster, data).filter(function (item) {
+      if (busy[item.name]) return false;
+      var other = findResident(roster, item.name);
+      if (other && other.pm && other.pm.text === pmText) return false; // already staffing it
+      return true;
+    });
+    if (!chain.length) return null;
+    return { clinic: pmText, primary: chain[0], second: chain[1] || null };
+  }
+
+  /* ------------------------------------------------------------------ */
+
+  var Assign = {
+    classify: classify,
+    suggest: suggest,
+    clinicCoverage: clinicCoverage,
+    backupPlan: backupPlan
+  };
+
+  if (typeof window !== 'undefined') window.Assign = Assign;
+  if (typeof module !== 'undefined' && module.exports) module.exports = Assign;
+})();
+
+</script>
+<script>
+/*
+ * export.js — schedule document formatting.
+ * window.ExportFmt in the browser; module.exports in Node.
+ *
+ * buildHTML(day) / buildText(day) are pure: they take a plain object
+ * (the per-date app state plus `roster`, the Engine DayRoster) and return
+ * a string. Only copy() touches browser APIs, and every browser API is
+ * guarded so the module is requireable and callable from Node.
+ */
+(function () {
+  'use strict';
+
+  /* ------------------------------------------------------------------ */
+  /* helpers                                                             */
+  /* ------------------------------------------------------------------ */
+
+  function trim(s) {
+    return String(s == null ? '' : s).replace(/^\s+|\s+$/g, '');
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // A "line" is an array of segments { t: text, b: bold, cls?: 'unassigned' }
+  // (or a plain string, meaning one non-bold segment).
+  function seg(t, b) { return { t: String(t), b: !!b }; }
+
+  function normLine(line) {
+    if (typeof line === 'string') return [seg(line, false)];
+    return line.map(function (s) {
+      return typeof s === 'string' ? seg(s, false) : s;
+    });
+  }
+
+  function num(v) {
+    var n = parseInt(v, 10);
+    return isNaN(n) ? 0 : n;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* section builders                                                    */
+  /* ------------------------------------------------------------------ */
+
+  // WER collapses per-resident sessions: 'Nahar AM/PM, Hamou AM/PM, Patel PM'
+  function collapseWer(wer) {
+    wer = wer || {};
+    var am = wer.am || [];
+    var pm = wer.pm || [];
+    var parts = [];
+    am.forEach(function (n) {
+      parts.push(n + (pm.indexOf(n) !== -1 ? ' AM/PM' : ' AM'));
+    });
+    pm.forEach(function (n) {
+      if (am.indexOf(n) === -1) parts.push(n + ' PM');
+    });
+    return parts.join(', ');
+  }
+
+  function buddyPart(b, sess) {
+    if (!b || !trim(b.name)) return '';
+    var t = trim(b.name) + ' ' + sess;
+    if (trim(b.note)) t += ' (' + trim(b.note) + ')';
+    return t;
+  }
+
+  // 'Illiano + buddy [Camacho AM (private glaucoma) | DeSimone PM (retina)]'
+  function cooperText(roster, day) {
+    var cooper = (roster.cooperConsults || []);
+    if (!cooper.length) return '';
+    var t = cooper.join(', ');
+    var a = buddyPart(day.cooperBuddyAM, 'AM');
+    var p = buddyPart(day.cooperBuddyPM, 'PM');
+    var buddies = [a, p].filter(function (x) { return !!x; });
+    if (buddies.length) t += ' + buddy [' + buddies.join(' | ') + ']';
+    return t;
+  }
+
+  // '-Marous x7 (730 start), x1 service - **Momenaei** (no Peds OR)'
+  function caseLine(c) {
+    var count = num(c.count);
+    var svc = num(c.serviceCount);
+    var t = '-' + (trim(c.surgeon) || '?') + ' x' + count;
+    if (trim(c.start)) t += ' (' + trim(c.start) + ' start)';
+    if (svc > 0 && svc !== count) t += ', x' + svc + ' service';
+    var line = [seg(t)];
+    var assigned = trim(c.assigned);
+    var backup = trim(c.backup);
+    var backupNote = trim(c.backupNote);
+    if (assigned) {
+      // '- **Bair; Calotti** to cover glaucoma clinic during case if after 1 PM, …'
+      line.push(seg(' - '));
+      line.push(seg(assigned + (backup ? '; ' + backup : ''), true));
+      if (backupNote) line.push(seg(' ' + backupNote));
+    } else if (svc > 0) {
+      line.push({ t: ' - ⚠ UNASSIGNED', b: false, cls: 'unassigned' });
+    }
+    var extras = [];
+    if (trim(c.notes)) extras.push(trim(c.notes));
+    if (!assigned && backup) {
+      extras.push('backup: ' + backup + (backupNote ? ' ' + backupNote : ''));
+    }
+    if (extras.length) line.push(seg(' (' + extras.join('; ') + ')'));
+    return line;
+  }
+
+  // Roster clinic staff for label+session with manual add/remove overrides.
+  function clinicStaff(day, roster, label, session) {
+    var grp = (roster.clinics || {})[label];
+    var base = ((grp && grp[session]) || []).map(function (p) {
+      return typeof p === 'string' ? p : (p && p.name) || '';
+    }).filter(function (n) { return !!n; });
+    var ov = (day.clinicStaffOverrides || {})[label + '|' + session] || {};
+    var removed = ov.removed || [];
+    var added = ov.added || [];
+    var out = base.filter(function (n) { return removed.indexOf(n) === -1; });
+    added.forEach(function (n) {
+      if (n && out.indexOf(n) === -1) out.push(n);
+    });
+    return out;
+  }
+
+  // 'Cornea PM (29x3): **Momenaei, Williamson, Aguwa**'
+  function clinicLines(day, roster) {
+    var clinics = roster.clinics || {};
+    var counts = day.clinicCounts || {};
+    var labels = Object.keys(clinics);
+    Object.keys(counts).forEach(function (k) {
+      var label = k.split('|')[0];
+      if (label && labels.indexOf(label) === -1) labels.push(label);
+    });
+    labels.sort();
+    var lines = [];
+    labels.forEach(function (label) {
+      ['am', 'pm'].forEach(function (session) {
+        var staff = clinicStaff(day, roster, label, session);
+        var cc = counts[label + '|' + session] || {};
+        var count = trim(cc.count);
+        var extra = trim(cc.extra);
+        if (!staff.length && !count && !extra) return;
+        var head = label + ' ' + session.toUpperCase();
+        var paren = [];
+        if (count) paren.push(count);
+        if (extra) paren.push(extra);
+        if (paren.length) head += ' (' + paren.join(', ') + ')';
+        var line = [seg(head + ': ')];
+        line.push(staff.length ? seg(staff.join(', '), true) : seg('none'));
+        lines.push(line);
+      });
+    });
+    return lines;
+  }
+
+  // -> array of sections; each section is an array of lines.
+  function buildSections(day) {
+    day = day || {};
+    var roster = day.roster || {};
+    var sections = [];
+
+    // Lectures/Events
+    var lectures = trim(day.lectures);
+    if (lectures) {
+      var lLines = ['Lectures/Events'];
+      lectures.split(/\r?\n/).forEach(function (ln) { lLines.push(ln); });
+      sections.push(lLines);
+    }
+
+    // Assignments (Surg 1..N)
+    var surg = roster.surg || {};
+    var surgKeys = Object.keys(surg).sort(function (a, b) { return (+a) - (+b); });
+    if (surgKeys.length) {
+      var aLines = ['Assignments'];
+      surgKeys.forEach(function (n) {
+        var s = surg[n] || {};
+        var line = [seg('Surg ' + n + ' - ')];
+        if (s.am && s.pm) {
+          line.push(seg(s.name, true));
+        } else if (s.am) {
+          line.push(seg(s.name + ' AM', true));
+          line.push(seg(' | none PM'));
+        } else if (s.pm) {
+          line.push(seg('none AM | '));
+          line.push(seg(s.name + ' PM', true));
+        } else {
+          line.push(seg('none'));
+        }
+        aLines.push(line);
+      });
+      sections.push(aLines);
+    }
+
+    // WER / Night Float / Jeff Consults / Cooper Consults
+    var cLines = [];
+    var wer = collapseWer(roster.wer);
+    if (wer) cLines.push([seg('WER: '), seg(wer, true)]);
+    var nf = trim(day.nightFloat);
+    if (nf) cLines.push([seg('Night Float: '), seg(nf, true)]);
+    var jeff = roster.jeffConsults || [];
+    if (jeff.length) cLines.push([seg('Jeff Consults: '), seg(jeff.join(', '), true)]);
+    var cooper = cooperText(roster, day);
+    if (cooper) cLines.push([seg('Cooper Consults: '), seg(cooper, true)]);
+    if (cLines.length) sections.push(cLines);
+
+    // Case sections. The three core sections always print (with '-none' when
+    // empty, matching the target document); 'Other' only prints when used.
+    var cases = day.cases || [];
+    var defs = [
+      { key: 'wills', label: 'Wills/ASC', always: true },
+      { key: 'private', label: 'Privates', always: true },
+      { key: 'jhn', label: 'JHN/TJUH/JSC', always: true },
+      { key: 'other', label: 'Other (Stadium/Cherry Hill)', always: false }
+    ];
+    defs.forEach(function (def) {
+      var list = cases.filter(function (c) { return c && c.section === def.key; });
+      if (!list.length && !def.always) return;
+      var lines = [def.label];
+      if (!list.length) lines.push('-none');
+      else list.forEach(function (c) { lines.push(caseLine(c)); });
+      sections.push(lines);
+    });
+
+    // Clinics
+    var clLines = clinicLines(day, roster);
+    if (clLines.length) sections.push(['Clinics'].concat(clLines));
+
+    // Vacation
+    var vac = trim(day.vacation);
+    if (vac) {
+      var vLines = ['Vacation'];
+      vac.split(/\r?\n/).forEach(function (ln) { vLines.push(ln); });
+      sections.push(vLines);
+    }
+
+    // Add-ons
+    var addLines = addOnLines(day);
+    if (addLines.length) sections.push(['Add-ons'].concat(addLines));
+
+    return sections;
+  }
+
+  // 'Tuesday night (7/21/26): **Djulbegovic**'
+  function addOnLines(day) {
+    var lines = [];
+    ((day && day.addOns) || []).forEach(function (row) {
+      if (!row || !trim(row.name)) return;
+      var label = trim(row.label);
+      if (label) lines.push([seg(label + ': '), seg(trim(row.name), true)]);
+      else lines.push([seg(trim(row.name), true)]);
+    });
+    return lines;
+  }
+
+  // The Add-ons section alone, as sections (for paste-at-the-end copying).
+  function addOnsSections(day) {
+    var lines = addOnLines(day);
+    return lines.length ? [['Add-ons'].concat(lines)] : [];
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* renderers                                                           */
+  /* ------------------------------------------------------------------ */
+
+  function buildText(day) {
+    return sectionsToText(buildSections(day));
+  }
+
+  function sectionsToText(sections) {
+    return sections.map(function (lines) {
+      return lines.map(function (line) {
+        return normLine(line).map(function (s) {
+          return s.b ? '**' + s.t + '**' : s.t;
+        }).join('');
+      }).join('\n');
+    }).join('\n\n');
+  }
+
+  function buildHTML(day) {
+    return sectionsToHTML(buildSections(day));
+  }
+
+  function sectionsToHTML(sections) {
+    var body = sections.map(function (lines) {
+      return lines.map(function (line) {
+        var inner = normLine(line).map(function (s) {
+          var t = esc(s.t);
+          if (s.cls === 'unassigned') {
+            return '<span style="color:#b3261e;font-weight:700">' + t + '</span>';
+          }
+          return s.b ? '<b>' + t + '</b>' : t;
+        }).join('');
+        return '<div>' + (inner || '<br>') + '</div>';
+      }).join('');
+    }).join('<div><br></div>');
+    return '<div style="font-family:Calibri,\'Segoe UI\',Arial,sans-serif;' +
+      'font-size:11pt;line-height:1.35">' + body + '</div>';
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* clipboard                                                           */
+  /* ------------------------------------------------------------------ */
+
+  // Copies the rendered HTML via a hidden contenteditable + execCommand.
+  function execCopyHTML(html) {
+    if (typeof document === 'undefined' || typeof window === 'undefined' ||
+        !document.body || !window.getSelection) return false;
+    var host;
+    try {
+      host = document.createElement('div');
+      host.setAttribute('contenteditable', 'true');
+      host.style.position = 'fixed';
+      host.style.left = '-9999px';
+      host.style.top = '0';
+      host.style.opacity = '0';
+      host.innerHTML = html;
+      document.body.appendChild(host);
+      var range = document.createRange();
+      range.selectNodeContents(host);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      var ok = !!document.execCommand('copy');
+      sel.removeAllRanges();
+      return ok;
+    } catch (e) {
+      return false;
+    } finally {
+      if (host && host.parentNode) host.parentNode.removeChild(host);
+    }
+  }
+
+  // Writes both flavors to the clipboard. Resolves true/false, never rejects.
+  function copy(day) {
+    var html, text;
+    try {
+      html = buildHTML(day);
+      text = buildText(day);
+    } catch (e) {
+      return Promise.resolve(false);
+    }
+    return copyPair(html, text);
+  }
+
+  // Copies just the Add-ons section, for pasting at the end of the schedule.
+  function copyAddOns(day) {
+    var html, text;
+    try {
+      var secs = addOnsSections(day);
+      if (!secs.length) return Promise.resolve(false);
+      html = sectionsToHTML(secs);
+      text = sectionsToText(secs);
+    } catch (e) {
+      return Promise.resolve(false);
+    }
+    return copyPair(html, text);
+  }
+
+  function copyPair(html, text) {
+    if (typeof navigator === 'undefined' || typeof document === 'undefined') {
+      return Promise.resolve(false); // Node — nothing to copy to
+    }
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.write &&
+          typeof ClipboardItem !== 'undefined' && typeof Blob !== 'undefined') {
+        try {
+          var item = new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([text], { type: 'text/plain' })
+          });
+          navigator.clipboard.write([item]).then(
+            function () { resolve(true); },
+            function () { resolve(execCopyHTML(html)); }
+          );
+          return;
+        } catch (e) { /* fall through to execCommand */ }
+      }
+      resolve(execCopyHTML(html));
+    });
+  }
+
+  // Plain-text-only copy (used by the "Copy plain text" button).
+  function copyText(day) {
+    var text;
+    try {
+      text = buildText(day);
+    } catch (e) {
+      return Promise.resolve(false);
+    }
+    if (typeof navigator === 'undefined' || typeof document === 'undefined') {
+      return Promise.resolve(false);
+    }
+    function fallback() {
+      if (!document.body) return false;
+      var ta;
+      try {
+        ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        ta.style.top = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        return !!document.execCommand('copy');
+      } catch (e) {
+        return false;
+      } finally {
+        if (ta && ta.parentNode) ta.parentNode.removeChild(ta);
+      }
+    }
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(
+          function () { resolve(true); },
+          function () { resolve(fallback()); }
+        );
+        return;
+      }
+      resolve(fallback());
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+
+  var ExportFmt = {
+    buildSections: buildSections,
+    buildText: buildText,
+    buildHTML: buildHTML,
+    copy: copy,
+    copyText: copyText,
+    copyAddOns: copyAddOns
+  };
+
+  if (typeof window !== 'undefined') window.ExportFmt = ExportFmt;
+  if (typeof module !== 'undefined' && module.exports) module.exports = ExportFmt;
+})();
+
+</script>
+<script>
+/*
+ * app.js — UI controller. Defines window.App and boots on DOMContentLoaded.
+ * Browser-only (guarded so the file parses/requires harmlessly in Node).
+ *
+ * Per-date state persists to localStorage under surgsched:v1:day:<YYYY-MM-DD>,
+ * debounced ~300ms after every manual input.
+ */
+(function () {
+  'use strict';
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+  var LS_PREFIX = 'surgsched:v1:day:';
+  var SAVE_DEBOUNCE_MS = 300;
+  var WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var CATEGORIES = ['cataract', 'cornea', 'glaucoma', 'plastics', 'peds', 'retina', 'trauma', 'other'];
+  var YEAR_ORDER = ['pgy2', 'pgy3', 'pgy4'];
+  var CASE_SECTIONS = [
+    { key: 'wills', label: 'Wills/ASC' },
+    { key: 'private', label: 'Privates' },
+    { key: 'jhn', label: 'JHN/TJUH/JSC' },
+    { key: 'other', label: 'Other (Stadium / Cherry Hill)' }
+  ];
+
+  var App = {
+    state: null,     // per-date persisted state (SPEC state shape)
+    roster: null,    // Engine DayRoster for state.date
+    activeTab: 'roster'
+  };
+
+  // Local UI state — never persisted.
+  var assignFilter = 'needs';                 // 'needs' | 'assigned' | 'all'
+  var assignExpanded = {};                    // caseId -> true (compact row expanded inline)
+  var caseSectionOpen = { wills: true, private: true, jhn: true, other: true };
+
+  function data() { return window.SCHED_DATA; }
+
+  /* ------------------------------------------------------------------ */
+  /* date helpers (all LOCAL — never new Date('YYYY-MM-DD'))             */
+  /* ------------------------------------------------------------------ */
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+  function isoOf(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function parseISO(iso) {
+    var p = String(iso).split('-');
+    return new Date(+p[0], +p[1] - 1, +p[2]);
+  }
+  function fmtMDYY(d) {
+    return (d.getMonth() + 1) + '/' + d.getDate() + '/' + String(d.getFullYear()).slice(-2);
+  }
+  function weekdayName(d) { return WEEKDAY_NAMES[d.getDay()]; }
+  function ordinal(n) {
+    if (n === 1) return '1st';
+    if (n === 2) return '2nd';
+    if (n === 3) return '3rd';
+    return n + 'th';
+  }
+  function tomorrowISO() {
+    var now = new Date();
+    return isoOf(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+  }
+  function trim(s) { return String(s == null ? '' : s).replace(/^\s+|\s+$/g, ''); }
+
+  /* ------------------------------------------------------------------ */
+  /* localStorage (guarded — file:// / private mode can throw)           */
+  /* ------------------------------------------------------------------ */
+
+  function lsGet(key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } }
+  function lsSet(key, val) { try { window.localStorage.setItem(key, val); return true; } catch (e) { return false; } }
+  function lsRemove(key) { try { window.localStorage.removeItem(key); } catch (e) { } }
+  function lsKeys() {
+    var out = [];
+    try {
+      for (var i = 0; i < window.localStorage.length; i++) out.push(window.localStorage.key(i));
+    } catch (e) { }
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* state                                                               */
+  /* ------------------------------------------------------------------ */
+
+  // Add-on rows for schedule date D:
+  // "<weekday(D-1)> night (M/D/YY)", "<weekday(D)> day (M/D/YY)", "<weekday(D)> night (M/D/YY)"
+  function defaultAddOns(dateISO) {
+    var d = parseISO(dateISO);
+    var prev = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
+    return [
+      { label: weekdayName(prev) + ' night (' + fmtMDYY(prev) + ')', name: '' },
+      { label: weekdayName(d) + ' day (' + fmtMDYY(d) + ')', name: '' },
+      { label: weekdayName(d) + ' night (' + fmtMDYY(d) + ')', name: '' }
+    ];
+  }
+
+  function defaultState(dateISO) {
+    return {
+      date: dateISO,
+      lectures: '',
+      nightFloat: '',
+      vacation: '24 strong',
+      cooperBuddyAM: { name: '', note: '' },
+      cooperBuddyPM: { name: '', note: '' },
+      addOns: defaultAddOns(dateISO),
+      cases: [],
+      clinicCounts: {},
+      clinicStaffOverrides: {},
+      suggestions: {},
+      seq: 1
+    };
+  }
+
+  function normBuddy(b) {
+    return { name: trim(b && b.name), note: String((b && b.note) || '') };
+  }
+
+  function normCase(c) {
+    if (!c || typeof c !== 'object') return null;
+    return {
+      id: String(c.id || ''),
+      section: CASE_SECTIONS.some(function (s) { return s.key === c.section; }) ? c.section : 'wills',
+      surgeon: String(c.surgeon || ''),
+      count: Math.max(0, parseInt(c.count, 10) || 0),
+      serviceCount: Math.max(0, parseInt(c.serviceCount, 10) || 0),
+      start: String(c.start || ''),
+      category: CATEGORIES.indexOf(c.category) !== -1 ? c.category : 'other',
+      addOn: !!c.addOn,
+      notes: String(c.notes || ''),
+      assigned: String(c.assigned || ''),
+      backup: String(c.backup || ''),
+      backupNote: String(c.backupNote || '')
+    };
+  }
+
+  function normalizeState(raw, dateISO) {
+    var st = (raw && typeof raw === 'object') ? raw : {};
+    var out = defaultState(dateISO);
+    if (typeof st.lectures === 'string') out.lectures = st.lectures;
+    if (typeof st.nightFloat === 'string') out.nightFloat = st.nightFloat;
+    if (typeof st.vacation === 'string') out.vacation = st.vacation;
+    if (st.cooperBuddyAM) out.cooperBuddyAM = normBuddy(st.cooperBuddyAM);
+    if (st.cooperBuddyPM) out.cooperBuddyPM = normBuddy(st.cooperBuddyPM);
+    if (Array.isArray(st.addOns)) {
+      out.addOns = st.addOns.map(function (a) {
+        return { label: String((a && a.label) || ''), name: String((a && a.name) || '') };
+      });
+    }
+    if (Array.isArray(st.cases)) {
+      out.cases = st.cases.map(normCase).filter(function (c) { return !!c; });
+    }
+    if (st.clinicCounts && typeof st.clinicCounts === 'object') {
+      Object.keys(st.clinicCounts).forEach(function (k) {
+        var v = st.clinicCounts[k];
+        out.clinicCounts[k] = {
+          count: String((v && v.count) || ''),
+          extra: String((v && v.extra) || '')
+        };
+      });
+    }
+    if (st.clinicStaffOverrides && typeof st.clinicStaffOverrides === 'object') {
+      Object.keys(st.clinicStaffOverrides).forEach(function (k) {
+        var v = st.clinicStaffOverrides[k];
+        out.clinicStaffOverrides[k] = {
+          removed: (v && Array.isArray(v.removed)) ? v.removed.map(String) : [],
+          added: (v && Array.isArray(v.added)) ? v.added.map(String) : []
+        };
+      });
+    }
+    if (st.suggestions && typeof st.suggestions === 'object') out.suggestions = st.suggestions;
+    var maxId = 0;
+    out.cases.forEach(function (c, i) {
+      if (!c.id) c.id = 'c_' + (i + 1);
+      var m = /^c(\d+)$/.exec(c.id);
+      if (m) maxId = Math.max(maxId, +m[1]);
+    });
+    out.seq = (typeof st.seq === 'number' && st.seq > maxId) ? st.seq : maxId + 1;
+    out.date = dateISO;
+    return out;
+  }
+
+  function loadState(dateISO) {
+    var raw = lsGet(LS_PREFIX + dateISO);
+    if (raw) {
+      try { return normalizeState(JSON.parse(raw), dateISO); } catch (e) { }
+    }
+    return defaultState(dateISO);
+  }
+
+  var saveTimer = null;
+  // True only once the user has actually edited the loaded day. saveNow() is a
+  // no-op while false, so merely visiting a date (or closing the tab) never
+  // fabricates a "saved draft" for a day the user never touched — the Home
+  // draft-detection and Recent-days chips rely on keys meaning real edits.
+  var stateDirty = false;
+  function saveNow() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    if (App.state && stateDirty) lsSet(LS_PREFIX + App.state.date, JSON.stringify(App.state));
+  }
+  function scheduleSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveNow, SAVE_DEBOUNCE_MS);
+  }
+
+  // Call after every manual input: debounced persist + live preview refresh.
+  function touch() {
+    stateDirty = true;
+    scheduleSave();
+    if (App.activeTab === 'preview') renderPreview();
+  }
+
+  function exportDay() {
+    var day = {};
+    for (var k in App.state) day[k] = App.state[k];
+    day.roster = App.roster;
+    return day;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* DOM helpers                                                         */
+  /* ------------------------------------------------------------------ */
+
+  function $(id) { return document.getElementById(id); }
+
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      for (var k in attrs) {
+        var v = attrs[k];
+        if (v == null || v === false) continue;
+        if (k === 'class') node.className = v;
+        else if (k === 'text') node.textContent = v;
+        else if (k.indexOf('on') === 0 && typeof v === 'function') node.addEventListener(k.slice(2), v);
+        else if (k === 'checked') node.checked = true;
+        else if (k === 'disabled') node.disabled = true;
+        else if (k === 'value') node.value = v;
+        else node.setAttribute(k, v);
+      }
+    }
+    (children || []).forEach(function (c) {
+      if (c == null) return;
+      node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    });
+    return node;
+  }
+
+  function clearNode(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+  function chipEl(text, cls) { return el('span', { class: 'chip ' + (cls || ''), text: text }); }
+
+  var toastTimer = null;
+  function toast(msg, ok) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (ok === false ? ' toast-err' : '');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.className = 'toast'; }, 2600);
+  }
+
+  /* residents */
+
+  var residentYearMap = null;
+  function yearOf(name) {
+    if (!residentYearMap) {
+      residentYearMap = {};
+      YEAR_ORDER.forEach(function (yk) {
+        var y = data().years[yk];
+        if (y) y.residents.forEach(function (n) { residentYearMap[n] = yk; });
+      });
+    }
+    return residentYearMap[name] || '';
+  }
+  function isResidentName(name) { return !!yearOf(name); }
+
+  function residentSelect(value, onChange, emptyLabel) {
+    var sel = el('select', { class: 'sel' });
+    sel.appendChild(el('option', { value: '', text: emptyLabel || '—' }));
+    YEAR_ORDER.forEach(function (yk) {
+      var y = data().years[yk];
+      if (!y) return;
+      var og = el('optgroup', { label: y.short });
+      y.residents.forEach(function (n) { og.appendChild(el('option', { value: n, text: n })); });
+      sel.appendChild(og);
+    });
+    sel.value = value || '';
+    if (value && sel.value !== value) { // stale/custom name — keep it selectable
+      sel.appendChild(el('option', { value: value, text: value }));
+      sel.value = value;
+    }
+    sel.addEventListener('change', function () { onChange(sel.value); });
+    return sel;
+  }
+
+  function nameChip(name, onRemove) {
+    var chip = el('span', { class: 'name-chip ' + yearOf(name) + (onRemove ? '' : ' no-x') }, [name]);
+    if (onRemove) {
+      chip.appendChild(el('button', {
+        type: 'button', class: 'btn-icon danger', title: 'Remove ' + name,
+        text: '×', onclick: onRemove
+      }));
+    }
+    return chip;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* roster computation                                                  */
+  /* ------------------------------------------------------------------ */
+
+  function emptyRoster(dateISO) {
+    var d = parseISO(dateISO);
+    return {
+      date: dateISO, weekdayKey: '', weekdayLabel: weekdayName(d),
+      nth: Math.floor((d.getDate() - 1) / 7) + 1,
+      inYear: false, isWeekend: d.getDay() === 0 || d.getDay() === 6,
+      residents: [], surg: {}, wer: { am: [], pm: [] },
+      jeffConsults: [], cooperConsults: [], dayFloat: [], taskmasters: [],
+      clinics: {}, orBlocks: {}, specialClinicsToday: []
+    };
+  }
+
+  function computeRoster() {
+    App.roster = null;
+    try {
+      if (window.Engine && window.Engine.resolveDay) {
+        App.roster = window.Engine.resolveDay(App.state.date, data());
+      }
+    } catch (e) {
+      if (window.console) console.error('resolveDay failed', e);
+    }
+    if (!App.roster) App.roster = emptyRoster(App.state.date);
+    prefillBuddies();
+  }
+
+  /* Cooper buddy prefill (buddy call schedule) — roster.cooperBuddies may be
+     absent (older engine.js); guard everything. Never overwrite a non-empty
+     user value: prefill only when BOTH name and note are empty. */
+
+  function prefillBuddies() {
+    var st = App.state;
+    var r = App.roster;
+    if (!st || !r || !r.cooperBuddies) return;
+    var cb = r.cooperBuddies;
+    var am = st.cooperBuddyAM || (st.cooperBuddyAM = { name: '', note: '' });
+    var pm = st.cooperBuddyPM || (st.cooperBuddyPM = { name: '', note: '' });
+    if (cb.am && !trim(am.name) && !trim(am.note)) {
+      st.cooperBuddyAM = { name: String(cb.am), note: String(cb.templateAM || '').toLowerCase() };
+    }
+    if (cb.pm && !trim(pm.name) && !trim(pm.note)) {
+      st.cooperBuddyPM = { name: String(cb.pm), note: String(cb.templatePM || '').toLowerCase() };
+    }
+  }
+
+  function buddyMatchesPrefill(b, name, template) {
+    return !!name && !!b && trim(b.name) === String(name) &&
+      trim(b.note) === trim(String(template || '').toLowerCase());
+  }
+
+  // True while the buddy fields still hold exactly the buddy-call values —
+  // survives reloads, disappears as soon as the user edits either field.
+  function buddiesAutoFilled() {
+    var st = App.state;
+    var r = App.roster;
+    if (!st || !r || !r.cooperBuddies) return false;
+    var cb = r.cooperBuddies;
+    return buddyMatchesPrefill(st.cooperBuddyAM, cb.am, cb.templateAM) ||
+      buddyMatchesPrefill(st.cooperBuddyPM, cb.pm, cb.templatePM);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* header                                                              */
+  /* ------------------------------------------------------------------ */
+
+  function renderHeader() {
+    $('ayLabel').textContent = data().ayLabel;
+    var chips = $('dayChips');
+    clearNode(chips);
+    var r = App.roster;
+    if (!r) return;
+    chips.appendChild(chipEl(ordinal(r.nth) + ' ' + r.weekdayLabel, 'chip-day'));
+
+    var banner = $('dayBanner');
+    if (r.isWeekend) {
+      banner.textContent = r.weekdayLabel + ' is a weekend — no block assignments. Manual entries and cases still work.';
+      banner.classList.remove('hidden');
+    } else if (!r.inYear) {
+      banner.textContent = 'Date is outside ' + data().ayLabel + ' (' + data().ayStart + ' – ' + data().ayEnd + ') — no block data for this day.';
+      banner.classList.remove('hidden');
+    } else {
+      banner.classList.add('hidden');
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* tab 1 — Day Roster                                                  */
+  /* ------------------------------------------------------------------ */
+
+  function cellDiv(cell) {
+    var isSurg = /^Surg \d+$/.test(cell.text || '');
+    var wrap = el('div', {}, [
+      el('div', { class: 'cell-text' + (isSurg ? ' is-surg' : ''), text: cell.text || '—' })
+    ]);
+    (cell.notes || []).forEach(function (n) {
+      wrap.appendChild(el('div', { class: 'cell-note', text: n }));
+    });
+    return wrap;
+  }
+
+  function renderRosterGrid() {
+    var host = $('rosterGrid');
+    clearNode(host);
+    var r = App.roster;
+    if (!r.residents.length) {
+      host.appendChild(el('p', {
+        class: 'empty-note',
+        text: r.isWeekend ? 'Weekend — no scheduled block assignments.' : 'No block data for this date.'
+      }));
+      return;
+    }
+    var tbl = el('table', { class: 'tbl' });
+    tbl.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: 'Resident' }), el('th', { text: 'Block' }),
+      el('th', { text: 'AM' }), el('th', { text: 'PM' })
+    ])]));
+    var tbody = el('tbody');
+    YEAR_ORDER.forEach(function (yk) {
+      var group = r.residents.filter(function (res) { return res.year === yk; });
+      if (!group.length) return;
+      var gr = el('tr', { class: 'group-row ' + yk });
+      var td = el('td', { colspan: '4', text: group[0].yearLabel });
+      gr.appendChild(td);
+      tbody.appendChild(gr);
+      group.slice().sort(function (a, b) { return a.block - b.block; }).forEach(function (res) {
+        var nameTd = el('td', {}, [el('span', { class: 'res-name ' + yk, text: res.name })]);
+        if (res.taskmaster) {
+          nameTd.appendChild(document.createTextNode(' '));
+          nameTd.appendChild(el('span', { class: 'badge badge-tm', text: 'TM' }));
+        }
+        tbody.appendChild(el('tr', {}, [
+          nameTd,
+          el('td', {}, [el('span', { class: 'res-block', text: 'B' + res.block })]),
+          el('td', {}, [cellDiv(res.am)]),
+          el('td', {}, [cellDiv(res.pm)])
+        ]));
+      });
+    });
+    tbl.appendChild(tbody);
+    host.appendChild(el('div', { class: 'table-scroll' }, [tbl]));
+  }
+
+  function summaryItem(key, valNode) {
+    return el('div', { class: 'summary-item' }, [
+      el('span', { class: 'summary-key', text: key }),
+      el('span', { class: 'summary-val' }, [valNode])
+    ]);
+  }
+
+  function collapseWerLocal(wer) {
+    var am = (wer && wer.am) || [];
+    var pm = (wer && wer.pm) || [];
+    var parts = [];
+    am.forEach(function (n) { parts.push(n + (pm.indexOf(n) !== -1 ? ' AM/PM' : ' AM')); });
+    pm.forEach(function (n) { if (am.indexOf(n) === -1) parts.push(n + ' PM'); });
+    return parts.join(', ');
+  }
+
+  function glanceKV(k, v) {
+    return el('span', { class: 'glance-kv' }, [
+      el('span', { class: 'k', text: k }),
+      el('b', { text: v })
+    ]);
+  }
+
+  function renderSummary() {
+    var host = $('rosterSummary');
+    clearNode(host);
+    var r = App.roster;
+    var meta = data().surgRoleMeta || {};
+
+    var chips = $('glanceChips');
+    if (chips) {
+      clearNode(chips);
+      (r.specialClinicsToday || []).forEach(function (sc) {
+        chips.appendChild(chipEl(sc, 'chip-special'));
+      });
+    }
+
+    var surgKeys = Object.keys(r.surg || {}).sort(function (a, b) { return (+a) - (+b); });
+    if (!surgKeys.length) {
+      host.appendChild(el('p', { class: 'empty-note', text: 'Nothing derived for this date — pick a weekday inside the academic year, then press Create Surg Schedule.' }));
+      return;
+    }
+
+    var grid = el('div', { class: 'glance-grid' });
+    surgKeys.forEach(function (n) {
+      var s = r.surg[n];
+      var tile = el('div', { class: 'glance-tile' }, [
+        el('div', { class: 'glance-role', text: 'Surg ' + n }),
+        el('div', { class: 'glance-name', text: s.name })
+      ]);
+      if (s.am && !s.pm) tile.appendChild(el('div', { class: 'glance-sess', text: 'AM only · PM: ' + (s.pmText || '—') }));
+      else if (s.pm && !s.am) tile.appendChild(el('div', { class: 'glance-sess', text: 'PM only · AM: ' + (s.amText || '—') }));
+      var m = meta['Surg ' + n];
+      if (m) tile.appendChild(el('div', { class: 'glance-sub', text: m.split(';')[0] }));
+      grid.appendChild(tile);
+    });
+    host.appendChild(grid);
+
+    var row = el('div', { class: 'glance-row' });
+    var wer = collapseWerLocal(r.wer);
+    if (wer) row.appendChild(glanceKV('WER', wer));
+    row.appendChild(glanceKV('Night Float', trim(App.state && App.state.nightFloat) || '—'));
+    if ((r.jeffConsults || []).length) row.appendChild(glanceKV('Jeff Consults', r.jeffConsults.join(', ')));
+    if ((r.cooperConsults || []).length) {
+      // 'Illiano + Camacho AM / DeSimone PM' when buddies are set (from state)
+      var cooperVal = r.cooperConsults.join(', ');
+      var st = App.state || {};
+      var buddyBits = [];
+      var amName = trim(st.cooperBuddyAM && st.cooperBuddyAM.name);
+      var pmName = trim(st.cooperBuddyPM && st.cooperBuddyPM.name);
+      if (amName) buddyBits.push(amName + ' AM');
+      if (pmName) buddyBits.push(pmName + ' PM');
+      if (buddyBits.length) cooperVal += ' + ' + buddyBits.join(' / ');
+      row.appendChild(glanceKV('Cooper Consults', cooperVal));
+    }
+    if ((r.dayFloat || []).length) row.appendChild(glanceKV('Day Float', r.dayFloat.join(', ')));
+    if ((r.taskmasters || []).length) row.appendChild(glanceKV('Taskmaster', r.taskmasters.join(' & ')));
+    host.appendChild(row);
+  }
+
+  function labeledField(labelText, control, hint) {
+    var f = el('div', { class: 'field' }, [
+      el('span', { class: 'field-label', text: labelText }), control
+    ]);
+    if (hint) f.appendChild(el('span', { class: 'field-hint', text: hint }));
+    return f;
+  }
+
+  function buddyRow(sess, buddy) {
+    var row = el('div', { class: 'buddy-row' });
+    row.appendChild(el('span', { class: 'buddy-session', text: sess }));
+    row.appendChild(residentSelect(buddy.name, function (v) {
+      buddy.name = v;
+      touch();
+      renderSummary();
+      updateBuddyHint();
+    }, 'buddy…'));
+    var note = el('input', { type: 'text', placeholder: 'note (e.g. private glaucoma)', value: buddy.note });
+    note.addEventListener('input', function () { buddy.note = note.value; touch(); updateBuddyHint(); });
+    row.appendChild(note);
+    return row;
+  }
+
+  function updateBuddyHint() {
+    var n = $('buddyHint');
+    if (!n) return;
+    var on = buddiesAutoFilled();
+    n.textContent = on ? 'auto-filled from the buddy call schedule — edit freely' : '';
+    n.classList.toggle('hidden', !on);
+  }
+
+  function renderManualInputs() {
+    var host = $('manualInputs');
+    clearNode(host);
+    var st = App.state;
+
+    var lectures = el('textarea', { rows: '3', placeholder: 'Grand rounds, wet lab, journal club…' });
+    lectures.value = st.lectures;
+    lectures.addEventListener('input', function () { st.lectures = lectures.value; touch(); });
+    host.appendChild(labeledField('Lectures / Events', lectures));
+
+    var nf = el('input', { type: 'text', placeholder: 'resident name', value: st.nightFloat });
+    nf.addEventListener('input', function () { st.nightFloat = nf.value; touch(); renderSummary(); });
+    host.appendChild(labeledField('Night Float', nf));
+
+    var buddies = el('div', {}, [
+      buddyRow('AM', st.cooperBuddyAM),
+      buddyRow('PM', st.cooperBuddyPM)
+    ]);
+    var buddiesField = labeledField('Cooper buddies', buddies);
+    buddiesField.appendChild(el('span', { class: 'field-hint hidden', id: 'buddyHint' }));
+    host.appendChild(buddiesField);
+    updateBuddyHint();
+
+    var vac = el('textarea', { rows: '2', placeholder: '24 strong' });
+    vac.value = st.vacation;
+    vac.addEventListener('input', function () { st.vacation = vac.value; touch(); });
+    host.appendChild(labeledField('Vacation', vac));
+
+    var addOnsField = labeledField('Add-ons (call coverage)', addOnsEditor());
+    addOnsField.classList.add('field-wide');
+    host.appendChild(addOnsField);
+  }
+
+  // Shared add-ons editor — rendered on both the Day Roster tab and the
+  // Cases & Clinics tab; both views edit the same rows.
+  function addOnsEditor() {
+    var st = App.state;
+    var wrap = el('div');
+    st.addOns.forEach(function (row, idx) {
+      var line = el('div', { class: 'addon-row' });
+      var label = el('input', { type: 'text', placeholder: 'e.g. Tuesday night (7/21/26)', value: row.label });
+      label.addEventListener('input', function () { row.label = label.value; touch(); });
+      line.appendChild(label);
+      line.appendChild(residentSelect(row.name, function (v) { row.name = v; touch(); }, 'resident…'));
+      line.appendChild(el('button', {
+        type: 'button', class: 'btn-icon danger', title: 'Remove row', text: '×',
+        onclick: function () {
+          st.addOns.splice(idx, 1);
+          touch();
+          renderAddOnsEverywhere();
+        }
+      }));
+      wrap.appendChild(line);
+    });
+    wrap.appendChild(el('button', {
+      type: 'button', class: 'btn btn-small', text: '+ Add add-on row',
+      onclick: function () {
+        st.addOns.push({ label: '', name: '' });
+        touch();
+        renderAddOnsEverywhere();
+      }
+    }));
+    return wrap;
+  }
+
+  function renderAddOnsCard() {
+    var host = $('addOnsCases');
+    if (!host) return;
+    clearNode(host);
+    host.appendChild(addOnsEditor());
+  }
+
+  function renderAddOnsEverywhere() {
+    renderManualInputs();
+    renderAddOnsCard();
+  }
+
+  function renderRosterTab() {
+    renderRosterGrid();
+    renderSummary();
+    renderManualInputs();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* tab 2 — Cases & Clinics                                             */
+  /* ------------------------------------------------------------------ */
+
+  function newCase(section) {
+    var id = 'c' + App.state.seq;
+    App.state.seq += 1;
+    return {
+      id: id, section: section, surgeon: '', count: 1,
+      serviceCount: section === 'private' ? 0 : 1,
+      start: '', category: 'cataract', addOn: false,
+      notes: '', assigned: '', backup: ''
+    };
+  }
+
+  function addCase(section) {
+    App.state.cases.push(newCase(section));
+    touch();
+    renderCasesTab();
+  }
+
+  function removeCase(id) {
+    App.state.cases = App.state.cases.filter(function (c) { return c.id !== id; });
+    if (App.state.suggestions) delete App.state.suggestions[id];
+    touch();
+    renderCasesTab();
+  }
+
+  function duplicateCase(id) {
+    var idx = -1;
+    App.state.cases.forEach(function (c, i) { if (c.id === id) idx = i; });
+    if (idx === -1) return;
+    var src = App.state.cases[idx];
+    var copy = normCase(src);
+    copy.id = 'c' + App.state.seq;
+    App.state.seq += 1;
+    copy.assigned = '';
+    copy.backup = '';
+    App.state.cases.splice(idx + 1, 0, copy);
+    touch();
+    renderCasesTab();
+  }
+
+  function textInput(value, placeholder, onInput) {
+    var inp = el('input', { type: 'text', value: value, placeholder: placeholder || '' });
+    inp.addEventListener('input', function () { onInput(inp.value); });
+    return inp;
+  }
+
+  function numInput(value, onInput) {
+    var inp = el('input', { type: 'number', min: '0', step: '1', value: String(value) });
+    inp.addEventListener('input', function () {
+      onInput(Math.max(0, parseInt(inp.value, 10) || 0));
+    });
+    return inp;
+  }
+
+  function miniField(labelText, control, cls) {
+    return el('label', { class: 'mini-field' + (cls ? ' ' + cls : '') }, [
+      el('span', { class: 'mini-label', text: labelText }),
+      control
+    ]);
+  }
+
+  function caseCard(c) {
+    var card = el('div', { class: 'case-card' });
+
+    card.appendChild(miniField('Surgeon',
+      textInput(c.surgeon, 'Surgeon', function (v) { c.surgeon = v; touch(); }), 'cf-surgeon'));
+    card.appendChild(miniField('Cases',
+      numInput(c.count, function (v) { c.count = v; touch(); }), 'cf-num'));
+    card.appendChild(miniField('Service',
+      numInput(c.serviceCount, function (v) { c.serviceCount = v; touch(); }), 'cf-num'));
+    card.appendChild(miniField('Start',
+      textInput(c.start, '0730', function (v) { c.start = v; touch(); }), 'cf-start'));
+
+    var cat = el('select');
+    CATEGORIES.forEach(function (k) { cat.appendChild(el('option', { value: k, text: k })); });
+    cat.value = c.category;
+    cat.addEventListener('change', function () { c.category = cat.value; touch(); });
+    card.appendChild(miniField('Category', cat, 'cf-cat'));
+
+    var box = el('input', { type: 'checkbox' });
+    box.checked = c.addOn;
+    var pill = el('label', { class: 'pill-check' + (c.addOn ? ' on' : '') }, [box, 'Add-on']);
+    box.addEventListener('change', function () {
+      c.addOn = box.checked;
+      pill.classList.toggle('on', box.checked);
+      touch();
+    });
+    card.appendChild(el('div', { class: 'cf-pill' }, [pill]));
+
+    card.appendChild(el('div', { class: 'case-actions' }, [
+      el('button', { type: 'button', class: 'btn-icon', title: 'Duplicate case', text: '⧉', onclick: function () { duplicateCase(c.id); } }),
+      el('button', { type: 'button', class: 'btn-icon danger', title: 'Remove case', text: '×', onclick: function () { removeCase(c.id); } })
+    ]));
+
+    card.appendChild(miniField('Notes',
+      textInput(c.notes, 'no Peds OR…', function (v) { c.notes = v; touch(); }), 'cf-notes'));
+    return card;
+  }
+
+  function renderCaseSections() {
+    var wrap = $('caseSections');
+    clearNode(wrap);
+    CASE_SECTIONS.forEach(function (secDef) {
+      var list = App.state.cases.filter(function (c) { return c.section === secDef.key; });
+
+      var det = el('details', { class: 'card case-section', open: !!caseSectionOpen[secDef.key] });
+      det.addEventListener('toggle', function () { caseSectionOpen[secDef.key] = det.open; });
+
+      // The button lives inside <summary>: preventDefault + stopPropagation so
+      // adding a case never toggles the <details> open/closed state.
+      var addBtn = el('button', {
+        type: 'button', class: 'btn btn-small', text: '+ Add case',
+        onclick: function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          caseSectionOpen[secDef.key] = true;
+          addCase(secDef.key);
+        }
+      });
+      det.appendChild(el('summary', { class: 'case-summary' }, [
+        el('span', { class: 'case-summary-title', text: secDef.label }),
+        el('span', { class: 'count-badge', text: list.length + (list.length === 1 ? ' case' : ' cases') }),
+        addBtn
+      ]));
+
+      var body = el('div', { class: 'case-section-body' });
+      if (secDef.key === 'private') {
+        body.appendChild(el('p', { class: 'field-hint', text: 'Private-only cases keep Service at 0 — no resident needed.' }));
+      }
+      if (!list.length) {
+        body.appendChild(el('div', { class: 'case-empty' }, [
+          el('span', { class: 'empty-note', text: 'No cases yet — add the first one.' }),
+          el('button', {
+            type: 'button', class: 'btn btn-small', text: '+ Add case',
+            onclick: function () { addCase(secDef.key); }
+          })
+        ]));
+      } else {
+        list.forEach(function (c) { body.appendChild(caseCard(c)); });
+      }
+      det.appendChild(body);
+      wrap.appendChild(det);
+    });
+  }
+
+  /* clinics sub-section */
+
+  function clinicOverride(key, create) {
+    var ov = App.state.clinicStaffOverrides[key];
+    if (!ov && create) {
+      ov = App.state.clinicStaffOverrides[key] = { removed: [], added: [] };
+    }
+    return ov;
+  }
+
+  function effectiveClinicStaff(label, session) {
+    var grp = (App.roster.clinics || {})[label];
+    var base = ((grp && grp[session]) || []).map(function (p) { return p.name; });
+    var ov = clinicOverride(label + '|' + session, false) || {};
+    var removed = ov.removed || [];
+    var out = base.filter(function (n) { return removed.indexOf(n) === -1; });
+    (ov.added || []).forEach(function (n) { if (out.indexOf(n) === -1) out.push(n); });
+    return { base: base, staff: out };
+  }
+
+  function removeClinicStaff(label, session, name) {
+    var key = label + '|' + session;
+    var ov = clinicOverride(key, true);
+    var ai = ov.added.indexOf(name);
+    if (ai !== -1) ov.added.splice(ai, 1);
+    else if (ov.removed.indexOf(name) === -1) ov.removed.push(name);
+    touch();
+    renderClinicRows();
+  }
+
+  function addClinicStaff(label, session, name) {
+    if (!name) return;
+    var key = label + '|' + session;
+    var ov = clinicOverride(key, true);
+    var ri = ov.removed.indexOf(name);
+    if (ri !== -1) ov.removed.splice(ri, 1);
+    else if (ov.added.indexOf(name) === -1) ov.added.push(name);
+    touch();
+    renderClinicRows();
+  }
+
+  function clinicCountEntry(key) {
+    var cc = App.state.clinicCounts[key];
+    if (!cc) cc = App.state.clinicCounts[key] = { count: '', extra: '' };
+    return cc;
+  }
+
+  function renderClinicRows() {
+    var host = $('clinicRows');
+    clearNode(host);
+    var clinics = App.roster.clinics || {};
+    var labels = Object.keys(clinics).sort();
+    var any = false;
+    labels.forEach(function (label) {
+      ['am', 'pm'].forEach(function (session) {
+        var eff = effectiveClinicStaff(label, session);
+        var key = label + '|' + session;
+        var hasOverride = !!App.state.clinicStaffOverrides[key];
+        var cc = App.state.clinicCounts[key];
+        if (!eff.base.length && !hasOverride && !cc) return;
+        any = true;
+
+        var row = el('div', { class: 'clinic-row' });
+        row.appendChild(el('span', { class: 'clinic-label' }, [
+          label + ' ',
+          el('span', { class: 'badge ' + (session === 'am' ? 'badge-am' : 'badge-pm'), text: session.toUpperCase() })
+        ]));
+
+        var chips = el('span', { class: 'clinic-chips' });
+        eff.staff.forEach(function (name) {
+          chips.appendChild(nameChip(name, function () { removeClinicStaff(label, session, name); }));
+        });
+        var addSel = residentSelect('', function (v) {
+          addClinicStaff(label, session, v);
+        }, '+ add…');
+        addSel.className = 'clinic-add';
+        chips.appendChild(addSel);
+        row.appendChild(chips);
+
+        var countIn = el('input', {
+          type: 'text', class: 'clinic-count', placeholder: 'e.g. 29x3',
+          value: (cc && cc.count) || ''
+        });
+        countIn.addEventListener('input', function () {
+          clinicCountEntry(key).count = countIn.value; touch();
+        });
+        row.appendChild(countIn);
+
+        var extraIn = el('input', {
+          type: 'text', class: 'clinic-extra', placeholder: 'note',
+          value: (cc && cc.extra) || ''
+        });
+        extraIn.addEventListener('input', function () {
+          clinicCountEntry(key).extra = extraIn.value; touch();
+        });
+        row.appendChild(extraIn);
+
+        host.appendChild(row);
+      });
+    });
+    if (!any) host.appendChild(el('p', { class: 'empty-note', text: 'No clinic sessions on this date.' }));
+  }
+
+  function renderCasesTab() {
+    renderCaseSections();
+    renderClinicRows();
+    renderAddOnsCard();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* tab 3 — Assign                                                      */
+  /* ------------------------------------------------------------------ */
+
+  function suggestAll() {
+    if (!window.Assign || !window.Assign.suggest) {
+      toast('Assign engine not loaded', false);
+      return;
+    }
+    var results = window.Assign.suggest(App.state.cases, App.roster, data());
+    App.state.suggestions = {};
+    results.forEach(function (s) { App.state.suggestions[s.caseId] = s; });
+    touch();
+    renderAssignTab();
+    toast('Suggestions computed for ' + results.length + ' case' + (results.length === 1 ? '' : 's'));
+  }
+
+  function acceptAll() {
+    var n = 0;
+    App.state.cases.forEach(function (c) {
+      var s = App.state.suggestions[c.id];
+      if (s && s.name && !trim(c.assigned)) { c.assigned = s.name; n++; }
+    });
+    touch();
+    renderAssignTab();
+    toast(n ? 'Accepted ' + n + ' suggestion' + (n === 1 ? '' : 's') : 'Nothing to accept — suggest first, or all cases already assigned');
+  }
+
+  function caseTitle(c) {
+    var t = (trim(c.surgeon) || '?') + ' x' + c.count;
+    if (trim(c.start)) t += ' (' + trim(c.start) + ')';
+    return t;
+  }
+
+  function sectionLabel(key) {
+    for (var i = 0; i < CASE_SECTIONS.length; i++) {
+      if (CASE_SECTIONS[i].key === key) return CASE_SECTIONS[i].label;
+    }
+    return key;
+  }
+
+  function assignCaseCard(c, collapsible) {
+    var card = el('div', { class: 'assign-card' });
+    var head = el('div', { class: 'assign-head' }, [
+      el('span', { class: 'assign-title', text: caseTitle(c) }),
+      el('span', { class: 'assign-meta', text: sectionLabel(c.section) }),
+      el('span', { class: 'badge badge-cat', text: c.category })
+    ]);
+    if (c.addOn) head.appendChild(el('span', { class: 'badge badge-addon', text: 'ADD-ON' }));
+    if (collapsible) {
+      head.appendChild(el('button', {
+        type: 'button', class: 'btn btn-small assign-collapse', text: 'Done',
+        title: 'Collapse back to one line',
+        onclick: function () { delete assignExpanded[c.id]; renderAssignTab(); }
+      }));
+    }
+    if (window.Assign && window.Assign.classify) {
+      var hier = (data().hierarchy || {})[window.Assign.classify(c)];
+      if (hier) head.appendChild(el('span', { class: 'assign-meta', text: '· ' + hier.label }));
+    }
+    if (c.serviceCount > 0) {
+      head.appendChild(el('span', { class: 'assign-meta', text: '· x' + c.serviceCount + ' service' }));
+    }
+    card.appendChild(head);
+
+    var s = App.state.suggestions[c.id];
+    if (s) {
+      var accepted = s.name && trim(c.assigned) === s.name;
+      var box = el('div', {
+        class: 'sugg-box' + (accepted ? ' sugg-accepted' : (s.name ? '' : ' sugg-none'))
+      });
+      if (s.name) {
+        box.appendChild(el('div', {}, [
+          el('span', { class: 'sugg-name', text: s.name }),
+          accepted ? el('span', { class: 'sugg-reason', text: ' — accepted' }) : null
+        ]));
+      } else {
+        box.appendChild(el('div', {}, [el('span', { class: 'sugg-name', text: 'No suggestion' })]));
+      }
+      (s.reasons || []).forEach(function (rr) {
+        box.appendChild(el('div', { class: 'sugg-reason', text: rr }));
+      });
+      (s.warnings || []).forEach(function (w) {
+        box.appendChild(el('span', { class: 'warn-line', text: '⚠ ' + w }));
+      });
+      if (s.name || (s.alternates || []).length) {
+        var actions = el('div', { class: 'sugg-actions' });
+        var pick = el('select');
+        if (s.name) pick.appendChild(el('option', { value: s.name, text: s.name + ' (suggested)' }));
+        (s.alternates || []).forEach(function (alt) {
+          if (isResidentName(alt)) pick.appendChild(el('option', { value: alt, text: alt }));
+          else pick.appendChild(el('option', { value: '', text: alt, disabled: true }));
+        });
+        actions.appendChild(pick);
+        actions.appendChild(el('button', {
+          type: 'button', class: 'btn btn-small btn-primary', text: 'Accept',
+          onclick: function () {
+            if (!pick.value) return;
+            c.assigned = pick.value;
+            touch();
+            renderAssignTab();
+          }
+        }));
+        box.appendChild(actions);
+      }
+      card.appendChild(box);
+    }
+
+    // Clinic-coverage backup (how-to Step 3): offered when the assigned
+    // resident staffs a PM clinic this case could pull them out of.
+    var plan = null;
+    if (window.Assign && window.Assign.backupPlan) {
+      try { plan = window.Assign.backupPlan(c, App.roster, data(), App.state.cases); } catch (e) { plan = null; }
+    }
+    if (plan && !trim(c.backup)) {
+      var covText = plan.primary.name + ' (' + plan.primary.source + ') to cover ' +
+        plan.clinic + ' clinic during the case if after 1 PM' +
+        (plan.second ? ' · 2nd backup ' + plan.second.name + ' (' + plan.second.source + ')' : '');
+      var covBox = el('div', { class: 'cover-suggest' }, [
+        el('span', { class: 'cover-text', text: 'Clinic backup: ' + covText }),
+        el('button', {
+          type: 'button', class: 'btn btn-small', text: 'Use as backup',
+          onclick: function () {
+            c.backup = plan.primary.name;
+            c.backupNote = 'to cover ' + plan.clinic.toLowerCase() +
+              ' clinic during case if after 1 PM' +
+              (plan.second ? ', 2nd backup ' + plan.second.name + ' (' + plan.second.source + ')' : '');
+            touch();
+            renderAssignTab();
+          }
+        })
+      ]);
+      card.appendChild(covBox);
+    }
+
+    var manual = el('div', { class: 'assign-manual' });
+    // Each label + select is grouped in a .assign-pair so flex wrapping can
+    // never split a label from its control at narrow widths.
+    manual.appendChild(el('span', { class: 'assign-pair' }, [
+      el('label', { text: 'Assigned' }),
+      residentSelect(c.assigned, function (v) {
+        c.assigned = v;
+        touch();
+        renderAssignTab();
+      }, 'unassigned')
+    ]));
+    manual.appendChild(el('span', { class: 'assign-pair' }, [
+      el('label', { text: 'Backup' }),
+      residentSelect(c.backup, function (v) {
+        c.backup = v;
+        touch();
+        renderAssignTab();
+      }, '—')
+    ]));
+    if (!trim(c.assigned) && c.serviceCount > 0) {
+      manual.appendChild(el('span', { class: 'unassigned-text', text: '⚠ UNASSIGNED' }));
+    }
+    card.appendChild(manual);
+
+    var covNote = el('input', {
+      type: 'text', class: 'covnote',
+      placeholder: 'backup note — e.g. to cover glaucoma clinic during case if after 1 PM, 2nd backup …',
+      value: c.backupNote || ''
+    });
+    covNote.addEventListener('input', function () { c.backupNote = covNote.value; touch(); });
+    card.appendChild(covNote);
+    return card;
+  }
+
+  // A case still needs a resident: has service cases and nobody assigned yet.
+  function needsResident(c) { return c.serviceCount > 0 && !trim(c.assigned); }
+
+  function renderAssignFilters() {
+    var host = $('assignFilters');
+    if (!host) return;
+    clearNode(host);
+    var cases = App.state.cases;
+    var nNeeds = 0, nAssigned = 0;
+    cases.forEach(function (c) {
+      if (needsResident(c)) nNeeds++;
+      if (trim(c.assigned)) nAssigned++;
+    });
+    [
+      { key: 'needs', label: 'Needs resident', count: nNeeds },
+      { key: 'assigned', label: 'Assigned', count: nAssigned },
+      { key: 'all', label: 'All', count: cases.length }
+    ].forEach(function (f) {
+      host.appendChild(el('button', {
+        type: 'button',
+        class: 'filter-chip' + (assignFilter === f.key ? ' active' : ''),
+        onclick: function () {
+          assignFilter = f.key;
+          renderAssignFilters();
+          renderAssignCases();
+        }
+      }, [f.label + ' ', el('span', { class: 'filter-count', text: String(f.count) })]));
+    });
+  }
+
+  // Compact one-line row: '✓ Huang x7 (0730) → Bair; backup Calotti' + Edit.
+  function assignCompactRow(c) {
+    var assigned = trim(c.assigned);
+    var row = el('div', { class: 'assign-row' });
+    row.appendChild(el('span', { class: 'row-check' + (assigned ? '' : ' none'), text: assigned ? '✓' : '—' }));
+    row.appendChild(el('span', { class: 'row-title', text: caseTitle(c) }));
+    if (assigned) {
+      row.appendChild(el('span', { class: 'row-arrow', text: '→' }));
+      row.appendChild(el('b', { class: 'row-assigned', text: assigned }));
+      if (trim(c.backup)) row.appendChild(el('span', { class: 'row-meta', text: '; backup ' + trim(c.backup) }));
+    } else {
+      row.appendChild(el('span', { class: 'row-meta', text: 'private — no resident needed' }));
+    }
+    row.appendChild(el('button', {
+      type: 'button', class: 'btn btn-small row-edit', text: 'Edit',
+      onclick: function () { assignExpanded[c.id] = true; renderAssignCases(); }
+    }));
+    return row;
+  }
+
+  function assignEmptyCard(text, btnLabel, btnTab, primary) {
+    var kids = [el('p', { class: 'empty-note', text: text })];
+    if (btnLabel) {
+      kids.push(el('button', {
+        type: 'button', class: 'btn btn-small' + (primary ? ' btn-primary' : ''), text: btnLabel,
+        onclick: function () { setTab(btnTab); }
+      }));
+    }
+    return el('div', { class: 'card assign-empty' }, kids);
+  }
+
+  function renderAssignCases() {
+    var host = $('assignCases');
+    clearNode(host);
+    var cases = App.state.cases;
+
+    if (!cases.length) {
+      host.appendChild(assignEmptyCard(
+        'No cases yet — add them on the Cases & Clinics tab.',
+        'Go to Cases & Clinics', 'cases', false));
+      return;
+    }
+
+    var shown = [];
+    CASE_SECTIONS.forEach(function (secDef) {
+      cases.forEach(function (c) {
+        if (c.section !== secDef.key) return;
+        if (assignFilter === 'needs' && !needsResident(c)) return;
+        if (assignFilter === 'assigned' && !trim(c.assigned)) return;
+        shown.push(c);
+      });
+    });
+
+    if (!shown.length) {
+      if (assignFilter === 'needs') {
+        host.appendChild(assignEmptyCard(
+          'Everything has a resident — check the output.',
+          'Go to Preview & Copy', 'preview', true));
+      } else {
+        host.appendChild(assignEmptyCard(
+          'Nothing assigned yet — suggest and accept, or pick residents on the cards.', null, null, false));
+      }
+      return;
+    }
+
+    shown.forEach(function (c) {
+      if (needsResident(c)) host.appendChild(assignCaseCard(c, false));
+      else if (assignExpanded[c.id]) host.appendChild(assignCaseCard(c, true));
+      else host.appendChild(assignCompactRow(c));
+    });
+  }
+
+  function renderLoadPanel() {
+    var host = $('loadPanel');
+    clearNode(host);
+    var r = App.roster;
+    var loads = {};
+    App.state.cases.forEach(function (c) {
+      if (trim(c.assigned)) (loads[c.assigned] = loads[c.assigned] || []).push(c);
+    });
+
+    var order = [];
+    var roleOf = {};
+    Object.keys(r.surg || {}).sort(function (a, b) { return (+a) - (+b); }).forEach(function (n) {
+      var name = r.surg[n].name;
+      if (order.indexOf(name) === -1) { order.push(name); roleOf[name] = 'Surg ' + n; }
+    });
+    (r.cooperConsults || []).forEach(function (name) {
+      if (order.indexOf(name) === -1) { order.push(name); roleOf[name] = 'Cooper Consults'; }
+    });
+    Object.keys(loads).forEach(function (name) {
+      if (order.indexOf(name) === -1) order.push(name);
+    });
+
+    if (!order.length) {
+      host.appendChild(el('p', { class: 'empty-note', text: 'No candidates on this date.' }));
+      return;
+    }
+    order.forEach(function (name) {
+      var cases = loads[name] || [];
+      var res = null;
+      (r.residents || []).forEach(function (x) { if (x.name === name) res = x; });
+      var row = el('div', { class: 'load-row' });
+      var top = el('div', { class: 'load-top' }, [
+        el('span', { class: 'res-name ' + yearOf(name), text: name }),
+        roleOf[name] ? el('span', { class: 'load-role', text: roleOf[name] }) : null,
+        el('span', { class: 'load-count' + (cases.length >= 3 ? ' hot' : ''), text: cases.length + (cases.length === 1 ? ' case' : ' cases') })
+      ]);
+      row.appendChild(top);
+      if (res) {
+        row.appendChild(el('div', { class: 'load-role' }, [
+          el('span', { class: 'badge badge-am', text: 'AM' }), ' ' + (res.am.text || '—') + '   ',
+          el('span', { class: 'badge badge-pm', text: 'PM' }), ' ' + (res.pm.text || '—')
+        ]));
+      }
+      if (cases.length) {
+        var chips = el('div');
+        cases.forEach(function (c) {
+          chips.appendChild(el('span', { class: 'case-chip', text: caseTitle(c) }));
+        });
+        row.appendChild(chips);
+      }
+      host.appendChild(row);
+    });
+  }
+
+  function renderCoveragePanel() {
+    var host = $('coveragePanel');
+    clearNode(host);
+    var cov = [];
+    try {
+      if (window.Assign && window.Assign.clinicCoverage) {
+        cov = window.Assign.clinicCoverage(App.roster, data()) || [];
+      }
+    } catch (e) {
+      if (window.console) console.error('clinicCoverage failed', e);
+    }
+    if (!cov.length) {
+      host.appendChild(el('p', { class: 'empty-note', text: 'No coverage chain for this date.' }));
+      return;
+    }
+    var ol = el('ol', { class: 'coverage-list' });
+    cov.forEach(function (item) {
+      ol.appendChild(el('li', {}, [
+        el('span', { class: 'res-name ' + yearOf(item.name), text: item.name }),
+        el('span', { class: 'coverage-src', text: ' — ' + item.source })
+      ]));
+    });
+    host.appendChild(ol);
+  }
+
+  function renderAssignSide() {
+    renderLoadPanel();
+    renderCoveragePanel();
+  }
+
+  function renderAssignTab() {
+    renderAssignFilters();
+    renderAssignCases();
+    renderAssignSide();
+    if (App.activeTab === 'preview') renderPreview();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* tab 4 — Preview & Copy                                              */
+  /* ------------------------------------------------------------------ */
+
+  function renderPreview() {
+    var host = $('previewDoc');
+    if (window.ExportFmt && window.ExportFmt.buildHTML) {
+      host.innerHTML = window.ExportFmt.buildHTML(exportDay());
+      if (!host.textContent.replace(/\s/g, '')) {
+        host.innerHTML = '<p class="empty-note">Nothing to show yet — the schedule builds up as you fill in the other tabs.</p>';
+      }
+    } else {
+      host.textContent = 'Export module not loaded.';
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* How-to view — friendly onboarding cards (static)                    */
+  /* ------------------------------------------------------------------ */
+
+  function bulletList(items, cls) {
+    var u = el('ul', { class: 'ref-note-list' + (cls ? ' ' + cls : '') });
+    items.forEach(function (t) { u.appendChild(el('li', { text: t })); });
+    return u;
+  }
+
+  var CHAIN_TOKEN_LABELS = {
+    COOPER: 'Cooper',
+    WILLS_OR: 'Wills OR',
+    RETINA: 'Retina',
+    PEDS_OR_JUNIOR: 'junior on Peds OR',
+    FREE_JUNIOR: 'free junior',
+    PLASTICS_OR_PGY2: 'PGY-2 on Plastics OR',
+    PLASTICS_OR_JUNIOR: 'junior on Plastics OR'
+  };
+
+  function chainText(key, fallback) {
+    var h = (data().hierarchy || {})[key];
+    if (!h || !(h.chain || []).length) return fallback;
+    return h.chain.map(function (tok) { return CHAIN_TOKEN_LABELS[tok] || tok; }).join(' → ');
+  }
+
+  function renderHowto() {
+    var host = $('howtoBody');
+    if (!host) return;
+    clearNode(host);
+
+    // 1. The flow — four numbered rows mirroring the tabs
+    var flow = refCard('The flow');
+    [
+      { tab: 'roster', num: '1', title: 'Day Roster', text: 'Pick the date — everyone’s block assignment, Surg 1–5, WER, consults and clinics fill in automatically. You type night float, add-ons and vacation.' },
+      { tab: 'cases', num: '2', title: 'Cases & Clinics', text: 'Copy the case list out of Cerner/NextGen by hand — count, start time, service vs private. Enter clinic patient counts.' },
+      { tab: 'assign', num: '3', title: 'Assign', text: 'Press Suggest all — the how-to hierarchy proposes a resident per case, with warnings. Accept or override, and use the clinic-backup suggestions.' },
+      { tab: 'preview', num: '4', title: 'Preview & Copy', text: 'The document, exactly in the usual format — Copy formatted and paste.' }
+    ].forEach(function (s) {
+      flow.appendChild(el('div', { class: 'howto-step' }, [
+        el('span', { class: 'howto-num', text: s.num }),
+        el('div', { class: 'howto-step-body' }, [
+          el('div', { class: 'howto-step-title', text: s.title }),
+          el('div', { class: 'howto-step-text', text: s.text })
+        ]),
+        el('button', {
+          type: 'button', class: 'btn btn-small', text: 'Go →',
+          onclick: function () { setTab(s.tab); }
+        })
+      ]));
+    });
+    host.appendChild(flow);
+
+    // 2. What fills itself in vs what you type
+    var av = refCard('What fills itself in — and what you type');
+    av.appendChild(el('div', { class: 'howto-cols' }, [
+      el('div', { class: 'howto-col' }, [
+        el('h3', { text: 'Fills itself in' }),
+        bulletList([
+          'Rosters & block assignments for every resident',
+          'Surg 1–5 roles',
+          'WER & Jeff/Cooper consult coverage',
+          'Clinic staffing',
+          'Cooper buddies (from the buddy call schedule)',
+          'Special clinic days (Bilyk, Wasserman, …)'
+        ])
+      ]),
+      el('div', { class: 'howto-col' }, [
+        el('h3', { text: 'You type' }),
+        bulletList([
+          'Cases from the EMRs',
+          'Clinic patient counts',
+          'Night float',
+          'Add-ons (call coverage)',
+          'Vacation',
+          'Lectures & events'
+        ])
+      ])
+    ]));
+    av.appendChild(el('p', { class: 'field-hint howto-note', text: 'Several EMRs, no interfaces — the case list is deliberately manual.' }));
+    host.appendChild(av);
+
+    // 3. The rules in 30 seconds — condensed chains (pulled from SCHED_DATA)
+    var rules = refCard('The rules in 30 seconds');
+    rules.appendChild(bulletList([
+      'Scheduled cornea → Surg 3. Scheduled glaucoma → Surg 4.',
+      'Cataracts → ' + chainText('scheduledCataract', 'Surg 1 → Surg 5 → Wills OR') + ' (per the lounge-wall block schedule).',
+      'Peds → ' + chainText('peds', 'junior on Peds OR → free junior → Surg 4 → Surg 3') + '.',
+      'Trauma → Surg 2 first (unless corneal tissue is needed — then cornea).',
+      'Everything else, chronologically: ' + chainText('remaining', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + '.',
+      'Clinic coverage: ' + chainText('clinicCoverage', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 → Wills OR → Retina') + '.'
+    ], 'howto-rules'));
+    rules.appendChild(el('div', { class: 'howto-foot' }, [
+      el('span', { class: 'field-hint', text: 'Full chains, notes, and the block grids live in the Reference tab.' }),
+      el('button', {
+        type: 'button', class: 'btn btn-small', text: 'Open Reference',
+        onclick: function () { setTab('reference'); }
+      })
+    ]));
+    host.appendChild(rules);
+
+    // 4. Tips for new schedulers — from the how-to deck
+    var tips = refCard('Tips for new schedulers');
+    tips.appendChild(bulletList([
+      'Check the Google Calendar for lectures and vacations first — before anything else.',
+      'Surg 3 and Surg 4 should reach out to the attendings about their scheduled cases beforehand.',
+      'The schedule is built the evening before — expect late changes and add-ons.',
+      'Surg 2 is the boss — give them some grace.'
+    ]));
+    if (data().quote) tips.appendChild(el('p', { class: 'ref-quote howto-quote', text: data().quote }));
+    host.appendChild(tips);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* tab 5 — Reference                                                   */
+  /* ------------------------------------------------------------------ */
+
+  function refCard(title) {
+    var c = el('div', { class: 'card' });
+    c.appendChild(el('h2', { text: title }));
+    return c;
+  }
+
+  function renderReference() {
+    var host = $('referenceBody');
+    clearNode(host);
+    var d = data();
+
+    if (d.quote) {
+      host.appendChild(el('p', { class: 'ref-quote', text: d.quote }));
+    }
+
+    // Hierarchy chains
+    var hCard = refCard('Case-assignment hierarchy');
+    var hTbl = el('table', { class: 'tbl' });
+    hTbl.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: 'Case type' }), el('th', { text: 'Chain' }), el('th', { text: 'Note' })
+    ])]));
+    var hBody = el('tbody');
+    Object.keys(d.hierarchy || {}).forEach(function (key) {
+      var h = d.hierarchy[key];
+      hBody.appendChild(el('tr', {}, [
+        el('td', {}, [el('strong', { text: h.label })]),
+        el('td', { text: (h.chain || []).join(' → ') }),
+        el('td', {}, [el('span', { class: 'field-hint', text: h.note || '' })])
+      ]));
+    });
+    hTbl.appendChild(hBody);
+    hCard.appendChild(el('div', { class: 'table-scroll' }, [hTbl]));
+    host.appendChild(hCard);
+
+    // Surg roles
+    var sCard = refCard('Surg roles');
+    var sTbl = el('table', { class: 'tbl' });
+    var sBody = el('tbody');
+    Object.keys(d.surgRoleMeta || {}).forEach(function (role) {
+      sBody.appendChild(el('tr', {}, [
+        el('td', {}, [el('strong', { text: role })]),
+        el('td', { text: d.surgRoleMeta[role] })
+      ]));
+    });
+    sTbl.appendChild(sBody);
+    sCard.appendChild(el('div', { class: 'table-scroll' }, [sTbl]));
+    host.appendChild(sCard);
+
+    // Scheduling notes
+    var nCard = refCard('Things to keep in mind');
+    var ul = el('ul', { class: 'ref-note-list' });
+    (d.schedulingNotes || []).forEach(function (n) { ul.appendChild(el('li', { text: n })); });
+    nCard.appendChild(ul);
+    host.appendChild(nCard);
+
+    // Post-ops
+    if ((d.postOpNotes || []).length) {
+      var pCard = refCard('Post-ops');
+      var pUl = el('ul', { class: 'ref-note-list' });
+      d.postOpNotes.forEach(function (n) { pUl.appendChild(el('li', { text: n })); });
+      pCard.appendChild(pUl);
+      host.appendChild(pCard);
+    }
+
+    // Which cases am I actually doing?
+    if (d.caseSourcesNote) {
+      var csCard = refCard('Finding your case list');
+      csCard.appendChild(el('p', { class: 'ref-para', text: d.caseSourcesNote }));
+      host.appendChild(csCard);
+    }
+
+    // PGY-4 cataract prep checklist
+    if ((d.cataractPrep || []).length) {
+      var cpCard = refCard('PGY-4 cataract prep checklist');
+      var cpUl = el('ul', { class: 'ref-note-list' });
+      d.cataractPrep.forEach(function (n) { cpUl.appendChild(el('li', { text: n })); });
+      cpCard.appendChild(cpUl);
+      host.appendChild(cpCard);
+    }
+
+    // Special clinics
+    var scCard = refCard('Attending clinic patterns');
+    var scTbl = el('table', { class: 'tbl' });
+    scTbl.appendChild(el('thead', {}, [el('tr', {}, [
+      el('th', { text: 'Clinic' }), el('th', { text: 'Day' }), el('th', { text: 'Session' }), el('th', { text: 'Weeks' })
+    ])]));
+    var scBody = el('tbody');
+    var dayLabel = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday' };
+    (d.specialClinics || []).forEach(function (sc) {
+      scBody.appendChild(el('tr', {}, [
+        el('td', {}, [el('strong', { text: sc.label })]),
+        el('td', { text: dayLabel[sc.day] || sc.day }),
+        el('td', { text: sc.session === 'all' ? 'AM/PM' : sc.session.toUpperCase() }),
+        el('td', { text: (sc.nth || []).map(ordinal).join(', ') })
+      ]));
+    });
+    scTbl.appendChild(scBody);
+    scCard.appendChild(el('div', { class: 'table-scroll' }, [scTbl]));
+    host.appendChild(scCard);
+
+    // Per-year block grids + block-dates tables
+    YEAR_ORDER.forEach(function (yk) {
+      var y = d.years[yk];
+      if (!y) return;
+
+      var gCard = refCard(y.label + ' — block grid');
+      var gTbl = el('table', { class: 'tbl grid-tbl' });
+      gTbl.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Block' })].concat(
+        d.weekdays.map(function (wk) { return el('th', { text: dayLabel[wk] || wk }); })
+      ))]));
+      var gBody = el('tbody');
+      Object.keys(y.grid).sort(function (a, b) { return (+a) - (+b); }).forEach(function (block) {
+        var cells = [el('td', {}, [el('strong', { text: block }),
+          (y.taskmasterBlocks || []).indexOf(+block) !== -1 ? el('span', { class: 'badge badge-tm', text: ' TM' }) : null])];
+        d.weekdays.forEach(function (wk) {
+          var cell = y.grid[block][wk] || {};
+          cells.push(el('td', {}, [
+            el('div', { class: 'g-line' }, [el('span', { class: 'badge badge-am', text: 'AM' }), ' ' + (cell.am || '—')]),
+            el('div', { class: 'g-line' }, [el('span', { class: 'badge badge-pm', text: 'PM' }), ' ' + (cell.pm || '—')])
+          ]));
+        });
+        gBody.appendChild(el('tr', {}, cells));
+      });
+      gTbl.appendChild(gBody);
+      gCard.appendChild(el('div', { class: 'table-scroll' }, [gTbl]));
+      if ((y.gridNotes || []).length) {
+        var gn = el('ul', { class: 'grid-notes' });
+        y.gridNotes.forEach(function (n) { gn.appendChild(el('li', { text: n })); });
+        gCard.appendChild(gn);
+      }
+      host.appendChild(gCard);
+
+      var bCard = refCard(y.label + ' — block dates');
+      var bTbl = el('table', { class: 'tbl blocks-tbl' });
+      bTbl.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Dates' })].concat(
+        y.residents.map(function (n) { return el('th', { text: n }); })
+      ))]));
+      var bBody = el('tbody');
+      (y.blockRanges || []).forEach(function (range) {
+        var label = fmtMDYY(parseISO(range.start)) + ' – ' + fmtMDYY(parseISO(range.end));
+        var cells = [el('td', { text: label })];
+        y.residents.forEach(function (n) {
+          var block = range.blocks[n];
+          var tm = (y.taskmasterBlocks || []).indexOf(block) !== -1;
+          cells.push(el('td', { class: tm ? 'tm' : null, text: block == null ? '—' : String(block) }));
+        });
+        bBody.appendChild(el('tr', {}, cells));
+      });
+      bTbl.appendChild(bBody);
+      bCard.appendChild(el('div', { class: 'table-scroll' }, [bTbl]));
+      host.appendChild(bCard);
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* header actions                                                      */
+  /* ------------------------------------------------------------------ */
+
+  function setDate(dateISO) {
+    saveNow(); // flush pending edits for the old date
+    App.state = loadState(dateISO);
+    stateDirty = false;   // freshly loaded — nothing user-edited yet
+    assignExpanded = {};  // case ids restart at 'c1' per date — expansion must not leak
+    computeRoster();
+    renderAll();
+  }
+
+  function createSchedule() {
+    computeRoster();
+    renderAll();
+    var r = App.roster;
+    toast('Roster built for ' + r.weekdayLabel + ' ' + fmtMDYY(parseISO(App.state.date)) + ' — manual entries kept');
+  }
+
+  // One-click sync: flush edits, recompute the roster, re-render every tab so
+  // the Preview & Copy output reflects everything entered anywhere in the app.
+  function updateSync() {
+    saveNow();
+    computeRoster();
+    renderAll();
+    toast('Updated — clinics, cases & Preview/Copy are in sync');
+  }
+
+  function startFromYesterday() {
+    var dates = lsKeys()
+      .filter(function (k) { return k.indexOf(LS_PREFIX) === 0; })
+      .map(function (k) { return k.slice(LS_PREFIX.length); })
+      .filter(function (dd) { return /^\d{4}-\d{2}-\d{2}$/.test(dd) && dd < App.state.date; })
+      .sort();
+    if (!dates.length) {
+      toast('No earlier saved day to copy from', false);
+      return;
+    }
+    var src = dates[dates.length - 1];
+    var raw = lsGet(LS_PREFIX + src);
+    var prev = null;
+    try { prev = raw ? JSON.parse(raw) : null; } catch (e) { }
+    if (!prev) {
+      toast('Could not read the saved day ' + src, false);
+      return;
+    }
+    App.state.nightFloat = String(prev.nightFloat || '');
+    App.state.vacation = String(prev.vacation || '');
+    App.state.lectures = String(prev.lectures || '');
+    App.state.addOns = Array.isArray(prev.addOns)
+      ? prev.addOns.map(function (a) {
+          return { label: String((a && a.label) || ''), name: String((a && a.name) || '') };
+        })
+      : [];
+    stateDirty = true; // explicit user action — this day now really has content
+    saveNow();
+    renderAll();
+    toast('Copied night float, vacation, lectures & add-ons from ' + src);
+  }
+
+  function clearDay() {
+    if (!window.confirm('Clear everything saved for ' + App.state.date + '? This cannot be undone.')) return;
+    lsRemove(LS_PREFIX + App.state.date);
+    App.state = defaultState(App.state.date);
+    stateDirty = false; // back to untouched — don't resurrect the key on next save
+    renderAll();
+    toast('Cleared ' + App.state.date);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Home landing view                                                   */
+  /* ------------------------------------------------------------------ */
+
+  function savedDayISOs() {
+    return lsKeys()
+      .filter(function (k) { return k.indexOf(LS_PREFIX) === 0; })
+      .map(function (k) { return k.slice(LS_PREFIX.length); })
+      .filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); })
+      .sort();
+  }
+
+  // Big home button: 'Create Surg Schedule →', or 'Open schedule for M/D/YY'
+  // with a 'saved draft' hint when a draft already exists for the chosen date.
+  function updateHomeCreate() {
+    var hd = $('homeDate');
+    var btn = $('btnHomeCreate');
+    var hint = $('homeDraftHint');
+    if (!hd || !btn) return;
+    var v = hd.value;
+    var hasDraft = !!(v && lsGet(LS_PREFIX + v));
+    if (hasDraft) {
+      btn.textContent = 'Open schedule for ' + fmtMDYY(parseISO(v));
+      if (hint) {
+        hint.textContent = 'saved draft — picks up right where you left off';
+        hint.classList.remove('hidden');
+      }
+    } else {
+      btn.textContent = 'Create Surg Schedule →';
+      if (hint) {
+        hint.textContent = '';
+        hint.classList.add('hidden');
+      }
+    }
+  }
+
+  function renderHome() {
+    var hd = $('homeDate');
+    if (hd && !hd.value) hd.value = tomorrowISO();
+    updateHomeCreate();
+    var host = $('homeRecent');
+    if (!host) return;
+    clearNode(host);
+    var dates = savedDayISOs();
+    dates.reverse();
+    dates = dates.slice(0, 4);
+    if (!dates.length) {
+      host.classList.add('hidden');
+      return;
+    }
+    host.classList.remove('hidden');
+    host.appendChild(el('span', { class: 'home-recent-label', text: 'Recent days' }));
+    dates.forEach(function (dISO) {
+      var d = parseISO(dISO);
+      host.appendChild(el('button', {
+        type: 'button', class: 'chip chip-recent',
+        text: WEEKDAY_NAMES[d.getDay()].slice(0, 3) + ' ' + fmtMDYY(d),
+        onclick: function () { enterApp(dISO); }
+      }));
+    });
+  }
+
+  function enterApp(dateISO, tab) {
+    var dp = $('datePicker');
+    if (dp) dp.value = dateISO;
+    document.body.classList.remove('home-active');
+    setDate(dateISO);
+    setTab(tab || 'roster');
+    if (!tab || tab === 'roster') {
+      toast('Roster built for ' + App.roster.weekdayLabel + ' ' + fmtMDYY(parseISO(dateISO)) + ' — manual entries kept');
+    }
+  }
+
+  // Brand click in the header — back to Home. Nothing is lost: state saved.
+  function goHome() {
+    saveNow();
+    var hd = $('homeDate');
+    if (hd && App.state) hd.value = App.state.date;
+    document.body.classList.add('home-active');
+    renderHome();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* tabs + boot                                                         */
+  /* ------------------------------------------------------------------ */
+
+  function setTab(tab) {
+    App.activeTab = tab;
+    var tabs = document.querySelectorAll('.tabbar .tab');
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === tab);
+    }
+    var panels = document.querySelectorAll('.panel');
+    for (var j = 0; j < panels.length; j++) {
+      panels[j].classList.toggle('active', panels[j].id === 'panel-' + tab);
+    }
+    if (tab === 'roster') renderRosterTab();
+    if (tab === 'cases') renderCasesTab();
+    if (tab === 'assign') renderAssignTab();
+    if (tab === 'preview') renderPreview();
+    // 'howto' and 'reference' are static — rendered once at boot.
+  }
+
+  function renderAll() {
+    renderHeader();
+    renderRosterTab();
+    renderCasesTab();
+    if (App.activeTab === 'assign') renderAssignTab();
+    if (App.activeTab === 'preview') renderPreview();
+  }
+
+  function boot() {
+    if (!window.SCHED_DATA) {
+      document.body.insertBefore(
+        el('div', { class: 'banner', text: 'js/data.js failed to load — the app cannot start.' }),
+        document.body.firstChild
+      );
+      return;
+    }
+
+    var dp = $('datePicker');
+    var initial = tomorrowISO();
+    dp.value = initial;
+    dp.addEventListener('change', function () { if (dp.value) setDate(dp.value); });
+
+    // Steer both date pickers to the academic year (defaults stay "tomorrow"
+    // from the real clock — nothing is pinned to any particular month).
+    var d = data();
+    [dp, $('homeDate')].forEach(function (inp) {
+      if (inp && d.ayStart && d.ayEnd) {
+        inp.min = d.ayStart;
+        inp.max = d.ayEnd;
+      }
+    });
+
+    var tabs = document.querySelectorAll('.tabbar .tab');
+    for (var i = 0; i < tabs.length; i++) {
+      (function (btn) {
+        btn.addEventListener('click', function () { setTab(btn.getAttribute('data-tab')); });
+      })(tabs[i]);
+    }
+
+    $('btnCreate').addEventListener('click', createSchedule);
+    $('btnUpdate').addEventListener('click', updateSync);
+    function closeMoreMenu() {
+      var m = $('moreMenu');
+      if (m) m.removeAttribute('open');
+    }
+    $('btnYesterday').addEventListener('click', function () { closeMoreMenu(); startFromYesterday(); });
+    $('btnClear').addEventListener('click', function () { closeMoreMenu(); clearDay(); });
+    document.addEventListener('click', function (ev) {
+      var m = $('moreMenu');
+      if (m && m.hasAttribute('open') && !m.contains(ev.target)) m.removeAttribute('open');
+    });
+    $('btnSuggestAll').addEventListener('click', suggestAll);
+    $('btnAcceptAll').addEventListener('click', acceptAll);
+
+    $('btnCopyHTML').addEventListener('click', function () {
+      renderPreview();
+      window.ExportFmt.copy(exportDay()).then(function (ok) {
+        toast(ok ? 'Formatted schedule copied' : 'Copy failed — select the preview text and copy manually', ok);
+      });
+    });
+    $('btnCopyText').addEventListener('click', function () {
+      window.ExportFmt.copyText(exportDay()).then(function (ok) {
+        toast(ok ? 'Plain-text schedule copied' : 'Copy failed', ok);
+      });
+    });
+    $('btnCopyAddons').addEventListener('click', function () {
+      var any = (App.state.addOns || []).some(function (a) { return a && trim(a.name); });
+      if (!any) { toast('No add-ons entered yet — fill them in on Day Roster or Cases & Clinics', false); return; }
+      window.ExportFmt.copyAddOns(exportDay()).then(function (ok) {
+        toast(ok ? 'Add-ons copied — paste at the end of the schedule' : 'Copy failed', ok);
+      });
+    });
+
+    // Home view + brand-click-returns-home
+    var brand = $('btnBrandHome');
+    if (brand) brand.addEventListener('click', goHome);
+    var homeDate = $('homeDate');
+    if (homeDate) {
+      homeDate.addEventListener('change', updateHomeCreate);
+      homeDate.addEventListener('input', updateHomeCreate);
+    }
+    var btnHomeCreate = $('btnHomeCreate');
+    if (btnHomeCreate) {
+      btnHomeCreate.addEventListener('click', function () {
+        enterApp((homeDate && homeDate.value) || tomorrowISO());
+      });
+    }
+    var btnHomeHowto = $('btnHomeHowto');
+    if (btnHomeHowto) {
+      btnHomeHowto.addEventListener('click', function () {
+        enterApp((homeDate && homeDate.value) || tomorrowISO(), 'howto');
+      });
+    }
+    var btnHomeReference = $('btnHomeReference');
+    if (btnHomeReference) {
+      btnHomeReference.addEventListener('click', function () {
+        enterApp((homeDate && homeDate.value) || tomorrowISO(), 'reference');
+      });
+    }
+
+    window.addEventListener('beforeunload', saveNow);
+
+    renderReference();
+    renderHowto();
+    setDate(initial);
+
+    // Land on Home (body starts with .home-active from the markup).
+    if (homeDate) homeDate.value = initial;
+    renderHome();
+  }
+
+  App.setDate = setDate;
+  App.setTab = setTab;
+  App.saveNow = saveNow;
+  App.exportDay = exportDay;
+  App.enterApp = enterApp;
+  App.goHome = goHome;
+  window.App = App;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
+</script>
+</body>
+</html>
