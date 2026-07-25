@@ -418,7 +418,28 @@ const SCHED_DATA = {
     { label: 'Pemphigoid Clinic', day: 'fri', session: 'all', nth: [3] },
     { label: 'Wasserman Clinic', day: 'thu', session: 'pm', nth: [3] },
     { label: 'Schnall Clinic', day: 'fri', session: 'am', nth: [2, 4] }
-  ]
+  ],
+
+  // Cooper buddy call — from the "Cooper Buddy Call 2026-2027" PDF.
+  buddyCall: {
+    note: 'Cooper buddy call — senior buddy for the Cooper consult PGY-2. Later blocks TBD; the weekly template shows which rotation the buddy is pulled from.',
+    template: {
+      am: { mon: 'Retina', tue: 'Wills OR (B3)', wed: 'Private Glaucoma', thu: 'Cooper', fri: 'Cooper OR' },
+      pm: { mon: 'Retina', tue: 'Wills OR (B3)', wed: 'Retina', thu: 'Cooper (PGY-4)', fri: 'PT (B6)' }
+    },
+    ranges: [
+      {
+        start: '2026-07-20', end: '2026-08-09',
+        am: { mon: 'DeSimone', tue: 'Williamson', wed: 'Camacho', thu: 'Nahar', fri: 'Nahar' },
+        pm: { mon: 'DeSimone', tue: 'Williamson', wed: 'DeSimone', thu: 'Shields', fri: 'Perez' }
+      },
+      {
+        start: '2026-08-10', end: '2026-08-30',
+        am: { mon: 'DeSimone', tue: 'Williamson', wed: 'Camacho', thu: 'Nahar', fri: 'Nahar' },
+        pm: { mon: 'DeSimone', tue: 'Williamson', wed: 'DeSimone', thu: 'Aguwa', fri: 'Perez' }
+      }
+    ]
+  }
 };
 
 if (typeof window !== 'undefined') window.SCHED_DATA = SCHED_DATA;

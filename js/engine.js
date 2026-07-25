@@ -91,7 +91,8 @@
       taskmasters: [],
       clinics: {},
       orBlocks: {},
-      specialClinicsToday: []
+      specialClinicsToday: [],
+      cooperBuddies: { am: null, pm: null, templateAM: null, templatePM: null }
     };
   }
 
@@ -201,6 +202,25 @@
       if (sc.day !== weekdayKey) continue;
       if (sc.nth && sc.nth.indexOf(nth) === -1) continue;
       day.specialClinicsToday.push(sc.label + sessionSuffix(sc.session));
+    }
+
+    // Cooper buddy call: template rotation by weekday; named buddy from the
+    // range containing this date (ISO string compare), if any. Weekend /
+    // out-of-year days never reach this point and keep all-null values.
+    var bc = data.buddyCall;
+    if (bc) {
+      var tmpl = bc.template || {};
+      day.cooperBuddies.templateAM = (tmpl.am && tmpl.am[weekdayKey]) || null;
+      day.cooperBuddies.templatePM = (tmpl.pm && tmpl.pm[weekdayKey]) || null;
+      var bcRanges = bc.ranges || [];
+      for (var bi = 0; bi < bcRanges.length; bi++) {
+        var br = bcRanges[bi];
+        if (br.start <= dateISO && dateISO <= br.end) {
+          day.cooperBuddies.am = (br.am && br.am[weekdayKey]) || null;
+          day.cooperBuddies.pm = (br.pm && br.pm[weekdayKey]) || null;
+          break;
+        }
+      }
     }
 
     return day;

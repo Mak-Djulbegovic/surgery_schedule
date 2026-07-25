@@ -304,6 +304,47 @@ eq(Object.keys(pre.clinics).length, 0, 'out-of-year: clinics empty');
 var fb = Engine.resolveDay('2026-07-22');
 eq(fb.surg['1'] && fb.surg['1'].name, 'Cheng', 'data fallback works in Node (require ./data.js)');
 
+/* ---------- Cooper buddy call (UISPEC2 section A) ---------- */
+// 2026-07-22 (Wed, named range 1)
+var bd1 = Engine.resolveDay('2026-07-22', DATA);
+ok(bd1.cooperBuddies && typeof bd1.cooperBuddies === 'object', 'buddy: cooperBuddies present on 7/22');
+eq(bd1.cooperBuddies.am, 'Camacho', 'buddy 7/22: am = Camacho (range 1 Wed)');
+eq(bd1.cooperBuddies.pm, 'DeSimone', 'buddy 7/22: pm = DeSimone (range 1 Wed)');
+eq(bd1.cooperBuddies.templateAM, 'Private Glaucoma', 'buddy 7/22: templateAM = Private Glaucoma');
+eq(bd1.cooperBuddies.templatePM, 'Retina', 'buddy 7/22: templatePM = Retina');
+
+// 2026-08-13 (Thu, named range 2 — Thu PM differs from range 1)
+var bd2 = Engine.resolveDay('2026-08-13', DATA);
+eq(bd2.weekdayKey, 'thu', 'buddy 8/13: is a Thursday');
+eq(bd2.cooperBuddies.am, 'Nahar', 'buddy 8/13: am = Nahar (range 2 Thu)');
+eq(bd2.cooperBuddies.pm, 'Aguwa', 'buddy 8/13: pm = Aguwa (range 2 Thu PM differs)');
+eq(bd2.cooperBuddies.templateAM, 'Cooper', 'buddy 8/13: templateAM = Cooper');
+eq(bd2.cooperBuddies.templatePM, 'Cooper (PGY-4)', 'buddy 8/13: templatePM = Cooper (PGY-4)');
+
+// 2026-09-02 (Wed, in year but after the last named range): names null, templates populated
+var bd3 = Engine.resolveDay('2026-09-02', DATA);
+eq(bd3.weekdayKey, 'wed', 'buddy 9/2: is a Wednesday');
+eq(bd3.inYear, true, 'buddy 9/2: inYear');
+eq(bd3.cooperBuddies.am, null, 'buddy 9/2: am null (no named range)');
+eq(bd3.cooperBuddies.pm, null, 'buddy 9/2: pm null (no named range)');
+eq(bd3.cooperBuddies.templateAM, 'Private Glaucoma', 'buddy 9/2: templateAM still populated');
+eq(bd3.cooperBuddies.templatePM, 'Retina', 'buddy 9/2: templatePM still populated');
+
+// Weekend: all null
+var bdSat = Engine.resolveDay('2026-07-18', DATA);
+ok(bdSat.cooperBuddies && typeof bdSat.cooperBuddies === 'object', 'buddy weekend: cooperBuddies key exists');
+eq(bdSat.cooperBuddies.am, null, 'buddy weekend: am null');
+eq(bdSat.cooperBuddies.pm, null, 'buddy weekend: pm null');
+eq(bdSat.cooperBuddies.templateAM, null, 'buddy weekend: templateAM null');
+eq(bdSat.cooperBuddies.templatePM, null, 'buddy weekend: templatePM null');
+
+// Out of year: all null
+var bdPre = Engine.resolveDay('2026-07-01', DATA);
+eq(bdPre.cooperBuddies.am, null, 'buddy out-of-year: am null');
+eq(bdPre.cooperBuddies.pm, null, 'buddy out-of-year: pm null');
+eq(bdPre.cooperBuddies.templateAM, null, 'buddy out-of-year: templateAM null');
+eq(bdPre.cooperBuddies.templatePM, null, 'buddy out-of-year: templatePM null');
+
 /* ---------- summary ---------- */
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures > 0) {
