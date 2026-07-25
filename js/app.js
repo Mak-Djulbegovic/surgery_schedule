@@ -27,6 +27,11 @@
     activeTab: 'roster'
   };
 
+  // Local UI state — never persisted.
+  var assignFilter = 'needs';                 // 'needs' | 'assigned' | 'all'
+  var assignExpanded = {};                    // caseId -> true (compact row expanded inline)
+  var caseSectionOpen = { wills: true, private: true, jhn: true, other: true };
+
   function data() { return window.SCHED_DATA; }
 
   /* ------------------------------------------------------------------ */
@@ -307,15 +312,51 @@
   }
 
   function computeRoster() {
+    App.roster = null;
     try {
       if (window.Engine && window.Engine.resolveDay) {
         App.roster = window.Engine.resolveDay(App.state.date, data());
-        return;
       }
     } catch (e) {
       if (window.console) console.error('resolveDay failed', e);
     }
-    App.roster = emptyRoster(App.state.date);
+    if (!App.roster) App.roster = emptyRoster(App.state.date);
+    prefillBuddies();
+  }
+
+  /* Cooper buddy prefill (buddy call schedule) — roster.cooperBuddies may be
+     absent (older engine.js); guard everything. Never overwrite a non-empty
+     user value: prefill only when BOTH name and note are empty. */
+
+  function prefillBuddies() {
+    var st = App.state;
+    var r = App.roster;
+    if (!st || !r || !r.cooperBuddies) return;
+    var cb = r.cooperBuddies;
+    var am = st.cooperBuddyAM || (st.cooperBuddyAM = { name: '', note: '' });
+    var pm = st.cooperBuddyPM || (st.cooperBuddyPM = { name: '', note: '' });
+    if (cb.am && !trim(am.name) && !trim(am.note)) {
+      st.cooperBuddyAM = { name: String(cb.am), note: String(cb.templateAM || '').toLowerCase() };
+    }
+    if (cb.pm && !trim(pm.name) && !trim(pm.note)) {
+      st.cooperBuddyPM = { name: String(cb.pm), note: String(cb.templatePM || '').toLowerCase() };
+    }
+  }
+
+  function buddyMatchesPrefill(b, name, template) {
+    return !!name && !!b && trim(b.name) === String(name) &&
+      trim(b.note) === trim(String(template || '').toLowerCase());
+  }
+
+  // True while the buddy fields still hold exactly the buddy-call values —
+  // survives reloads, disappears as soon as the user edits either field.
+  function buddiesAutoFilled() {
+    var st = App.state;
+    var r = App.roster;
+    if (!st || !r || !r.cooperBuddies) return false;
+    var cb = r.cooperBuddies;
+    return buddyMatchesPrefill(st.cooperBuddyAM, cb.am, cb.templateAM) ||
+      buddyMatchesPrefill(st.cooperBuddyPM, cb.pm, cb.templatePM);
   }
 
   /* ------------------------------------------------------------------ */
@@ -462,7 +503,18 @@
     if (wer) row.appendChild(glanceKV('WER', wer));
     row.appendChild(glanceKV('Night Float', trim(App.state && App.state.nightFloat) || '—'));
     if ((r.jeffConsults || []).length) row.appendChild(glanceKV('Jeff Consults', r.jeffConsults.join(', ')));
-    if ((r.cooperConsults || []).length) row.appendChild(glanceKV('Cooper Consults', r.cooperConsults.join(', ')));
+    if ((r.cooperConsults || []).length) {
+      // 'Illiano + Camacho AM / DeSimone PM' when buddies are set (from state)
+      var cooperVal = r.cooperConsults.join(', ');
+      var st = App.state || {};
+      var buddyBits = [];
+      var amName = trim(st.cooperBuddyAM && st.cooperBuddyAM.name);
+      var pmName = trim(st.cooperBuddyPM && st.cooperBuddyPM.name);
+      if (amName) buddyBits.push(amName + ' AM');
+      if (pmName) buddyBits.push(pmName + ' PM');
+      if (buddyBits.length) cooperVal += ' + ' + buddyBits.join(' / ');
+      row.appendChild(glanceKV('Cooper Consults', cooperVal));
+    }
     if ((r.dayFloat || []).length) row.appendChild(glanceKV('Day Float', r.dayFloat.join(', ')));
     if ((r.taskmasters || []).length) row.appendChild(glanceKV('Taskmaster', r.taskmasters.join(' & ')));
     host.appendChild(row);
@@ -479,11 +531,24 @@
   function buddyRow(sess, buddy) {
     var row = el('div', { class: 'buddy-row' });
     row.appendChild(el('span', { class: 'buddy-session', text: sess }));
-    row.appendChild(residentSelect(buddy.name, function (v) { buddy.name = v; touch(); }, 'buddy…'));
+    row.appendChild(residentSelect(buddy.name, function (v) {
+      buddy.name = v;
+      touch();
+      renderSummary();
+      updateBuddyHint();
+    }, 'buddy…'));
     var note = el('input', { type: 'text', placeholder: 'note (e.g. private glaucoma)', value: buddy.note });
-    note.addEventListener('input', function () { buddy.note = note.value; touch(); });
+    note.addEventListener('input', function () { buddy.note = note.value; touch(); updateBuddyHint(); });
     row.appendChild(note);
     return row;
+  }
+
+  function updateBuddyHint() {
+    var n = $('buddyHint');
+    if (!n) return;
+    var on = buddiesAutoFilled();
+    n.textContent = on ? 'auto-filled from the buddy call schedule — edit freely' : '';
+    n.classList.toggle('hidden', !on);
   }
 
   function renderManualInputs() {
@@ -504,7 +569,10 @@
       buddyRow('AM', st.cooperBuddyAM),
       buddyRow('PM', st.cooperBuddyPM)
     ]);
-    host.appendChild(labeledField('Cooper buddies', buddies));
+    var buddiesField = labeledField('Cooper buddies', buddies);
+    buddiesField.appendChild(el('span', { class: 'field-hint hidden', id: 'buddyHint' }));
+    host.appendChild(buddiesField);
+    updateBuddyHint();
 
     var vac = el('textarea', { rows: '2', placeholder: '24 strong' });
     vac.value = st.vacation;
