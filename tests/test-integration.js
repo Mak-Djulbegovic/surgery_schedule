@@ -451,6 +451,41 @@ ok((DATA.hierarchy.scheduledCataract.chain || []).indexOf('WILLS_OR') !== -1,
   'pptx: scheduled cataract chain includes Wills OR');
 
 /* ================================================================== */
+/* (6) Cooper buddy call — UISPEC2 §A engine contract + §F export line */
+
+// 2026-07-22 (Wed, range 1): named buddies + weekday template.
+var bud0722 = Engine.resolveDay('2026-07-22', DATA).cooperBuddies;
+ok(bud0722 && typeof bud0722 === 'object', 'buddy: 7/22 roster has cooperBuddies');
+eq(bud0722 && bud0722.am, 'Camacho', 'buddy: 7/22 am = Camacho');
+eq(bud0722 && bud0722.pm, 'DeSimone', 'buddy: 7/22 pm = DeSimone');
+eq(bud0722 && bud0722.templateAM, 'Private Glaucoma', 'buddy: 7/22 templateAM = Private Glaucoma');
+eq(bud0722 && bud0722.templatePM, 'Retina', 'buddy: 7/22 templatePM = Retina');
+
+// 2026-08-13 (Thu, range 2): the Thu PM buddy flips to Aguwa.
+var bud0813 = Engine.resolveDay('2026-08-13', DATA).cooperBuddies;
+eq(bud0813 && bud0813.pm, 'Aguwa', 'buddy: 8/13 (Thu, range 2) pm = Aguwa');
+
+// 2026-09-02 (Wed, after both ranges): no named buddy.
+var bud0902 = Engine.resolveDay('2026-09-02', DATA).cooperBuddies;
+eq(bud0902 && bud0902.am, null, 'buddy: 9/2 (no range) am = null');
+
+// Export: buddy names + notes render inside the Cooper Consults line
+// exactly as the real 7/22 document.
+var dayBuddy = {
+  date: '2026-07-22',
+  cooperBuddyAM: { name: 'Camacho', note: 'private glaucoma' },
+  cooperBuddyPM: { name: 'DeSimone', note: 'retina' },
+  cases: [],
+  addOns: [],
+  clinicCounts: {},
+  clinicStaffOverrides: {},
+  roster: roster
+};
+contains(ExportFmt.buildText(dayBuddy),
+  'Cooper Consults: **Illiano + buddy [Camacho AM (private glaucoma) | DeSimone PM (retina)]**',
+  'buddy: buildText Cooper Consults line with noted buddies matches the 7/22 document');
+
+/* ================================================================== */
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures > 0) process.exit(1);
 console.log('OK');

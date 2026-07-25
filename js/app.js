@@ -187,9 +187,14 @@
   }
 
   var saveTimer = null;
+  // True only once the user has actually edited the loaded day. saveNow() is a
+  // no-op while false, so merely visiting a date (or closing the tab) never
+  // fabricates a "saved draft" for a day the user never touched — the Home
+  // draft-detection and Recent-days chips rely on keys meaning real edits.
+  var stateDirty = false;
   function saveNow() {
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-    if (App.state) lsSet(LS_PREFIX + App.state.date, JSON.stringify(App.state));
+    if (App.state && stateDirty) lsSet(LS_PREFIX + App.state.date, JSON.stringify(App.state));
   }
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
@@ -198,6 +203,7 @@
 
   // Call after every manual input: debounced persist + live preview refresh.
   function touch() {
+    stateDirty = true;
     scheduleSave();
     if (App.activeTab === 'preview') renderPreview();
   }
@@ -1027,18 +1033,24 @@
     }
 
     var manual = el('div', { class: 'assign-manual' });
-    manual.appendChild(el('label', { text: 'Assigned' }));
-    manual.appendChild(residentSelect(c.assigned, function (v) {
-      c.assigned = v;
-      touch();
-      renderAssignTab();
-    }, 'unassigned'));
-    manual.appendChild(el('label', { text: 'Backup' }));
-    manual.appendChild(residentSelect(c.backup, function (v) {
-      c.backup = v;
-      touch();
-      renderAssignTab();
-    }, '—'));
+    // Each label + select is grouped in a .assign-pair so flex wrapping can
+    // never split a label from its control at narrow widths.
+    manual.appendChild(el('span', { class: 'assign-pair' }, [
+      el('label', { text: 'Assigned' }),
+      residentSelect(c.assigned, function (v) {
+        c.assigned = v;
+        touch();
+        renderAssignTab();
+      }, 'unassigned')
+    ]));
+    manual.appendChild(el('span', { class: 'assign-pair' }, [
+      el('label', { text: 'Backup' }),
+      residentSelect(c.backup, function (v) {
+        c.backup = v;
+        touch();
+        renderAssignTab();
+      }, '—')
+    ]));
     if (!trim(c.assigned) && c.serviceCount > 0) {
       manual.appendChild(el('span', { class: 'unassigned-text', text: '⚠ UNASSIGNED' }));
     }
@@ -1541,6 +1553,8 @@
   function setDate(dateISO) {
     saveNow(); // flush pending edits for the old date
     App.state = loadState(dateISO);
+    stateDirty = false;   // freshly loaded — nothing user-edited yet
+    assignExpanded = {};  // case ids restart at 'c1' per date — expansion must not leak
     computeRoster();
     renderAll();
   }
@@ -1587,6 +1601,7 @@
           return { label: String((a && a.label) || ''), name: String((a && a.name) || '') };
         })
       : [];
+    stateDirty = true; // explicit user action — this day now really has content
     saveNow();
     renderAll();
     toast('Copied night float, vacation, lectures & add-ons from ' + src);
@@ -1596,6 +1611,7 @@
     if (!window.confirm('Clear everything saved for ' + App.state.date + '? This cannot be undone.')) return;
     lsRemove(LS_PREFIX + App.state.date);
     App.state = defaultState(App.state.date);
+    stateDirty = false; // back to untouched — don't resurrect the key on next save
     renderAll();
     toast('Cleared ' + App.state.date);
   }
@@ -1724,6 +1740,16 @@
     var initial = tomorrowISO();
     dp.value = initial;
     dp.addEventListener('change', function () { if (dp.value) setDate(dp.value); });
+
+    // Steer both date pickers to the academic year (defaults stay "tomorrow"
+    // from the real clock — nothing is pinned to any particular month).
+    var d = data();
+    [dp, $('homeDate')].forEach(function (inp) {
+      if (inp && d.ayStart && d.ayEnd) {
+        inp.min = d.ayStart;
+        inp.max = d.ayEnd;
+      }
+    });
 
     var tabs = document.querySelectorAll('.tabbar .tab');
     for (var i = 0; i < tabs.length; i++) {

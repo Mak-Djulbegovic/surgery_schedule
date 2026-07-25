@@ -801,6 +801,8 @@ table.tbl { border-collapse: collapse; width: 100%; }
 .assign-manual { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .assign-manual label { font-size: 12px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
 .assign-manual select { width: 138px; }
+/* label + select wrap as one unit — a label can never be split from its control */
+.assign-pair { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 
 .load-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
 .load-row:last-child { border-bottom: none; }
@@ -927,7 +929,11 @@ table.tbl { border-collapse: collapse; width: 100%; }
   .howto-cols { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 720px) {
+/* 820px (not 720px): the 7-column case-card row needs ~780px of viewport
+   (fixed/max-content columns + gaps + main/card/case-card padding), so the
+   old 720px collapse left a 721–~770px band with page-level horizontal
+   scroll on Cases & Clinics. 820px covers that band with margin. */
+@media (max-width: 820px) {
   .case-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cf-surgeon { grid-column: 1 / -1; }
   .cf-pill, .case-actions { padding-bottom: 0; }

@@ -808,6 +808,8 @@ table.tbl { border-collapse: collapse; width: 100%; }
 .assign-manual { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .assign-manual label { font-size: 12px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
 .assign-manual select { width: 138px; }
+/* label + select wrap as one unit — a label can never be split from its control */
+.assign-pair { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 
 .load-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
 .load-row:last-child { border-bottom: none; }
@@ -934,7 +936,11 @@ table.tbl { border-collapse: collapse; width: 100%; }
   .howto-cols { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 720px) {
+/* 820px (not 720px): the 7-column case-card row needs ~780px of viewport
+   (fixed/max-content columns + gaps + main/card/case-card padding), so the
+   old 720px collapse left a 721–~770px band with page-level horizontal
+   scroll on Cases & Clinics. 820px covers that band with margin. */
+@media (max-width: 820px) {
   .case-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cf-surgeon { grid-column: 1 / -1; }
   .cf-pill, .case-actions { padding-bottom: 0; }
@@ -1514,7 +1520,7 @@ const SCHED_DATA = {
 
   // Cooper buddy call — from the "Cooper Buddy Call 2026-2027" PDF.
   buddyCall: {
-    note: 'Cooper buddy call — senior buddy for the Cooper consult PGY-2. Later blocks TBD; the weekly template shows which rotation the buddy is pulled from.',
+    note: 'Cooper buddy call — senior buddy for the Cooper consult PGY-2. Runs during BLOCK 1 ONLY (7/20 – 8/30); outside that window there is no buddy. The weekly template shows which rotation the buddy is pulled from.',
     template: {
       am: { mon: 'Retina', tue: 'Wills OR (B3)', wed: 'Private Glaucoma', thu: 'Cooper', fri: 'Cooper OR' },
       pm: { mon: 'Retina', tue: 'Wills OR (B3)', wed: 'Retina', thu: 'Cooper (PGY-4)', fri: 'PT (B6)' }
@@ -2828,9 +2834,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   }
 
   var saveTimer = null;
+  // True only once the user has actually edited the loaded day. saveNow() is a
+  // no-op while false, so merely visiting a date (or closing the tab) never
+  // fabricates a "saved draft" for a day the user never touched — the Home
+  // draft-detection and Recent-days chips rely on keys meaning real edits.
+  var stateDirty = false;
   function saveNow() {
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-    if (App.state) lsSet(LS_PREFIX + App.state.date, JSON.stringify(App.state));
+    if (App.state && stateDirty) lsSet(LS_PREFIX + App.state.date, JSON.stringify(App.state));
   }
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
@@ -2839,6 +2850,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
 
   // Call after every manual input: debounced persist + live preview refresh.
   function touch() {
+    stateDirty = true;
     scheduleSave();
     if (App.activeTab === 'preview') renderPreview();
   }
@@ -3668,18 +3680,24 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     }
 
     var manual = el('div', { class: 'assign-manual' });
-    manual.appendChild(el('label', { text: 'Assigned' }));
-    manual.appendChild(residentSelect(c.assigned, function (v) {
-      c.assigned = v;
-      touch();
-      renderAssignTab();
-    }, 'unassigned'));
-    manual.appendChild(el('label', { text: 'Backup' }));
-    manual.appendChild(residentSelect(c.backup, function (v) {
-      c.backup = v;
-      touch();
-      renderAssignTab();
-    }, '—'));
+    // Each label + select is grouped in a .assign-pair so flex wrapping can
+    // never split a label from its control at narrow widths.
+    manual.appendChild(el('span', { class: 'assign-pair' }, [
+      el('label', { text: 'Assigned' }),
+      residentSelect(c.assigned, function (v) {
+        c.assigned = v;
+        touch();
+        renderAssignTab();
+      }, 'unassigned')
+    ]));
+    manual.appendChild(el('span', { class: 'assign-pair' }, [
+      el('label', { text: 'Backup' }),
+      residentSelect(c.backup, function (v) {
+        c.backup = v;
+        touch();
+        renderAssignTab();
+      }, '—')
+    ]));
     if (!trim(c.assigned) && c.serviceCount > 0) {
       manual.appendChild(el('span', { class: 'unassigned-text', text: '⚠ UNASSIGNED' }));
     }
@@ -4182,6 +4200,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   function setDate(dateISO) {
     saveNow(); // flush pending edits for the old date
     App.state = loadState(dateISO);
+    stateDirty = false;   // freshly loaded — nothing user-edited yet
+    assignExpanded = {};  // case ids restart at 'c1' per date — expansion must not leak
     computeRoster();
     renderAll();
   }
@@ -4228,6 +4248,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
           return { label: String((a && a.label) || ''), name: String((a && a.name) || '') };
         })
       : [];
+    stateDirty = true; // explicit user action — this day now really has content
     saveNow();
     renderAll();
     toast('Copied night float, vacation, lectures & add-ons from ' + src);
@@ -4237,6 +4258,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     if (!window.confirm('Clear everything saved for ' + App.state.date + '? This cannot be undone.')) return;
     lsRemove(LS_PREFIX + App.state.date);
     App.state = defaultState(App.state.date);
+    stateDirty = false; // back to untouched — don't resurrect the key on next save
     renderAll();
     toast('Cleared ' + App.state.date);
   }
@@ -4365,6 +4387,16 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var initial = tomorrowISO();
     dp.value = initial;
     dp.addEventListener('change', function () { if (dp.value) setDate(dp.value); });
+
+    // Steer both date pickers to the academic year (defaults stay "tomorrow"
+    // from the real clock — nothing is pinned to any particular month).
+    var d = data();
+    [dp, $('homeDate')].forEach(function (inp) {
+      if (inp && d.ayStart && d.ayEnd) {
+        inp.min = d.ayStart;
+        inp.max = d.ayEnd;
+      }
+    });
 
     var tabs = document.querySelectorAll('.tabbar .tab');
     for (var i = 0; i < tabs.length; i++) {
