@@ -4343,6 +4343,49 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     if (hd && App.state) hd.value = App.state.date;
     document.body.classList.add('home-active');
     renderHome();
+    syncHash('home');
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* hash routing — every view is a history entry so the browser Back    */
+  /* button walks Home ↔ tabs instead of leaving the site               */
+  /* ------------------------------------------------------------------ */
+
+  var VALID_ROUTES = ['home', 'roster', 'cases', 'assign', 'preview', 'howto', 'reference'];
+
+  function routeFromHash() {
+    var h = String(window.location.hash || '').replace(/^#\/?/, '');
+    return VALID_ROUTES.indexOf(h) !== -1 ? h : null;
+  }
+
+  // Record the applied route and mirror it into the URL. Writing
+  // location.hash pushes a history entry; when the change came FROM the
+  // hash (Back/Forward), the hash already matches and nothing is written.
+  function syncHash(route, replace) {
+    App.currentRoute = route;
+    var target = '#/' + route;
+    if (window.location.hash === target) return;
+    try {
+      if (replace && window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', target);
+      } else {
+        window.location.hash = target;
+      }
+    } catch (e) { /* very old browsers / exotic file:// — routing stays internal */ }
+  }
+
+  function onHashChange() {
+    var route = routeFromHash();
+    if (!route || route === App.currentRoute) return;
+    if (route === 'home') {
+      goHome();
+    } else if (document.body.classList.contains('home-active')) {
+      // Deep link / Forward into a tab while sitting on Home.
+      var hd = $('homeDate');
+      enterApp((hd && hd.value) || tomorrowISO(), route);
+    } else {
+      setTab(route);
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -4364,6 +4407,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     if (tab === 'assign') renderAssignTab();
     if (tab === 'preview') renderPreview();
     // 'howto' and 'reference' are static — rendered once at boot.
+    syncHash(tab);
   }
 
   function renderAll() {
@@ -4472,9 +4516,18 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     renderHowto();
     setDate(initial);
 
-    // Land on Home (body starts with .home-active from the markup).
+    // Land on Home (body starts with .home-active from the markup) — unless
+    // the URL deep-links a tab (#/cases etc.), then go straight there.
     if (homeDate) homeDate.value = initial;
     renderHome();
+    window.addEventListener('hashchange', onHashChange);
+    var initialRoute = routeFromHash();
+    if (initialRoute && initialRoute !== 'home') {
+      enterApp(initial, initialRoute);
+    } else {
+      App.currentRoute = 'home';
+      syncHash('home', true); // replaceState: Back from the landing leaves the site
+    }
   }
 
   App.setDate = setDate;
