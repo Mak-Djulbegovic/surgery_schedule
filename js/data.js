@@ -439,6 +439,170 @@ const SCHED_DATA = {
         pm: { mon: 'DeSimone', tue: 'Williamson', wed: 'DeSimone', thu: 'Aguwa', fri: 'Perez' }
       }
     ]
+  },
+
+  // CPEC SURGICAL BLOCK SCHEDULE (effective 05/01/2026) — attending cataract
+  // blocks by nth weekday of the calendar month (rows 1st–5th × Mon–Fri).
+  // Cell highlight = which resident covers the cases: white/none = Surg 1,
+  // yellow = Surg 5, green = Wills OR, tan = Retina Resident.
+  // privateOnly = '*private only' on the sheet (no resident; listed only as who
+  // is doing private cases). site: 'SP' = Stadium, 'CH' = Cherry Hill.
+  // time 'AM TF' = AM, to-follow (no fixed start). months = starred times: the
+  // attending operates only those calendar months (1–12). count = the sheet's
+  // (n) case count, used as an editable prefill.
+  // Transcription note: the cell colors were read from a photo of the sheet —
+  // any entry whose color could not be confirmed carries unverified: true
+  // (none currently; the transcription has been verified against the spec table).
+  cpecSheet: {
+    label: 'CPEC Surgical Block Schedule',
+    effective: '2026-05-01',
+    note: 'Transcribed from a photo of the sheet — cell colors (resident coverage) were read visually; entries that could not be confirmed would carry unverified: true (none currently). Confirm against Cerner/NextGen.',
+    legend: { surg1: 'Surg 1', surg5: 'Surg 5', willsOR: 'Wills OR', retina: 'Retina Resident' },
+    // entries[nth][weekday] = [ { attending, time, count, cover, site, months, privateOnly, note } ]
+    // time: '7:30' | '1:00' | '12:30' | '9:30' | 'AM TF' | 'All day 7:30' | null ; count: number|null
+    // cover: 'surg1'|'surg5'|'willsOR'|'retina'|null (null when privateOnly)
+    // site: 'SP'|'CH'|null ; months: [1..12] or null ; privateOnly: bool
+    entries: {
+      1: {
+        mon: [
+          { attending: 'Harris', time: null, count: 2, cover: 'surg5', site: 'SP', months: null, privateOnly: false, note: null },
+          { attending: 'Davis', time: null, count: 8, cover: 'willsOR', site: 'SP', months: null, privateOnly: false, note: '2 private / 6 service' }
+        ],
+        tue: [
+          { attending: 'Wisner', time: '7:30', count: 4, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Bailey', time: '1:00', count: 3, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Markovitz', time: '7:30', count: 7, cover: 'surg5', site: 'SP', months: null, privateOnly: false, note: null },
+          { attending: 'Pericic', time: '7:30', count: 5, cover: null, site: null, months: null, privateOnly: true, note: null },
+          { attending: 'Anhalt', time: '12:30', count: 4, cover: null, site: null, months: null, privateOnly: true, note: null },
+          { attending: 'Ang', time: '7:30', count: 12, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ],
+        wed: [
+          { attending: 'Brown', time: '7:30', count: 4, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Siliquini', time: '1:00', count: 3, cover: 'surg1', site: null, months: [2, 4, 6, 8, 10, 12], privateOnly: false, note: null },
+          { attending: 'Pyfer Jr', time: '1:00', count: 3, cover: 'surg1', site: null, months: [1, 3, 5, 7, 9, 11], privateOnly: false, note: null },
+          { attending: 'Abendroth', time: 'AM TF', count: 2, cover: 'surg5', site: 'SP', months: null, privateOnly: false, note: null },
+          { attending: 'Lamson', time: null, count: 12, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ],
+        thu: [
+          { attending: 'Shafer', time: '7:30', count: 4, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Ang', time: '12:30', count: 3, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'McGowan', time: '7:30', count: 10, cover: 'surg5', site: 'SP', months: null, privateOnly: false, note: null },
+          { attending: 'Anhalt', time: null, count: 15, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ],
+        fri: [
+          { attending: 'Witherell', time: '7:30', count: 4, cover: 'surg1', site: null, months: [2, 4, 6, 8, 10, 12], privateOnly: false, note: null },
+          { attending: 'Pyfer', time: '7:30', count: 4, cover: 'surg1', site: null, months: [1, 3, 5, 7, 9, 11], privateOnly: false, note: null },
+          { attending: 'Negrey', time: '1:00', count: 3, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Pericic', time: null, count: 14, cover: null, site: 'SP', months: null, privateOnly: true, note: null },
+          { attending: 'Lamson', time: null, count: 12, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ]
+      },
+      2: {
+        mon: [
+          { attending: 'Markovitz', time: 'All day 7:30', count: 7, cover: 'surg5', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Abendroth', time: 'AM TF', count: 3, cover: 'surg1', site: null, months: null, privateOnly: false, note: '2–3 cases' },
+          { attending: 'Ang', time: '12:30', count: 3, cover: 'surg1', site: null, months: null, privateOnly: false, note: null }
+        ],
+        tue: [
+          { attending: 'Davis', time: 'AM TF', count: 2, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Tyson', time: '1:00', count: 3, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Gordon', time: 'AM TF', count: 2, cover: 'surg5', site: 'CH', months: null, privateOnly: false, note: null },
+          { attending: 'Anhalt', time: null, count: 15, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ],
+        wed: [
+          { attending: 'Tabas', time: 'AM TF', count: 1, cover: 'surg1', site: null, months: null, privateOnly: false, note: null }
+        ],
+        thu: [
+          { attending: 'Pyfer', time: 'AM TF', count: 1, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Ang', time: '12:30', count: 4, cover: null, site: null, months: null, privateOnly: true, note: null },
+          { attending: 'Harris', time: '7:30', count: 2, cover: 'surg5', site: 'SP', months: null, privateOnly: false, note: null }
+        ],
+        fri: [
+          { attending: 'Anhalt', time: '7:30', count: 4, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Epstein/Solarte', time: '1:00', count: 3, cover: 'surg1', site: null, months: null, privateOnly: false, note: null }
+        ]
+      },
+      3: {
+        mon: [
+          { attending: 'McGowan', time: 'All day 7:30', count: 10, cover: 'surg1', site: null, months: null, privateOnly: false, note: null }
+        ],
+        tue: [
+          { attending: 'Lamson', time: '7:30', count: 4, cover: null, site: null, months: null, privateOnly: true, note: null },
+          { attending: 'Markovitz', time: '7:30', count: 7, cover: 'surg5', site: 'SP', months: null, privateOnly: false, note: null },
+          { attending: 'Pericic', time: '7:30', count: 5, cover: null, site: null, months: null, privateOnly: true, note: null }
+        ],
+        wed: [
+          { attending: 'Brown', time: '7:30', count: 4, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Galiani', time: '1:00', count: 3, cover: 'surg1', site: null, months: [1, 3, 5, 7, 9, 11], privateOnly: false, note: null },
+          { attending: 'Williams', time: '1:00', count: 3, cover: 'surg1', site: null, months: [2, 4, 6, 8, 10, 12], privateOnly: false, note: null },
+          { attending: 'Tabas', time: 'AM TF', count: 1, cover: 'retina', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Derham', time: '9:30', count: 11, cover: 'surg5', site: 'SP', months: null, privateOnly: false, note: null }
+        ],
+        thu: [
+          { attending: 'Lamson', time: '7:30', count: 4, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Anhalt', time: null, count: 15, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ],
+        fri: [
+          { attending: 'Anhalt', time: '7:30', count: 4, cover: 'surg1', site: null, months: null, privateOnly: false, note: '3 service / 1 private' },
+          { attending: 'Weinstock', time: '1:00', count: 3, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Ang', time: '7:30', count: 12, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ]
+      },
+      4: {
+        mon: [
+          { attending: 'Abendroth', time: 'AM TF', count: 5, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Intili', time: '7:30', count: 4, cover: 'surg5', site: null, months: [2, 4, 6, 8, 10, 12], privateOnly: false, note: null },
+          { attending: 'DiDomenico', time: '7:30', count: 4, cover: 'surg5', site: null, months: [1, 3, 5, 7, 9, 11], privateOnly: false, note: null },
+          { attending: 'Pendse', time: '1:00', count: 3, cover: 'surg5', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Pericic', time: null, count: 14, cover: null, site: 'SP', months: null, privateOnly: true, note: null },
+          { attending: 'Anhalt', time: '12:30', count: 4, cover: null, site: null, months: null, privateOnly: true, note: null }
+        ],
+        tue: [
+          { attending: 'Wisner', time: 'AM TF', count: 3, cover: 'surg1', site: null, months: null, privateOnly: false, note: null }
+        ],
+        wed: [
+          { attending: 'Markovitz', time: '1:00', count: 3, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Ang', time: '7:30', count: 12, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ],
+        thu: [
+          { attending: 'Pyfer', time: '7:30', count: 4, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Lehman', time: '1:00', count: 2, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'McGowan', time: '7:30', count: 5, cover: 'surg5', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Derham', time: '12:30', count: 4, cover: 'surg5', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Anhalt', time: null, count: 15, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ],
+        fri: [
+          { attending: 'Sieber', time: '7:30', count: 4, cover: 'surg1', site: null, months: [1, 3, 5, 7, 9, 11], privateOnly: false, note: null },
+          { attending: 'Chatterjee', time: '7:30', count: 4, cover: 'surg1', site: null, months: [2, 4, 6, 8, 10, 12], privateOnly: false, note: null },
+          { attending: 'Sieber', time: '1:00', count: 3, cover: 'surg1', site: null, months: null, privateOnly: false, note: null }
+        ]
+      },
+      5: {
+        mon: [
+          { attending: 'McMahon', time: 'AM TF', count: 2, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Pericic', time: null, count: 14, cover: null, site: 'SP', months: null, privateOnly: true, note: null },
+          { attending: 'Lamson', time: null, count: 12, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ],
+        tue: [
+          { attending: 'Davis', time: 'AM TF', count: 2, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Ang', time: '7:30', count: 12, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ],
+        wed: [
+          { attending: 'Cutney', time: '7:30', count: 4, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Markovitz', time: '12:30', count: 3, cover: 'surg5', site: null, months: null, privateOnly: false, note: null }
+        ],
+        thu: [
+          { attending: 'Chronister', time: '7:30', count: 4, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Lamson', time: null, count: 12, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ],
+        fri: [
+          { attending: 'Harris', time: '7:30', count: 4, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Halfpenny', time: '1:00', count: 3, cover: 'surg1', site: null, months: null, privateOnly: false, note: null },
+          { attending: 'Anhalt', time: '12:30', count: 4, cover: null, site: null, months: null, privateOnly: true, note: null },
+          { attending: 'Pericic', time: null, count: 14, cover: null, site: 'SP', months: null, privateOnly: true, note: null }
+        ]
+      }
+    }
   }
 };
 

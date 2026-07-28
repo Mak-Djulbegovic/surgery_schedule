@@ -81,15 +81,17 @@
   /* state                                                               */
   /* ------------------------------------------------------------------ */
 
-  // Add-on rows for schedule date D:
-  // "<weekday(D-1)> night (M/D/YY)", "<weekday(D)> day (M/D/YY)", "<weekday(D)> night (M/D/YY)"
-  function defaultAddOns(dateISO) {
-    var d = parseISO(dateISO);
-    var prev = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
+  // Add-on prefill rows are anchored to the REAL current date (the clock),
+  // not the schedule date — "what is to come" at the moment the schedule is
+  // being built: tonight, then tomorrow day + night. Rows stay fully editable.
+  function defaultAddOns() {
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
     return [
-      { label: weekdayName(prev) + ' night (' + fmtMDYY(prev) + ')', name: '' },
-      { label: weekdayName(d) + ' day (' + fmtMDYY(d) + ')', name: '' },
-      { label: weekdayName(d) + ' night (' + fmtMDYY(d) + ')', name: '' }
+      { label: weekdayName(today) + ' night (' + fmtMDYY(today) + ')', name: '' },
+      { label: weekdayName(tomorrow) + ' day (' + fmtMDYY(tomorrow) + ')', name: '' },
+      { label: weekdayName(tomorrow) + ' night (' + fmtMDYY(tomorrow) + ')', name: '' }
     ];
   }
 
@@ -101,7 +103,7 @@
       vacation: '24 strong',
       cooperBuddyAM: { name: '', note: '' },
       cooperBuddyPM: { name: '', note: '' },
-      addOns: defaultAddOns(dateISO),
+      addOns: defaultAddOns(),
       cases: [],
       clinicCounts: {},
       clinicStaffOverrides: {},
@@ -123,6 +125,7 @@
       count: Math.max(0, parseInt(c.count, 10) || 0),
       serviceCount: Math.max(0, parseInt(c.serviceCount, 10) || 0),
       start: String(c.start || ''),
+      serviceTimes: String(c.serviceTimes || ''),
       category: CATEGORIES.indexOf(c.category) !== -1 ? c.category : 'other',
       addOn: !!c.addOn,
       notes: String(c.notes || ''),
@@ -650,7 +653,7 @@
     return {
       id: id, section: section, surgeon: '', count: 1,
       serviceCount: section === 'private' ? 0 : 1,
-      start: '', category: 'cataract', addOn: false,
+      start: '', serviceTimes: '', category: 'cataract', addOn: false,
       notes: '', assigned: '', backup: ''
     };
   }
@@ -705,7 +708,7 @@
   }
 
   function caseCard(c) {
-    var card = el('div', { class: 'case-card' });
+    var card = el('div', { class: 'case-card', 'data-case-id': c.id });
 
     card.appendChild(miniField('Surgeon',
       textInput(c.surgeon, 'Surgeon', function (v) { c.surgeon = v; touch(); }), 'cf-surgeon'));
@@ -737,6 +740,9 @@
       el('button', { type: 'button', class: 'btn-icon danger', title: 'Remove case', text: '×', onclick: function () { removeCase(c.id); } })
     ]));
 
+    card.appendChild(miniField('Service case time(s)',
+      textInput(c.serviceTimes, 'when the resident/service cases are — e.g. 9:30 AM',
+        function (v) { c.serviceTimes = v; touch(); }), 'cf-svctimes'));
     card.appendChild(miniField('Notes',
       textInput(c.notes, 'no Peds OR…', function (v) { c.notes = v; touch(); }), 'cf-notes'));
     return card;
@@ -891,7 +897,152 @@
     if (!any) host.appendChild(el('p', { class: 'empty-note', text: 'No clinic sessions on this date.' }));
   }
 
+  /* CPEC surgical block sheet lineup card (UISPEC3 §D). Engine.cpecForDate /
+     SCHED_DATA.cpecSheet may be absent while section A lands — guard
+     everything; the card simply shows nothing without them. */
+
+  var CPEC_SITE_LABELS = { SP: 'Stadium', CH: 'Cherry Hill' };
+  var CPEC_GROUPS = [
+    { key: 'surg1', label: 'Surg 1' },
+    { key: 'surg5', label: 'Surg 5' },
+    { key: 'willsOR', label: 'Wills OR' },
+    { key: 'retina', label: 'Retina resident' },
+    { key: 'private', label: 'Private only' }
+  ];
+
+  function cpecInfo() {
+    if (!window.Engine || typeof window.Engine.cpecForDate !== 'function') return null;
+    try {
+      return window.Engine.cpecForDate(App.state.date, data());
+    } catch (e) {
+      if (window.console) console.error('cpecForDate failed', e);
+      return null;
+    }
+  }
+
+  // Covering resident from TODAY'S roster for a sheet `cover` key. The
+  // resolution itself lives in Engine.cpecCoverName (pure + Node-testable);
+  // in particular the retina cover must NOT come from clinics['Retina'] alone:
+  // on 3rd Wednesdays — the only day the sheet uses it — the pgy4 retina
+  // resident is moved to 'Tabas Cataracts' by the block-4 override.
+  function cpecCoverName(cover) {
+    if (!window.Engine || typeof window.Engine.cpecCoverName !== 'function') return '';
+    return window.Engine.cpecCoverName(App.roster || {}, cover) || '';
+  }
+
+  // 'Markovitz 1:00 (3) · Stadium' — shown verbatim-ish from the sheet.
+  function cpecEntryText(e) {
+    var t = e.attending || '?';
+    if (e.time) t += ' ' + e.time;
+    if (e.count != null) t += ' (' + e.count + ')';
+    var site = CPEC_SITE_LABELS[e.site];
+    if (site) t += ' · ' + site;
+    if (e.note) t += ' · ' + e.note;
+    return t;
+  }
+
+  function cpecAlreadyAdded(surgeon, start) {
+    return (App.state.cases || []).some(function (c) {
+      return trim(c.surgeon) === trim(surgeon) && trim(c.start) === trim(start);
+    });
+  }
+
+  // Private sheet entries drop their sheet time on add (addCpecPrivate leaves
+  // start empty), so 'added' means: a Privates-section case for this surgeon
+  // already exists. Never match other sections — a blank-start Wills/JHN case
+  // for the same surgeon must not disable '+ Add to Privates'.
+  function cpecPrivateAdded(surgeon) {
+    return (App.state.cases || []).some(function (c) {
+      return c.section === 'private' && trim(c.surgeon) === trim(surgeon);
+    });
+  }
+
+  function addCpecCase(e) {
+    var c = newCase('wills');
+    c.surgeon = e.attending || '';
+    c.start = e.time || '';           // 'AM TF' goes in start as text
+    if (e.count != null) c.count = e.count;
+    c.serviceCount = 0;               // unknown — user fills
+    c.category = 'cataract';
+    var noteBits = [];
+    var site = CPEC_SITE_LABELS[e.site];
+    if (site) noteBits.push(site);
+    if (e.note) noteBits.push(e.note);
+    c.notes = noteBits.join('; ');
+    c.assigned = cpecCoverName(e.cover);
+    App.state.cases.push(c);
+    caseSectionOpen.wills = true;
+    touch();
+    renderCasesTab();
+    toast('Case added from the CPEC sheet — everything stays editable');
+  }
+
+  function addCpecPrivate(e) {
+    var c = newCase('private');
+    c.surgeon = e.attending || '';
+    if (e.count != null) c.count = e.count;
+    c.serviceCount = 0;
+    App.state.cases.push(c);
+    caseSectionOpen.private = true;
+    touch();
+    renderCasesTab();
+    toast('Added to Privates from the CPEC sheet');
+  }
+
+  function renderCpecCard() {
+    var host = $('cpecCard');
+    if (!host) return;
+    clearNode(host);
+    var info = cpecInfo();
+    var entries = (info && info.entries) || [];
+    if (!entries.length) return; // weekend / out-of-year / sheet not loaded
+
+    var r = App.roster || {};
+    var card = el('div', { class: 'card cpec-card' });
+    var title = 'CPEC surgical block sheet';
+    if (r.nth && r.weekdayLabel) title += ' — ' + ordinal(r.nth) + ' ' + r.weekdayLabel;
+    card.appendChild(el('h2', {}, [
+      title + ' ',
+      el('span', { class: 'h-note', text: 'attending cataract blocks for this date' })
+    ]));
+
+    CPEC_GROUPS.forEach(function (g) {
+      var list = entries.filter(function (e) {
+        if (g.key === 'private') return !!e.privateOnly || !e.cover;
+        return !e.privateOnly && e.cover === g.key;
+      });
+      if (!list.length) return;
+      var head = el('div', { class: 'cpec-group-title', text: g.label });
+      if (g.key !== 'private') {
+        var cov = cpecCoverName(g.key);
+        if (cov) head.appendChild(el('span', { class: 'cpec-cover', text: '→ ' + cov }));
+      }
+      card.appendChild(head);
+      list.forEach(function (e) {
+        var isPrivate = g.key === 'private';
+        var added = isPrivate
+          ? cpecPrivateAdded(e.attending || '')
+          : cpecAlreadyAdded(e.attending || '', e.time || '');
+        var row = el('div', { class: 'cpec-row' });
+        row.appendChild(el('span', { class: 'cpec-entry', text: cpecEntryText(e) }));
+        row.appendChild(el('button', {
+          type: 'button', class: 'btn btn-small cpec-add', disabled: added,
+          text: added ? 'added' : (isPrivate ? '+ Add to Privates' : '+ Add as case'),
+          onclick: function () { if (isPrivate) addCpecPrivate(e); else addCpecCase(e); }
+        }));
+        card.appendChild(row);
+      });
+    });
+
+    card.appendChild(el('p', {
+      class: 'field-hint cpec-note',
+      text: 'From the CPEC sheet effective 5/1/2026 — nth weekday of the month; confirm against Cerner/NextGen. (n) = sheet case count, editable.'
+    }));
+    host.appendChild(card);
+  }
+
   function renderCasesTab() {
+    renderCpecCard();
     renderCaseSections();
     renderClinicRows();
     renderAddOnsCard();
@@ -925,9 +1076,13 @@
     toast(n ? 'Accepted ' + n + ' suggestion' + (n === 1 ? '' : 's') : 'Nothing to accept — suggest first, or all cases already assigned');
   }
 
+  // 'Huang x7 (0730; svc 1030 & 1300)' — start + service-case times.
   function caseTitle(c) {
     var t = (trim(c.surgeon) || '?') + ' x' + c.count;
-    if (trim(c.start)) t += ' (' + trim(c.start) + ')';
+    var bits = [];
+    if (trim(c.start)) bits.push(trim(c.start));
+    if (trim(c.serviceTimes)) bits.push('svc ' + trim(c.serviceTimes));
+    if (bits.length) t += ' (' + bits.join('; ') + ')';
     return t;
   }
 
@@ -1168,57 +1323,104 @@
     });
   }
 
+  // "+ case" on an Assignments row: new Wills case pre-assigned to the
+  // resident, then jump to the Cases tab focused on the fresh card.
+  function addCaseForResident(name) {
+    var c = newCase('wills');
+    c.assigned = name;
+    App.state.cases.push(c);
+    caseSectionOpen.wills = true;
+    touch();
+    setTab('cases');
+    var firstInput = document.querySelector('.case-card[data-case-id="' + c.id + '"] input');
+    if (firstInput) { try { firstInput.focus(); } catch (e) { } }
+    toast('Case added for ' + name + ' — fill in surgeon and counts on Cases & Clinics');
+  }
+
+  function loadRow(name, role, cases, r) {
+    var res = null;
+    (r.residents || []).forEach(function (x) { if (x.name === name) res = x; });
+    var row = el('div', { class: 'load-row' });
+    var top = el('div', { class: 'load-top' }, [
+      el('span', { class: 'res-name ' + yearOf(name), text: name }),
+      role ? el('span', { class: 'load-role', text: role }) : null,
+      el('button', {
+        type: 'button', class: 'btn btn-small load-add', text: '+ case',
+        title: 'Add a Wills case assigned to ' + name,
+        onclick: function () { addCaseForResident(name); }
+      })
+    ]);
+    row.appendChild(top);
+    if (res) {
+      row.appendChild(el('div', { class: 'load-role' }, [
+        el('span', { class: 'badge badge-am', text: 'AM' }), ' ' + (res.am.text || '—') + '   ',
+        el('span', { class: 'badge badge-pm', text: 'PM' }), ' ' + (res.pm.text || '—')
+      ]));
+    }
+    if (cases.length) {
+      var chips = el('div');
+      cases.forEach(function (c) {
+        chips.appendChild(el('span', { class: 'case-chip', text: caseTitle(c) }));
+      });
+      row.appendChild(chips);
+    }
+    return row;
+  }
+
+  // Assignments panel: Surgical (Surg 1..6 + anyone on OR blocks) vs
+  // Clinic / Consults (Cooper Consults + any other assigned resident).
+  // No count pills; everyone gets the "+ case" option.
   function renderLoadPanel() {
     var host = $('loadPanel');
     clearNode(host);
     var r = App.roster;
     var loads = {};
     App.state.cases.forEach(function (c) {
-      if (trim(c.assigned)) (loads[c.assigned] = loads[c.assigned] || []).push(c);
+      var a = trim(c.assigned);
+      if (a) (loads[a] = loads[a] || []).push(c);
     });
 
-    var order = [];
+    var seen = {};
     var roleOf = {};
+    var surgical = [];
+    var clinical = [];
+    function add(list, name, role) {
+      if (!name || seen[name]) return;
+      seen[name] = true;
+      roleOf[name] = role || '';
+      list.push(name);
+    }
+
     Object.keys(r.surg || {}).sort(function (a, b) { return (+a) - (+b); }).forEach(function (n) {
-      var name = r.surg[n].name;
-      if (order.indexOf(name) === -1) { order.push(name); roleOf[name] = 'Surg ' + n; }
+      add(surgical, r.surg[n].name, 'Surg ' + n);
+    });
+    Object.keys(r.orBlocks || {}).sort().forEach(function (blk) {
+      ['am', 'pm'].forEach(function (sess) {
+        (((r.orBlocks[blk] || {})[sess]) || []).forEach(function (p) {
+          add(surgical, typeof p === 'string' ? p : p && p.name, blk);
+        });
+      });
     });
     (r.cooperConsults || []).forEach(function (name) {
-      if (order.indexOf(name) === -1) { order.push(name); roleOf[name] = 'Cooper Consults'; }
+      add(clinical, name, 'Cooper Consults');
     });
     Object.keys(loads).forEach(function (name) {
-      if (order.indexOf(name) === -1) order.push(name);
+      add(clinical, name, '');
     });
 
-    if (!order.length) {
+    if (!surgical.length && !clinical.length) {
       host.appendChild(el('p', { class: 'empty-note', text: 'No candidates on this date.' }));
       return;
     }
-    order.forEach(function (name) {
-      var cases = loads[name] || [];
-      var res = null;
-      (r.residents || []).forEach(function (x) { if (x.name === name) res = x; });
-      var row = el('div', { class: 'load-row' });
-      var top = el('div', { class: 'load-top' }, [
-        el('span', { class: 'res-name ' + yearOf(name), text: name }),
-        roleOf[name] ? el('span', { class: 'load-role', text: roleOf[name] }) : null,
-        el('span', { class: 'load-count' + (cases.length >= 3 ? ' hot' : ''), text: cases.length + (cases.length === 1 ? ' case' : ' cases') })
-      ]);
-      row.appendChild(top);
-      if (res) {
-        row.appendChild(el('div', { class: 'load-role' }, [
-          el('span', { class: 'badge badge-am', text: 'AM' }), ' ' + (res.am.text || '—') + '   ',
-          el('span', { class: 'badge badge-pm', text: 'PM' }), ' ' + (res.pm.text || '—')
-        ]));
-      }
-      if (cases.length) {
-        var chips = el('div');
-        cases.forEach(function (c) {
-          chips.appendChild(el('span', { class: 'case-chip', text: caseTitle(c) }));
-        });
-        row.appendChild(chips);
-      }
-      host.appendChild(row);
+    [
+      { title: 'Surgical', names: surgical },
+      { title: 'Clinic / Consults', names: clinical }
+    ].forEach(function (g) {
+      if (!g.names.length) return;
+      host.appendChild(el('div', { class: 'load-group-title', text: g.title }));
+      g.names.forEach(function (name) {
+        host.appendChild(loadRow(name, roleOf[name], loads[name] || [], r));
+      });
     });
   }
 
