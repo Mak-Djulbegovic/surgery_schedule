@@ -84,15 +84,45 @@
   // Add-on prefill rows are anchored to the REAL current date (the clock),
   // not the schedule date — "what is to come" at the moment the schedule is
   // being built: tonight, then tomorrow day + night. Rows stay fully editable.
-  function defaultAddOns() {
-    var now = new Date();
-    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    var tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  // Add-on call coverage for the SCHEDULE date: that night, then the next
+  // day and night — "what is to come" after the day being scheduled.
+  // Friday rolls forward to Monday (no weekend day rows).
+  function defaultAddOns(dateISO) {
+    var day = dateISO ? parseISO(dateISO) : new Date();
+    var next = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+    while (next.getDay() === 0 || next.getDay() === 6) {
+      next = new Date(next.getFullYear(), next.getMonth(), next.getDate() + 1);
+    }
     return [
-      { label: weekdayName(today) + ' night (' + fmtMDYY(today) + ')', name: '' },
-      { label: weekdayName(tomorrow) + ' day (' + fmtMDYY(tomorrow) + ')', name: '' },
-      { label: weekdayName(tomorrow) + ' night (' + fmtMDYY(tomorrow) + ')', name: '' }
+      { label: weekdayName(day) + ' night (' + fmtMDYY(day) + ')', name: '' },
+      { label: weekdayName(next) + ' day (' + fmtMDYY(next) + ')', name: '' },
+      { label: weekdayName(next) + ' night (' + fmtMDYY(next) + ')', name: '' }
     ];
+  }
+
+  // True when the row still holds a generated label with no name typed —
+  // safe to refresh when the schedule date changes.
+  function addOnsArePristine(rows, forDateISO) {
+    if (!rows || rows.length !== 3) return false;
+    if (rows.some(function (r) { return trim(r && r.name); })) return false;
+    var labels = rows.map(function (r) { return trim(r && r.label); });
+    // Pristine if the labels match the defaults for ANY date (i.e. the user
+    // never hand-edited them): compare against this date's and the stored
+    // date's generated sets.
+    var expected = defaultAddOns(forDateISO).map(function (r) { return r.label; });
+    if (labels.join('|') === expected.join('|')) return true;
+    return labels.every(function (l) { return /^[A-Za-z]+ (night|day) \(\d+\/\d+\/\d+\)$/.test(l); });
+  }
+
+  // Re-anchor pristine add-on rows to the current schedule date.
+  function refreshAddOnsForDate() {
+    var st = App.state;
+    if (!st || !addOnsArePristine(st.addOns, st.date)) return;
+    var fresh = defaultAddOns(st.date);
+    var same = st.addOns.every(function (r, i) { return trim(r.label) === fresh[i].label; });
+    if (same) return;
+    st.addOns = fresh;
+    saveNow();
   }
 
   function defaultState(dateISO) {
@@ -103,7 +133,7 @@
       vacation: '24 strong',
       cooperBuddyAM: { name: '', note: '' },
       cooperBuddyPM: { name: '', note: '' },
-      addOns: defaultAddOns(),
+      addOns: defaultAddOns(dateISO),
       cases: [],
       clinicCounts: {},
       clinicStaffOverrides: {},
@@ -1832,6 +1862,7 @@
     App.state = loadState(dateISO);
     stateDirty = false;   // freshly loaded — nothing user-edited yet
     assignExpanded = {};  // case ids restart at 'c1' per date — expansion must not leak
+    refreshAddOnsForDate(); // untouched add-on rows follow the schedule date
     computeRoster();
     renderAll();
   }
