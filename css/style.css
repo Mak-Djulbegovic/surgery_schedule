@@ -666,9 +666,21 @@ table.tbl { border-collapse: collapse; width: 100%; }
 
 /* ---------------- add-ons & buddies ---------------- */
 
-.addon-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.addon-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
 .addon-row input[type="text"] { flex: 1; min-width: 0; }
 .addon-row select { flex: none; width: 132px; }
+.addon-date { flex: none; font-size: 13px; padding: 5px 7px; }
+.addon-period { width: 88px !important; }
+.addon-preview {
+  flex: 1 1 150px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .buddy-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
 .buddy-row .buddy-session {

@@ -15,10 +15,10 @@ const root = path.join(__dirname, '..');
 const bare = process.argv.includes('--bare');
 let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
-html = html.replace(/<link rel="stylesheet" href="css\/style.css">/, () =>
+html = html.replace(/<link rel="stylesheet" href="css\/style\.css(?:\?[^"]*)?">/, () =>
   '<style>\n' + fs.readFileSync(path.join(root, 'css', 'style.css'), 'utf8') + '\n</style>');
 
-html = html.replace(/<script src="js\/([a-z]+)\.js"><\/script>/g, (m, name) =>
+html = html.replace(/<script src="js\/([a-z]+)\.js(?:\?[^"]*)?"><\/script>/g, (m, name) =>
   '<script>\n' + fs.readFileSync(path.join(root, 'js', name + '.js'), 'utf8') + '\n</script>');
 
 if (bare) {
