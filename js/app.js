@@ -1503,6 +1503,81 @@
     return h.chain.map(function (tok) { return CHAIN_TOKEN_LABELS[tok] || tok; }).join(' → ');
   }
 
+  /* ------------------------------------------------------------------ */
+  /* tab — CPEC Block Schedule (full sheet reference)                    */
+  /* ------------------------------------------------------------------ */
+
+  var CPEC_MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var CPEC_DAY_LABELS = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday' };
+
+  function cpecRefEntry(e) {
+    var cls = 'cpec-ref-entry ';
+    cls += (e.privateOnly || !e.cover) ? 'cpec-c-private' : 'cpec-c-' + e.cover;
+    var wrap = el('div', { class: cls });
+    wrap.appendChild(el('span', {
+      class: 'cpec-ref-main',
+      text: cpecEntryText(e) + (e.privateOnly ? ' · private only' : '')
+    }));
+    if (e.months && e.months.length) {
+      wrap.appendChild(el('span', {
+        class: 'cpec-ref-months',
+        text: '*(' + e.months.map(function (m) { return CPEC_MONTH_ABBR[m - 1] || m; }).join(', ') + ')'
+      }));
+    }
+    return wrap;
+  }
+
+  function renderCpecReference() {
+    var host = $('cpecBody');
+    if (!host) return;
+    clearNode(host);
+    var sheet = data().cpecSheet;
+    if (!sheet || !sheet.entries) {
+      host.appendChild(el('div', { class: 'card' }, [
+        el('p', { class: 'empty-note', text: 'No CPEC sheet loaded.' })
+      ]));
+      return;
+    }
+
+    var card = el('div', { class: 'card' });
+    card.appendChild(el('h2', {}, [
+      (sheet.label || 'CPEC Surgical Block Schedule') + ' ',
+      el('span', { class: 'h-note', text: 'effective ' + fmtMDYY(parseISO(sheet.effective)) + ' — rows are the 1st–5th weekday of each calendar month' })
+    ]));
+
+    var legend = el('div', { class: 'cpec-legend' });
+    [['surg1', 'Surg 1'], ['surg5', 'Surg 5'], ['willsOR', 'Wills OR'],
+     ['retina', 'Retina resident'], ['private', 'Private only — no resident']].forEach(function (p) {
+      legend.appendChild(el('span', { class: 'cpec-ref-entry cpec-c-' + p[0] + ' cpec-legend-chip', text: p[1] }));
+    });
+    card.appendChild(legend);
+
+    var r = App.roster || {};
+    var tbl = el('table', { class: 'tbl cpec-ref-tbl' });
+    tbl.appendChild(el('thead', {}, [el('tr', {},
+      [el('th', { text: '' })].concat(data().weekdays.map(function (d) {
+        return el('th', { text: CPEC_DAY_LABELS[d] || d });
+      }))
+    )]));
+    var body = el('tbody');
+    [1, 2, 3, 4, 5].forEach(function (nth) {
+      var row = el('tr', {}, [el('td', { class: 'cpec-ref-nth', text: ordinal(nth) })]);
+      data().weekdays.forEach(function (d) {
+        var entries = (sheet.entries[nth] || {})[d] || [];
+        var isToday = !r.isWeekend && r.inYear && r.nth === nth && r.weekdayKey === d;
+        var td = el('td', { class: isToday ? 'cpec-today' : null });
+        if (!entries.length) td.appendChild(el('span', { class: 'empty-note', text: '—' }));
+        entries.forEach(function (e) { td.appendChild(cpecRefEntry(e)); });
+        row.appendChild(td);
+      });
+      body.appendChild(row);
+    });
+    tbl.appendChild(body);
+    card.appendChild(el('div', { class: 'table-scroll' }, [tbl]));
+    card.appendChild(el('p', { class: 'field-hint', text: 'Sites: SP = Stadium, CH = Cherry Hill. Starred entries operate only in the listed months. The highlighted cell is the selected schedule date; use the card on Cases & Clinics to add that day’s attendings as cases.' }));
+    host.appendChild(card);
+  }
+
   function renderHowto() {
     var host = $('howtoBody');
     if (!host) return;
@@ -1906,7 +1981,7 @@
   /* button walks Home ↔ tabs instead of leaving the site               */
   /* ------------------------------------------------------------------ */
 
-  var VALID_ROUTES = ['home', 'roster', 'cases', 'assign', 'preview', 'howto', 'reference'];
+  var VALID_ROUTES = ['home', 'roster', 'cases', 'assign', 'preview', 'howto', 'cpec', 'reference'];
 
   function routeFromHash() {
     var h = String(window.location.hash || '').replace(/^#\/?/, '');
@@ -1961,6 +2036,7 @@
     if (tab === 'cases') renderCasesTab();
     if (tab === 'assign') renderAssignTab();
     if (tab === 'preview') renderPreview();
+    if (tab === 'cpec') renderCpecReference(); // re-render so the selected date's cell is highlighted
     // 'howto' and 'reference' are static — rendered once at boot.
     syncHash(tab);
   }
@@ -2069,6 +2145,7 @@
 
     renderReference();
     renderHowto();
+    renderCpecReference();
     setDate(initial);
 
     // Land on Home (body starts with .home-active from the markup) — unless
