@@ -98,25 +98,28 @@
     return next;
   }
 
+  // Matches the sent schedule for Tue 7/28/26:
+  //   Tuesday daytime (7/28/26) / Tuesday night (7/28/26) /
+  //   Wednesday daytime (7/29/26)
   function defaultAddOns(dateISO) {
     var day = dateISO ? parseISO(dateISO) : new Date();
-    var next = nextCoverageDay(day);
-    var nextISO = isoOf(next);
+    var dayISO = dateISO || isoOf(day);
+    var nextISO = isoOf(nextCoverageDay(day));
     return [
-      { date: dateISO || isoOf(day), period: 'night', name: '', auto: true },
-      { date: nextISO, period: 'day', name: '', auto: true },
-      { date: nextISO, period: 'night', name: '', auto: true }
+      { date: dayISO, period: 'day', name: '', auto: true },
+      { date: dayISO, period: 'night', name: '', auto: true },
+      { date: nextISO, period: 'day', name: '', auto: true }
     ];
   }
 
-  // 'Thursday night (7/30/26)' — derived from date+period; a legacy/custom
+  // 'Tuesday daytime (7/28/26)' — derived from date+period; a legacy/custom
   // row with no date keeps whatever label it carries.
   function addOnLabel(row) {
     if (!row) return '';
     if (!row.date) return trim(row.label);
     var d = parseISO(row.date);
     if (!d || isNaN(d.getTime())) return trim(row.label);
-    return weekdayName(d) + ' ' + (row.period === 'day' ? 'day' : 'night') +
+    return weekdayName(d) + ' ' + (row.period === 'day' ? 'daytime' : 'night') +
       ' (' + fmtMDYY(d) + ')';
   }
 
@@ -679,7 +682,7 @@
         line.appendChild(dateIn);
 
         var period = el('select', { class: 'addon-period' });
-        [['night', 'night'], ['day', 'day']].forEach(function (p) {
+        [['day', 'daytime'], ['night', 'night']].forEach(function (p) {
           var o = el('option', { value: p[0], text: p[1] });
           if ((row.period || 'night') === p[0]) o.selected = true;
           period.appendChild(o);
