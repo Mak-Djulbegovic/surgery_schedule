@@ -662,36 +662,40 @@
     st.addOns.forEach(function (row, idx) {
       var line = el('div', { class: 'addon-row' });
 
-      var dateIn = el('input', { type: 'date', class: 'addon-date', value: row.date || '' });
-      if (d.ayStart && d.ayEnd) { dateIn.min = d.ayStart; dateIn.max = d.ayEnd; }
-      dateIn.addEventListener('change', function () {
-        row.date = dateIn.value;
-        row.auto = false; // user picked this date — stop re-anchoring it
-        row.label = addOnLabel(row);
-        touch();
-        renderAddOnsEverywhere();
-      });
-      line.appendChild(dateIn);
+      // The three standard rows follow the schedule date, so they need no
+      // controls — just the label and who is covering. Rows the user adds
+      // carry their own date + night/day pickers.
+      if (row.auto && row.date) {
+        line.appendChild(el('span', { class: 'addon-label', text: addOnLabel(row) }));
+      } else {
+        var dateIn = el('input', { type: 'date', class: 'addon-date', value: row.date || '' });
+        if (d.ayStart && d.ayEnd) { dateIn.min = d.ayStart; dateIn.max = d.ayEnd; }
+        dateIn.addEventListener('change', function () {
+          row.date = dateIn.value;
+          row.label = addOnLabel(row);
+          touch();
+          renderAddOnsEverywhere();
+        });
+        line.appendChild(dateIn);
 
-      var period = el('select', { class: 'addon-period' });
-      [['night', 'night'], ['day', 'day']].forEach(function (p) {
-        var o = el('option', { value: p[0], text: p[1] });
-        if ((row.period || 'night') === p[0]) o.selected = true;
-        period.appendChild(o);
-      });
-      period.addEventListener('change', function () {
-        row.period = period.value;
-        row.auto = false;
-        row.label = addOnLabel(row);
-        touch();
-        renderAddOnsEverywhere();
-      });
-      line.appendChild(period);
+        var period = el('select', { class: 'addon-period' });
+        [['night', 'night'], ['day', 'day']].forEach(function (p) {
+          var o = el('option', { value: p[0], text: p[1] });
+          if ((row.period || 'night') === p[0]) o.selected = true;
+          period.appendChild(o);
+        });
+        period.addEventListener('change', function () {
+          row.period = period.value;
+          row.label = addOnLabel(row);
+          touch();
+          renderAddOnsEverywhere();
+        });
+        line.appendChild(period);
+        line.appendChild(el('span', { class: 'addon-preview', text: addOnLabel(row) || '—' }));
+      }
 
-      line.appendChild(el('span', { class: 'addon-preview', text: addOnLabel(row) || '—' }));
       line.appendChild(residentSelect(row.name, function (v) {
         row.name = v;
-        if (v) row.auto = false;
         touch();
       }, 'resident…'));
       line.appendChild(el('button', {
