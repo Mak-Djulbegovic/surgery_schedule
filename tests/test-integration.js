@@ -486,6 +486,157 @@ contains(ExportFmt.buildText(dayBuddy),
   'buddy: buildText Cooper Consults line with noted buddies matches the 7/22 document');
 
 /* ================================================================== */
+/* (7) UISPEC3 §B — service-case times in export case lines            */
+
+var daySvc = JSON.parse(JSON.stringify(day));
+daySvc.roster = roster;
+var svcHuang = daySvc.cases.filter(function (c) { return c.id === 'c1'; })[0];
+svcHuang.serviceTimes = '1030 & 1300';
+var svcGarg = daySvc.cases.filter(function (c) { return c.id === 'c6'; })[0];
+svcGarg.serviceTimes = '0930'; // serviceCount 0 — must never render
+var textSvc = ExportFmt.buildText(daySvc);
+var htmlSvc = ExportFmt.buildHTML(daySvc);
+contains(textSvc, '-Huang x7 (0730 start), x2 service - 1030 & 1300 - **Cheng**',
+  'svcTimes: text appends " - {serviceTimes}" after the service clause');
+contains(htmlSvc, ', x2 service - 1030 &amp; 1300 - <b>Cheng</b>',
+  'svcTimes: html appends the service times (escaped) before the assignee');
+ok(!/Garg[^\n]*0930/.test(textSvc),
+  'svcTimes: private case with serviceCount 0 never renders service times');
+ok(textSvc.indexOf('-Garg x5 (0800 start)') !== -1,
+  'svcTimes: private Garg line otherwise unchanged');
+
+/* ================================================================== */
+/* (8) UISPEC3 §A — Engine.cpecForDate against the transcription table */
+
+function cpecEntry(res, attending) {
+  var list = (res && res.entries) || [];
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].attending === attending) return list[i];
+  }
+  return null;
+}
+
+function cpecAttendings(res) {
+  return ((res && res.entries) || []).map(function (e) { return e.attending; });
+}
+
+ok(typeof Engine.cpecForDate === 'function', 'engine.js exports Engine.cpecForDate');
+
+// (a) 2026-07-22 — 4th Wednesday: EXACTLY Markovitz (surg1, 1:00, 3) + Ang
+// (private only, Stadium) and nothing else (in particular no Pyfer).
+var cp0722 = Engine.cpecForDate('2026-07-22', DATA);
+eq(cp0722.nth, 4, 'cpec 7/22: nth = 4');
+eq(cp0722.weekdayKey, 'wed', 'cpec 7/22: weekdayKey = wed');
+eq((cp0722.entries || []).length, 2, 'cpec 7/22: exactly two entries (nothing else)');
+sameMembers(cpecAttendings(cp0722), ['Markovitz', 'Ang'],
+  'cpec 7/22: attendings are exactly Markovitz + Ang');
+var cpMark = cpecEntry(cp0722, 'Markovitz');
+ok(!!cpMark, 'cpec 7/22: Markovitz entry present');
+eq(cpMark && cpMark.cover, 'surg1', 'cpec 7/22: Markovitz covered by surg1');
+eq(cpMark && cpMark.time, '1:00', 'cpec 7/22: Markovitz time 1:00');
+eq(cpMark && cpMark.count, 3, 'cpec 7/22: Markovitz count 3');
+eq(cpMark && cpMark.privateOnly, false, 'cpec 7/22: Markovitz not private-only');
+var cpAng = cpecEntry(cp0722, 'Ang');
+ok(!!cpAng, 'cpec 7/22: Ang entry present');
+eq(cpAng && cpAng.privateOnly, true, 'cpec 7/22: Ang is private-only');
+eq(cpAng && cpAng.site, 'SP', 'cpec 7/22: Ang site SP (Stadium)');
+eq(cpAng && cpAng.cover, null, 'cpec 7/22: Ang has no covering resident');
+eq(cpecEntry(cp0722, 'Pyfer'), null, 'cpec 7/22: Pyfer NOT listed');
+
+// (b) 2026-07-15 — 3rd Wednesday, July (odd month): Brown + Galiani (odd
+// months) + Tabas (retina) + Derham (surg5); Williams (even months) excluded.
+var cp0715 = Engine.cpecForDate('2026-07-15', DATA);
+eq(cp0715.nth, 3, 'cpec 7/15: nth = 3');
+eq(cp0715.weekdayKey, 'wed', 'cpec 7/15: weekdayKey = wed');
+ok(!!cpecEntry(cp0715, 'Brown'), 'cpec 7/15: includes Brown');
+ok(!!cpecEntry(cp0715, 'Galiani'), 'cpec 7/15: includes Galiani (July is an odd month)');
+eq(cpecEntry(cp0715, 'Galiani') && cpecEntry(cp0715, 'Galiani').cover, 'surg1',
+  'cpec 7/15: Galiani covered by surg1');
+ok(!!cpecEntry(cp0715, 'Tabas'), 'cpec 7/15: includes Tabas');
+eq(cpecEntry(cp0715, 'Tabas') && cpecEntry(cp0715, 'Tabas').cover, 'retina',
+  'cpec 7/15: Tabas covered by the retina resident');
+ok(!!cpecEntry(cp0715, 'Derham'), 'cpec 7/15: includes Derham');
+eq(cpecEntry(cp0715, 'Derham') && cpecEntry(cp0715, 'Derham').cover, 'surg5',
+  'cpec 7/15: Derham covered by surg5');
+eq(cpecEntry(cp0715, 'Williams'), null, 'cpec 7/15: excludes Williams (even months only)');
+
+// (c) 2026-08-19 — 3rd Wednesday, August (even month): Williams in, Galiani out.
+var cp0819 = Engine.cpecForDate('2026-08-19', DATA);
+eq(cp0819.nth, 3, 'cpec 8/19: nth = 3');
+eq(cp0819.weekdayKey, 'wed', 'cpec 8/19: weekdayKey = wed');
+ok(!!cpecEntry(cp0819, 'Williams'), 'cpec 8/19: includes Williams (August is an even month)');
+eq(cpecEntry(cp0819, 'Galiani'), null, 'cpec 8/19: excludes Galiani (odd months only)');
+
+// (c2) UISPEC3 §D — the 3rd-Wednesday retina prefill must resolve against the
+// same day's roster: the Tabas entry carries cover 'retina', yet the pgy4
+// retina resident spends every 3rd Wednesday on 'Tabas Cataracts' (block-4
+// override), never in clinics['Retina']. Engine.cpecCoverName is what the
+// Cases-tab '+ Add as case' prefill uses.
+eq(cpecEntry(cp0819, 'Tabas') && cpecEntry(cp0819, 'Tabas').cover, 'retina',
+  'cpec 8/19: Tabas covered by the retina resident');
+var day0819 = Engine.resolveDay('2026-08-19', DATA);
+eq(Engine.cpecCoverName(day0819, 'retina'), 'Bair',
+  'cpec 8/19: retina cover prefill resolves to Bair (pgy4 on Tabas Cataracts)');
+eq(Engine.cpecCoverName(day0819, 'surg1'), (day0819.surg['1'] || {}).name,
+  'cpec 8/19: surg1 cover prefill matches roster.surg[1]');
+
+// (d) 2026-07-06 — 1st Monday: Harris → surg5, Davis → willsOR.
+var cp0706 = Engine.cpecForDate('2026-07-06', DATA);
+eq(cp0706.nth, 1, 'cpec 7/6: nth = 1');
+eq(cp0706.weekdayKey, 'mon', 'cpec 7/6: weekdayKey = mon');
+sameMembers(cpecAttendings(cp0706), ['Harris', 'Davis'],
+  'cpec 7/6: attendings are Harris + Davis');
+eq(cpecEntry(cp0706, 'Harris') && cpecEntry(cp0706, 'Harris').cover, 'surg5',
+  'cpec 7/6: Harris covered by surg5');
+eq(cpecEntry(cp0706, 'Davis') && cpecEntry(cp0706, 'Davis').cover, 'willsOR',
+  'cpec 7/6: Davis covered by Wills OR');
+
+/* ================================================================== */
+/* (9) UISPEC3 §B — caseLine serviceTimes rendering (via buildText)    */
+
+// (e) serviceCount 2 + serviceTimes '1030 & 1300' → ', x2 service - 1030 & 1300'
+var svcTimesCase = {
+  id: 'st1', section: 'wills', surgeon: 'Huang', count: 7, serviceCount: 2,
+  start: '0730', category: 'cataract', addOn: false, notes: '',
+  assigned: 'Cheng', backup: '', backupNote: '', serviceTimes: '1030 & 1300'
+};
+var svcTimesDay = {
+  date: '2026-07-22', cases: [svcTimesCase], addOns: [],
+  clinicCounts: {}, clinicStaffOverrides: {}, roster: {}
+};
+var svcTimesText = ExportFmt.buildText(svcTimesDay);
+contains(svcTimesText, ', x2 service - 1030 & 1300',
+  'caseLine: serviceCount 2 + serviceTimes renders ", x2 service - 1030 & 1300"');
+contains(svcTimesText, '-Huang x7 (0730 start), x2 service - 1030 & 1300 - **Cheng**',
+  'caseLine: full line places the service times between the service clause and the assignee');
+
+// (f) serviceTimes empty → the line renders exactly as before the field existed.
+var noTimesCase = Object.assign({}, svcTimesCase, { id: 'st2', serviceTimes: '' });
+var noTimesDay = Object.assign({}, svcTimesDay, { cases: [noTimesCase] });
+var noTimesText = ExportFmt.buildText(noTimesDay);
+contains(noTimesText, '-Huang x7 (0730 start), x2 service - **Cheng**',
+  'caseLine: empty serviceTimes renders the unchanged pre-UISPEC3 line');
+ok(noTimesText.indexOf('service - 1030') === -1 && noTimesText.indexOf('service -  ') === -1,
+  'caseLine: empty serviceTimes appends nothing after the service clause');
+var absentCase = Object.assign({}, svcTimesCase, { id: 'st3' });
+delete absentCase.serviceTimes;
+var absentText = ExportFmt.buildText(Object.assign({}, svcTimesDay, { cases: [absentCase] }));
+eq(noTimesText, absentText,
+  'caseLine: empty serviceTimes is byte-identical to a case without the field');
+
+// (g) all-service case (serviceCount === count): the ', x{svc} service'
+// clause is suppressed, so the service times attached to it must be too —
+// no dangling ' - 1030 & 1300' colliding with the assignee slot.
+var allSvcCase = Object.assign({}, svcTimesCase, {
+  id: 'st4', surgeon: 'Ayres', count: 2, serviceCount: 2, assigned: 'Bair'
+});
+var allSvcText = ExportFmt.buildText(Object.assign({}, svcTimesDay, { cases: [allSvcCase] }));
+contains(allSvcText, '-Ayres x2 (0730 start) - **Bair**',
+  'caseLine: all-service case renders start + assignee with no service clause');
+ok(allSvcText.indexOf('1030 & 1300') === -1,
+  'caseLine: serviceTimes suppressed when the service clause is suppressed');
+
+/* ================================================================== */
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures > 0) process.exit(1);
 console.log('OK');

@@ -81,12 +81,19 @@
   }
 
   // '-Marous x7 (730 start), x1 service - **Momenaei** (no Peds OR)'
+  // With service times: '…, x2 service - 1030 & 1300 - **Momenaei**'.
+  // The times belong to the ', x{svc} service' clause (UISPEC3 §B) — when that
+  // clause is suppressed (all-service case, svc === count), the times are too,
+  // so they never dangle unlabeled before the assignee.
   function caseLine(c) {
     var count = num(c.count);
     var svc = num(c.serviceCount);
     var t = '-' + (trim(c.surgeon) || '?') + ' x' + count;
     if (trim(c.start)) t += ' (' + trim(c.start) + ' start)';
-    if (svc > 0 && svc !== count) t += ', x' + svc + ' service';
+    if (svc > 0 && svc !== count) {
+      t += ', x' + svc + ' service';
+      if (trim(c.serviceTimes)) t += ' - ' + trim(c.serviceTimes);
+    }
     var line = [seg(t)];
     var assigned = trim(c.assigned);
     var backup = trim(c.backup);

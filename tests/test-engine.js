@@ -345,6 +345,141 @@ eq(bdPre.cooperBuddies.pm, null, 'buddy out-of-year: pm null');
 eq(bdPre.cooperBuddies.templateAM, null, 'buddy out-of-year: templateAM null');
 eq(bdPre.cooperBuddies.templatePM, null, 'buddy out-of-year: templatePM null');
 
+/* ---------- CPEC surgical block sheet (UISPEC3 section A) ---------- */
+ok(typeof Engine.cpecForDate === 'function', 'Engine.cpecForDate is a function');
+ok(DATA.cpecSheet && typeof DATA.cpecSheet === 'object', 'data has cpecSheet');
+eq(DATA.cpecSheet.label, 'CPEC Surgical Block Schedule', 'cpecSheet label');
+eq(DATA.cpecSheet.effective, '2026-05-01', 'cpecSheet effective 2026-05-01');
+eq(DATA.cpecSheet.legend && DATA.cpecSheet.legend.surg1, 'Surg 1', 'cpecSheet legend surg1');
+eq(DATA.cpecSheet.legend && DATA.cpecSheet.legend.retina, 'Retina Resident', 'cpecSheet legend retina');
+ok(DATA.cpecSheet.entries && [1, 2, 3, 4, 5].every(function (n) { return DATA.cpecSheet.entries[n]; }),
+  'cpecSheet entries has rows 1..5');
+
+function cpecAttendings(res) {
+  return (res.entries || []).map(function (e) { return e.attending; });
+}
+function cpecEntry(res, attending) {
+  for (var i = 0; i < res.entries.length; i++) {
+    if (res.entries[i].attending === attending) return res.entries[i];
+  }
+  return null;
+}
+
+// 2026-07-22 — 4th Wednesday: Markovitz 1:00 surg1 + Ang private-only, NOT Pyfer
+var cp1 = Engine.cpecForDate('2026-07-22', DATA);
+eq(cp1.nth, 4, 'cpec 7/22: nth 4');
+eq(cp1.weekdayKey, 'wed', 'cpec 7/22: weekdayKey wed');
+eq(cp1.entries.length, 2, 'cpec 7/22: exactly 2 entries (4th Wed)');
+var cpMark = cpecEntry(cp1, 'Markovitz');
+ok(cpMark, 'cpec 7/22: Markovitz present');
+eq(cpMark && cpMark.time, '1:00', 'cpec 7/22: Markovitz time 1:00');
+eq(cpMark && cpMark.count, 3, 'cpec 7/22: Markovitz count 3');
+eq(cpMark && cpMark.cover, 'surg1', 'cpec 7/22: Markovitz cover surg1');
+eq(cpMark && cpMark.privateOnly, false, 'cpec 7/22: Markovitz not private-only');
+var cpAng = cpecEntry(cp1, 'Ang');
+ok(cpAng, 'cpec 7/22: Ang present');
+eq(cpAng && cpAng.privateOnly, true, 'cpec 7/22: Ang private-only');
+eq(cpAng && cpAng.cover, null, 'cpec 7/22: Ang cover null (private only)');
+eq(cpAng && cpAng.site, 'SP', 'cpec 7/22: Ang site SP (Stadium)');
+eq(cpAng && cpAng.time, '7:30', 'cpec 7/22: Ang time 7:30');
+eq(cpAng && cpAng.count, 12, 'cpec 7/22: Ang count 12');
+ok(cpecAttendings(cp1).indexOf('Pyfer') === -1, 'cpec 7/22: NOT Pyfer (Pyfer is 4th Thu, not 4th Wed)');
+
+// 2026-07-15 — 3rd Wednesday, July (month 7, odd): Brown + Galiani + Tabas (retina)
+// + Derham; Williams excluded (even months only)
+var cp2 = Engine.cpecForDate('2026-07-15', DATA);
+eq(cp2.nth, 3, 'cpec 7/15: nth 3');
+eq(cp2.weekdayKey, 'wed', 'cpec 7/15: weekdayKey wed');
+sameMembers(cpecAttendings(cp2), ['Brown', 'Galiani', 'Tabas', 'Derham'],
+  'cpec 7/15: Brown+Galiani+Tabas+Derham (Williams excluded in odd month)');
+ok(cpecAttendings(cp2).indexOf('Williams') === -1, 'cpec 7/15: Williams excluded (even months only)');
+var cpGal = cpecEntry(cp2, 'Galiani');
+eq(cpGal && cpGal.cover, 'surg1', 'cpec 7/15: Galiani cover surg1');
+eq(cpGal && cpGal.time, '1:00', 'cpec 7/15: Galiani time 1:00');
+var cpTabas = cpecEntry(cp2, 'Tabas');
+eq(cpTabas && cpTabas.cover, 'retina', 'cpec 7/15: Tabas cover retina');
+eq(cpTabas && cpTabas.time, 'AM TF', 'cpec 7/15: Tabas time AM TF');
+var cpDerham = cpecEntry(cp2, 'Derham');
+eq(cpDerham && cpDerham.cover, 'surg5', 'cpec 7/15: Derham cover surg5');
+eq(cpDerham && cpDerham.time, '9:30', 'cpec 7/15: Derham time 9:30');
+eq(cpDerham && cpDerham.site, 'SP', 'cpec 7/15: Derham site SP');
+eq(cpDerham && cpDerham.count, 11, 'cpec 7/15: Derham count 11');
+
+// 2026-08-19 — 3rd Wednesday, August (month 8, even): Williams yes, Galiani no
+var cp3 = Engine.cpecForDate('2026-08-19', DATA);
+eq(cp3.nth, 3, 'cpec 8/19: nth 3');
+ok(cpecAttendings(cp3).indexOf('Williams') !== -1, 'cpec 8/19: Williams included (even month)');
+ok(cpecAttendings(cp3).indexOf('Galiani') === -1, 'cpec 8/19: Galiani excluded (odd months only)');
+sameMembers(cpecAttendings(cp3), ['Brown', 'Williams', 'Tabas', 'Derham'],
+  'cpec 8/19: Brown+Williams+Tabas+Derham');
+
+// 2026-07-06 — 1st Monday: Harris surg5 + Davis willsOR
+var cp4 = Engine.cpecForDate('2026-07-06', DATA);
+eq(cp4.nth, 1, 'cpec 7/6: nth 1');
+eq(cp4.weekdayKey, 'mon', 'cpec 7/6: weekdayKey mon');
+eq(cp4.entries.length, 2, 'cpec 7/6: exactly 2 entries (1st Mon)');
+var cpHarris = cpecEntry(cp4, 'Harris');
+eq(cpHarris && cpHarris.cover, 'surg5', 'cpec 7/6: Harris cover surg5');
+eq(cpHarris && cpHarris.site, 'SP', 'cpec 7/6: Harris site SP');
+eq(cpHarris && cpHarris.count, 2, 'cpec 7/6: Harris count 2');
+var cpDavis = cpecEntry(cp4, 'Davis');
+eq(cpDavis && cpDavis.cover, 'willsOR', 'cpec 7/6: Davis cover willsOR');
+eq(cpDavis && cpDavis.note, '2 private / 6 service', 'cpec 7/6: Davis note 2 private / 6 service');
+eq(cpDavis && cpDavis.count, 8, 'cpec 7/6: Davis count 8 (2 prvt + 6 svc)');
+
+// Weekend → empty entries
+var cpSat = Engine.cpecForDate('2026-07-18', DATA); // Saturday
+eq(cpSat.weekdayKey, 'sat', 'cpec weekend: weekdayKey sat');
+eq(cpSat.entries.length, 0, 'cpec weekend: entries empty');
+eq(Engine.cpecForDate('2026-07-19', DATA).entries.length, 0, 'cpec Sunday: entries empty');
+
+// Before the sheet's effective date (2026-05-01) → empty entries
+var cpPre = Engine.cpecForDate('2026-04-29', DATA); // Wednesday before effective
+eq(cpPre.weekdayKey, 'wed', 'cpec pre-effective: weekdayKey wed');
+eq(cpPre.entries.length, 0, 'cpec pre-effective: entries empty before 2026-05-01');
+
+// After the academic year ends (ayEnd 2027-06-30) → empty entries: the sheet
+// prints no end date, so its window closes with the year (§A "out-of-year").
+eq(Engine.cpecForDate('2027-06-30', DATA).entries.length, 2,
+  'cpec ayEnd itself (2027-06-30, 5th Wed): still applies — Cutney + Markovitz');
+var cpPost = Engine.cpecForDate('2027-07-07', DATA); // Wednesday after ayEnd
+eq(cpPost.weekdayKey, 'wed', 'cpec post-ayEnd: weekdayKey wed');
+eq(cpPost.entries.length, 0, 'cpec post-ayEnd: entries empty after 2027-06-30');
+eq(Engine.cpecForDate('2030-01-02', DATA).entries.length, 0,
+  'cpec far future: entries empty');
+
+// Data fallback (no explicit data argument) works in Node
+eq(Engine.cpecForDate('2026-07-22').entries.length, 2, 'cpec data fallback works in Node');
+
+/* ---------- CPEC cover → covering resident (UISPEC3 section D) ---------- */
+ok(typeof Engine.cpecCoverName === 'function', 'Engine.cpecCoverName is a function');
+
+var cov0722 = Engine.resolveDay('2026-07-22', DATA); // 4th Wednesday
+eq(Engine.cpecCoverName(cov0722, 'surg1'), 'Cheng', 'cover 7/22: surg1 → Cheng');
+eq(Engine.cpecCoverName(cov0722, 'surg5'), 'Wibbelsman', 'cover 7/22: surg5 → Wibbelsman');
+eq(Engine.cpecCoverName(cov0722, 'retina'), 'Samuel',
+  'cover 7/22: retina → Samuel (pgy4 on Retina, normal Wednesday)');
+
+// willsOR: first person on the Wills OR block (1st Monday, pgy4 block 7)
+eq(Engine.cpecCoverName(Engine.resolveDay('2026-08-03', DATA), 'willsOR'), 'Shields',
+  'cover 8/3 (Mon): willsOR → Shields');
+
+// 3rd Wednesday — the ONLY day the sheet uses the retina cover (Tabas AM TF).
+// The pgy4 block-4 override moves the retina resident to 'Tabas Cataracts'
+// that day, so clinics['Retina'] holds no pgy4 — the cover must resolve from
+// the block's actual grouping, not the clinic label.
+var cov0819 = Engine.resolveDay('2026-08-19', DATA);
+ok(!((cov0819.clinics['Retina'] || {}).am || [])
+  .concat((cov0819.clinics['Retina'] || {}).pm || [])
+  .some(function (p) { return p.year === 'pgy4'; }),
+  'cover 8/19 (3rd Wed): clinics.Retina has no pgy4 (moved to Tabas Cataracts)');
+eq(Engine.cpecCoverName(cov0819, 'retina'), 'Bair',
+  'cover 8/19 (3rd Wed): retina → Bair via Tabas Cataracts');
+
+// Unknown cover / empty roster stay safe
+eq(Engine.cpecCoverName(cov0722, null), '', 'cover: null cover → empty string');
+eq(Engine.cpecCoverName({}, 'retina'), '', 'cover: empty roster → empty string');
+
 /* ---------- summary ---------- */
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures > 0) {

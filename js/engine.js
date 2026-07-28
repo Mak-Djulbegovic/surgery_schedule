@@ -226,12 +226,95 @@
     return day;
   }
 
+  // CPEC surgical block sheet lookup (UISPEC3 section A).
+  // Returns { nth, weekdayKey, entries } for the sheet cell matching this
+  // date's nth-weekday-of-month, with month-restricted entries filtered out
+  // (an entry applies when !months || months.includes(calendarMonth)).
+  // entries is [] on weekends and out-of-window dates. The window starts at the
+  // sheet's own printed effective date (2026-05-01 — deliberately BEFORE
+  // ayStart; §A's required test dates 7/6 and 7/15 precede the academic year)
+  // and, since the sheet prints no end date, closes with the academic year
+  // (data.ayEnd) per §A's "out-of-year" wording.
+  function cpecForDate(dateISO, data) {
+    data = getData(data);
+    var d = parseISO(dateISO);
+    var weekdayKey = WEEKDAY_KEYS[d.getDay()];
+    var nth = nthWeekdayOfMonth(d);
+    var month = d.getMonth() + 1;
+    var result = { nth: nth, weekdayKey: weekdayKey, entries: [] };
+
+    var sheet = data.cpecSheet;
+    if (!sheet || !sheet.entries) return result;
+    if (weekdayKey === 'sat' || weekdayKey === 'sun') return result;
+    if (sheet.effective && dateISO < sheet.effective) return result;
+    if (data.ayEnd && dateISO > data.ayEnd) return result;
+
+    var row = sheet.entries[nth];
+    var cell = row && row[weekdayKey];
+    if (!cell) return result;
+    for (var i = 0; i < cell.length; i++) {
+      var e = cell[i];
+      if (e.months && e.months.indexOf(month) === -1) continue;
+      result.entries.push(e);
+    }
+    return result;
+  }
+
+  // First pgy4 in a roster group shaped { am: [{name,year}...], pm: [...] }.
+  function firstPgy4(group) {
+    var sessions = ['am', 'pm'];
+    for (var i = 0; i < sessions.length; i++) {
+      var list = (group && group[sessions[i]]) || [];
+      for (var j = 0; j < list.length; j++) {
+        var p = list[j];
+        if (p && p.year === 'pgy4' && p.name) return p.name;
+      }
+    }
+    return '';
+  }
+
+  // Covering resident from a resolved DayRoster for a CPEC sheet `cover` key
+  // (UISPEC3 section D prefill): surg1/surg5 → roster.surg, willsOR → first
+  // person on the 'Wills OR' block, retina → the pgy4 retina resident.
+  // The retina cover is only used on 3rd Wednesdays (Tabas AM TF) — the very
+  // day the pgy4 block-4 override moves the retina resident from 'Retina' to
+  // 'Tabas Cataracts' — so resolve from the block's possible groupings
+  // (clinics 'Retina' / 'Tabas Cataracts', orBlocks 'Retina OR'), never from
+  // the 'Retina' clinic label alone. Returns '' when nothing matches.
+  function cpecCoverName(roster, cover) {
+    var r = roster || {};
+    if (cover === 'surg1' || cover === 'surg5') {
+      var n = cover === 'surg1' ? '1' : '5';
+      return (r.surg && r.surg[n] && r.surg[n].name) || '';
+    }
+    if (cover === 'willsOR') {
+      var blk = (r.orBlocks || {})['Wills OR'] || {};
+      var sessions = ['am', 'pm'];
+      for (var i = 0; i < sessions.length; i++) {
+        var list = blk[sessions[i]] || [];
+        for (var j = 0; j < list.length; j++) {
+          var nm = typeof list[j] === 'string' ? list[j] : list[j] && list[j].name;
+          if (nm) return nm;
+        }
+      }
+      return '';
+    }
+    if (cover === 'retina') {
+      return firstPgy4((r.clinics || {})['Retina']) ||
+        firstPgy4((r.clinics || {})['Tabas Cataracts']) ||
+        firstPgy4((r.orBlocks || {})['Retina OR']) || '';
+    }
+    return '';
+  }
+
   var Engine = {
     parseISO: parseISO,
     nthWeekdayOfMonth: nthWeekdayOfMonth,
     findBlockRange: findBlockRange,
     resolveCell: resolveCell,
-    resolveDay: resolveDay
+    resolveDay: resolveDay,
+    cpecForDate: cpecForDate,
+    cpecCoverName: cpecCoverName
   };
 
   if (typeof window !== 'undefined') window.Engine = Engine;
