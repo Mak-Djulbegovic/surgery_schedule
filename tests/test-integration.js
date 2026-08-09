@@ -725,6 +725,16 @@ ok(text.indexOf('CPEC PO') === -1,
   'cpec po (e): baseline output has no CPEC PO line without staff/count data');
 
 /* ================================================================== */
+/* ================================================================== */
+/* Cooper buddy call ends after Labor Day weekend (buddyCall.end 9/7)  */
+
+var bdBefore = Engine.resolveDay('2026-09-04', DATA).cooperBuddies; // Fri before Labor Day
+ok(bdBefore && !!bdBefore.templateAM, 'buddy call: still active Fri 9/4 (template present)');
+var bdAfter = Engine.resolveDay('2026-09-09', DATA).cooperBuddies;  // Wed after Labor Day
+ok(bdAfter && bdAfter.am === null && bdAfter.pm === null &&
+   bdAfter.templateAM === null && bdAfter.templatePM === null,
+  'buddy call: fully off after Labor Day weekend (9/9 all null)');
+
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures > 0) process.exit(1);
 console.log('OK');

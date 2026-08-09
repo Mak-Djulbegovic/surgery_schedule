@@ -422,7 +422,8 @@ const SCHED_DATA = {
 
   // Cooper buddy call — from the "Cooper Buddy Call 2026-2027" PDF.
   buddyCall: {
-    note: 'Cooper buddy call — senior buddy for the Cooper consult PGY-2. Runs during BLOCK 1 ONLY (7/20 – 8/30); outside that window there is no buddy. The weekly template shows which rotation the buddy is pulled from.',
+    note: 'Cooper buddy call — senior buddy for the Cooper consult PGY-2. Runs from the start of the year through Labor Day weekend (last day Mon 9/7/26); after that the buddy system falls off entirely. Named assignments exist for block 1; the weekly template shows which rotation the buddy is pulled from.',
+    end: '2026-09-07',
     template: {
       am: { mon: 'Retina', tue: 'Wills OR (B3)', wed: 'Private Glaucoma', thu: 'Cooper', fri: 'Cooper OR' },
       pm: { mon: 'Retina', tue: 'Wills OR (B3)', wed: 'Retina', thu: 'Cooper (PGY-4)', fri: 'PT (B6)' }

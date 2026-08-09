@@ -760,14 +760,24 @@
     host.appendChild(nfField);
     updateNfHint();
 
-    var buddies = el('div', {}, [
-      buddyRow('AM', st.cooperBuddyAM),
-      buddyRow('PM', st.cooperBuddyPM)
-    ]);
-    var buddiesField = labeledField('Cooper buddies', buddies);
-    buddiesField.appendChild(el('span', { class: 'field-hint hidden', id: 'buddyHint' }));
-    host.appendChild(buddiesField);
-    updateBuddyHint();
+    // The Cooper buddy system runs only through Labor Day weekend — once the
+    // roster carries no buddy info (and nothing was typed), drop the field.
+    var cb = (App.roster && App.roster.cooperBuddies) || {};
+    var buddySystemActive = !!(cb.am || cb.pm || cb.templateAM || cb.templatePM);
+    var buddyTyped = !!(trim(st.cooperBuddyAM && st.cooperBuddyAM.name) ||
+      trim(st.cooperBuddyPM && st.cooperBuddyPM.name) ||
+      trim(st.cooperBuddyAM && st.cooperBuddyAM.note) ||
+      trim(st.cooperBuddyPM && st.cooperBuddyPM.note));
+    if (buddySystemActive || buddyTyped) {
+      var buddies = el('div', {}, [
+        buddyRow('AM', st.cooperBuddyAM),
+        buddyRow('PM', st.cooperBuddyPM)
+      ]);
+      var buddiesField = labeledField('Cooper buddies', buddies);
+      buddiesField.appendChild(el('span', { class: 'field-hint hidden', id: 'buddyHint' }));
+      host.appendChild(buddiesField);
+      updateBuddyHint();
+    }
 
     var vac = el('textarea', { rows: '2', placeholder: '24 strong' });
     vac.value = st.vacation;
