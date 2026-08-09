@@ -600,6 +600,7 @@ table.tbl { border-collapse: collapse; width: 100%; }
   padding-top: 10px; border-top: 1px solid var(--border-soft);
 }
 .glance-kv { font-size: 13.5px; }
+.glance-kv.glance-warn b { color: var(--amber-text); }
 .glance-kv .k {
   color: var(--faint); font-weight: 600; margin-right: 6px;
   font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
@@ -3740,11 +3741,21 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       // NF resident IS the day float, or when no coverage info exists.
       var dfVal = r.dayFloat.join(', ');
       var cov = r.dayFloatCoverage;
-      if (cov && cov.nf && r.dayFloat.indexOf(cov.nf) === -1) {
-        var duty = nfDutyText(cov.nfDuties);
-        dfVal += ' — covering ' + cov.nf + '’s daytime' + (duty ? ' (' + duty + ')' : '');
+      var dfConflict = false;
+      if (cov && cov.nf) {
+        if (r.dayFloat.indexOf(cov.nf) === -1) {
+          var duty = nfDutyText(cov.nfDuties);
+          dfVal += ' — covering ' + cov.nf + '’s daytime' + (duty ? ' (' + duty + ')' : '');
+        } else {
+          // The day-float-block resident is themselves on Night Float this
+          // week — just note it.
+          dfVal += ' (on Night Float)';
+          dfConflict = true;
+        }
       }
-      row.appendChild(glanceKV('Day Float', dfVal));
+      var dfKV = glanceKV('Day Float', dfVal);
+      if (dfConflict) dfKV.classList.add('glance-warn');
+      row.appendChild(dfKV);
     }
     if ((r.taskmasters || []).length) row.appendChild(glanceKV('Taskmaster', r.taskmasters.join(' & ')));
     host.appendChild(row);
