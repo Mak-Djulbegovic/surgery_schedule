@@ -209,7 +209,10 @@
     // Cooper buddy call: template rotation by weekday; named buddy from the
     // range containing this date (ISO string compare), if any. Weekend /
     // out-of-year days never reach this point and keep all-null values.
+    // The buddy system ends after Labor Day weekend (buddyCall.end);
+    // past that date all four fields stay null so the UI drops the buddy row.
     var bc = data.buddyCall;
+    if (bc && bc.end && dateISO > bc.end) bc = null;
     if (bc) {
       var tmpl = bc.template || {};
       day.cooperBuddies.templateAM = (tmpl.am && tmpl.am[weekdayKey]) || null;
