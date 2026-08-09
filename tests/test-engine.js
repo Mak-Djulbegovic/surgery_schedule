@@ -480,6 +480,67 @@ eq(Engine.cpecCoverName(cov0819, 'retina'), 'Bair',
 eq(Engine.cpecCoverName(cov0722, null), '', 'cover: null cover → empty string');
 eq(Engine.cpecCoverName({}, 'retina'), '', 'cover: empty roster → empty string');
 
+/* ---------- Night Float + day-float coverage (UISPEC5 section A) ---------- */
+ok(DATA.nfSchedule && typeof DATA.nfSchedule === 'object', 'data has nfSchedule');
+ok(Array.isArray(DATA.nfSchedule.ranges), 'nfSchedule.ranges is an array');
+eq(DATA.nfSchedule.ranges.length, 14, 'nfSchedule has 14 weekly ranges');
+eq(DATA.nfSchedule.ranges[0].start, '2026-07-13', 'nfSchedule first range starts 7/13');
+eq(DATA.nfSchedule.ranges[0].name, 'Cotton', 'nfSchedule first range = Cotton');
+eq(DATA.nfSchedule.ranges[13].end, '2026-10-25', 'nfSchedule last range ends 10/25');
+
+// 2026-07-22 (Wed): Perez on NF (7/20–7/26 week); Perez = pgy3 block 6 →
+// Wed cells CPEC/CPEC; Tang is the Day Float covering the daytime duties.
+var nf1 = Engine.resolveDay('2026-07-22', DATA);
+eq(nf1.nightFloat, 'Perez', 'NF 7/22: nightFloat = Perez');
+ok(nf1.dayFloatCoverage && typeof nf1.dayFloatCoverage === 'object', 'NF 7/22: dayFloatCoverage present');
+eq(nf1.dayFloatCoverage.nf, 'Perez', 'NF 7/22: dayFloatCoverage.nf = Perez');
+eq(nf1.dayFloatCoverage.nfDuties.am, 'CPEC', 'NF 7/22: nfDuties.am = CPEC (Perez pgy3 block 6 Wed)');
+eq(nf1.dayFloatCoverage.nfDuties.pm, 'CPEC', 'NF 7/22: nfDuties.pm = CPEC');
+sameMembers(nf1.dayFloatCoverage.coveredBy, ['Tang'], 'NF 7/22: coveredBy = [Tang]');
+
+// 2026-08-10 (Mon): Tang on NF — who IS the Day Float that block; coveredBy
+// [Tang] still fine, nfDuties are Tang's own cells (Day Float / Day Float).
+var nf2 = Engine.resolveDay('2026-08-10', DATA);
+eq(nf2.nightFloat, 'Tang', 'NF 8/10: nightFloat = Tang');
+ok(nf2.dayFloatCoverage && typeof nf2.dayFloatCoverage === 'object', 'NF 8/10: dayFloatCoverage present');
+eq(nf2.dayFloatCoverage.nf, 'Tang', 'NF 8/10: dayFloatCoverage.nf = Tang');
+eq(nf2.dayFloatCoverage.nfDuties.am, 'Day Float', 'NF 8/10: nfDuties.am = Day Float (Tang pgy3 block 7 Mon)');
+eq(nf2.dayFloatCoverage.nfDuties.pm, 'Day Float', 'NF 8/10: nfDuties.pm = Day Float');
+sameMembers(nf2.dayFloatCoverage.coveredBy, ['Tang'], 'NF 8/10: coveredBy = [Tang] (NF is the day float)');
+
+// 2026-09-02 (Wed, in year): the 8/31–9/6 week is not filled in the sheet.
+var nf3 = Engine.resolveDay('2026-09-02', DATA);
+eq(nf3.inYear, true, 'NF 9/2: inYear');
+eq(nf3.nightFloat, null, 'NF 9/2: nightFloat null (week not filled)');
+eq(nf3.dayFloatCoverage, null, 'NF 9/2: dayFloatCoverage null (week not filled)');
+
+// 2026-11-04 (Wed, in year): past the last listed range (later weeks TBD).
+var nf4 = Engine.resolveDay('2026-11-04', DATA);
+eq(nf4.inYear, true, 'NF 11/4: inYear');
+eq(nf4.nightFloat, null, 'NF 11/4: nightFloat null (week TBD)');
+eq(nf4.dayFloatCoverage, null, 'NF 11/4: dayFloatCoverage null (week TBD)');
+
+// Weekend: 2026-07-25 (Sat) falls inside the Perez range but stays null.
+var nfSat = Engine.resolveDay('2026-07-25', DATA);
+eq(nfSat.isWeekend, true, 'NF weekend: 7/25 isWeekend');
+eq(nfSat.nightFloat, null, 'NF weekend: nightFloat null');
+eq(nfSat.dayFloatCoverage, null, 'NF weekend: dayFloatCoverage null');
+
+// Out-of-year: 2026-07-15 (Wed) sits inside the 7/13–7/19 Cotton range but
+// precedes ayStart, so both stay null.
+var nfPre = Engine.resolveDay('2026-07-15', DATA);
+eq(nfPre.inYear, false, 'NF out-of-year: 7/15 inYear false');
+eq(nfPre.nightFloat, null, 'NF out-of-year: nightFloat null');
+eq(nfPre.dayFloatCoverage, null, 'NF out-of-year: dayFloatCoverage null');
+
+// Null-safe when nfSchedule is absent from the data object entirely.
+var noNfData = {};
+Object.keys(DATA).forEach(function (k) { if (k !== 'nfSchedule') noNfData[k] = DATA[k]; });
+var nf5 = Engine.resolveDay('2026-07-22', noNfData);
+eq(nf5.nightFloat, null, 'NF absent nfSchedule: nightFloat null');
+eq(nf5.dayFloatCoverage, null, 'NF absent nfSchedule: dayFloatCoverage null');
+eq(nf5.surg['1'] && nf5.surg['1'].name, 'Cheng', 'NF absent nfSchedule: rest of resolveDay unaffected');
+
 /* ---------- summary ---------- */
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures > 0) {

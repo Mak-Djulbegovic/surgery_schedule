@@ -92,7 +92,9 @@
       clinics: {},
       orBlocks: {},
       specialClinicsToday: [],
-      cooperBuddies: { am: null, pm: null, templateAM: null, templatePM: null }
+      cooperBuddies: { am: null, pm: null, templateAM: null, templatePM: null },
+      nightFloat: null,
+      dayFloatCoverage: null
     };
   }
 
@@ -221,6 +223,39 @@
           break;
         }
       }
+    }
+
+    // Night Float + day-float coverage (UISPEC5 section A): the weekly NF
+    // resident from nfSchedule.ranges (ISO string compare). While on NF, the
+    // resident's normal daytime block duties are covered by Day Float, so
+    // dayFloatCoverage carries the NF resident's OWN resolved am/pm cell texts
+    // for this date plus the roster's dayFloat names. Dates outside every
+    // range (week not yet filled in the call sheet, or TBD later weeks) keep
+    // both null; weekend / out-of-year days never reach this point and keep
+    // the emptyDay nulls. Null-safe when nfSchedule is absent entirely.
+    var nfs = data.nfSchedule;
+    if (nfs && nfs.ranges) {
+      for (var ni = 0; ni < nfs.ranges.length; ni++) {
+        var nr = nfs.ranges[ni];
+        if (nr.start <= dateISO && dateISO <= nr.end) {
+          day.nightFloat = nr.name || null;
+          break;
+        }
+      }
+    }
+    if (day.nightFloat) {
+      var nfRes = null;
+      for (var nj = 0; nj < day.residents.length; nj++) {
+        if (day.residents[nj].name === day.nightFloat) { nfRes = day.residents[nj]; break; }
+      }
+      day.dayFloatCoverage = {
+        nf: day.nightFloat,
+        nfDuties: {
+          am: nfRes ? nfRes.am.text : null,
+          pm: nfRes ? nfRes.pm.text : null
+        },
+        coveredBy: day.dayFloat.slice()
+      };
     }
 
     return day;

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Surg Schedule Builder</title>
-<link rel="stylesheet" href="css/style.css?v=7">
+<link rel="stylesheet" href="css/style.css?v=8">
 </head>
 <body class="home-active">
 
@@ -29,6 +29,8 @@
       <button type="button" class="btn-link" id="btnHomeHowto">How it works</button>
       <span class="home-dot" aria-hidden="true">·</span>
       <button type="button" class="btn-link" id="btnHomeReference">Block schedule reference</button>
+      <span class="home-dot" aria-hidden="true">·</span>
+      <button type="button" class="btn-link" id="btnHomeSetup">Set up a new year</button>
     </div>
     <div class="home-recent hidden" id="homeRecent"></div>
   </div>
@@ -56,6 +58,7 @@
         <summary title="More actions">⋯</summary>
         <div class="menu-pop">
           <button type="button" class="btn" id="btnYesterday">Start from yesterday</button>
+          <button type="button" class="btn" id="btnSetupMenu">Setup / new year</button>
           <button type="button" class="btn btn-danger" id="btnClear">Clear day</button>
         </div>
       </details>
@@ -102,6 +105,7 @@
     <div id="caseSections"></div>
     <div class="card">
       <h2>Clinics <span class="h-note">patient counts come from the EMRs — enter manually</span></h2>
+      <div id="clinicDressBanner" class="dress-banner hidden"></div>
       <div id="clinicRows"></div>
     </div>
     <div class="card">
@@ -155,14 +159,18 @@
   <section class="panel" id="panel-reference">
     <div id="referenceBody"></div>
   </section>
+
+  <section class="panel" id="panel-setup">
+    <div id="setupBody"></div>
+  </section>
 </main>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-<script src="js/data.js?v=7"></script>
-<script src="js/engine.js?v=7"></script>
-<script src="js/assign.js?v=7"></script>
-<script src="js/export.js?v=7"></script>
-<script src="js/app.js?v=7"></script>
+<script src="js/data.js?v=8"></script>
+<script src="js/engine.js?v=8"></script>
+<script src="js/assign.js?v=8"></script>
+<script src="js/export.js?v=8"></script>
+<script src="js/app.js?v=8"></script>
 </body>
 </html>

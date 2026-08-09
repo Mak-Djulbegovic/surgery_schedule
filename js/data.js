@@ -603,6 +603,30 @@ const SCHED_DATA = {
         ]
       }
     }
+  },
+
+  // Night Float — weekly Mon–Sun ranges from the call-schedule Google Sheet
+  // ("Summer Interim Call '26" + "PGY3 Call Schedule '26-'27" tabs). The NF
+  // resident works Sun–Thu nights; missing weeks = not yet filled in the
+  // sheet, later weeks TBD (the Setup import updates this).
+  nfSchedule: {
+    note: 'Weekly Night Float (Sun–Thu nights) from the PGY-3 call schedule. While on NF, the resident’s daytime duties are covered by Day Float. Weeks not listed are not yet assigned in the call sheet.',
+    ranges: [
+      { start: '2026-07-13', end: '2026-07-19', name: 'Cotton' },
+      { start: '2026-07-20', end: '2026-07-26', name: 'Perez' },
+      { start: '2026-07-27', end: '2026-08-02', name: 'Camacho' },
+      { start: '2026-08-03', end: '2026-08-09', name: 'Williamson' },
+      { start: '2026-08-10', end: '2026-08-16', name: 'Tang' },
+      { start: '2026-08-17', end: '2026-08-23', name: 'DeSimone' },
+      { start: '2026-08-24', end: '2026-08-30', name: 'Cotton' },
+      { start: '2026-09-07', end: '2026-09-13', name: 'Tang' },
+      { start: '2026-09-14', end: '2026-09-20', name: 'Nahar' },
+      { start: '2026-09-21', end: '2026-09-27', name: 'DeSimone' },
+      { start: '2026-09-28', end: '2026-10-04', name: 'Perez' },
+      { start: '2026-10-05', end: '2026-10-11', name: 'Camacho' },
+      { start: '2026-10-12', end: '2026-10-18', name: 'Williamson' },
+      { start: '2026-10-19', end: '2026-10-25', name: 'Cotton' }
+    ]
   }
 };
 

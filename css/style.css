@@ -132,6 +132,8 @@ input[type="date"] {
 .chip-day { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
 .chip-task { background: var(--pgy2-bg); border-color: var(--pgy2-border); color: var(--pgy2); }
 .chip-special { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-text); }
+/* dress-code reminder chip — may carry a long text, so it wraps */
+.chip-dress { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-text); white-space: normal; text-align: left; }
 
 .header-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; padding-bottom: 1px; }
 
@@ -477,6 +479,8 @@ table.tbl { border-collapse: collapse; width: 100%; }
 .cell-text { font-size: 13.5px; }
 .cell-text.is-surg { font-weight: 700; color: var(--accent); }
 .cell-note { font-size: 11.5px; color: var(--faint); font-style: italic; margin-top: 1px; }
+/* amber Night-Float note in the full roster grid (UISPEC5 §B) */
+.cell-note.nf-note { color: var(--amber-text); font-style: normal; font-weight: 600; }
 
 /* ---------------- case sections (details cards) ---------------- */
 
@@ -725,6 +729,18 @@ table.tbl { border-collapse: collapse; width: 100%; }
 
 /* ---------------- clinics ---------------- */
 
+/* dress-code banner at the top of the Clinics card (UISPEC5 §D) */
+.dress-banner {
+  background: var(--amber-bg);
+  border: 1px solid var(--amber-border);
+  color: var(--amber-text);
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
 /* Aligned on a grid: [label+session 170px] [staff chips 1fr] [count 90px] [note 1fr] */
 .clinic-row {
   display: grid;
@@ -736,6 +752,9 @@ table.tbl { border-collapse: collapse; width: 100%; }
 }
 .clinic-row:last-child { border-bottom: none; }
 .clinic-label { font-weight: 600; min-width: 0; }
+.clinic-sub { display: block; font-size: 11px; font-weight: 500; color: var(--faint); line-height: 1.35; }
+/* standing clinic (CPEC PO) — no session badge, subtle accent edge */
+.clinic-standing { border-left: 3px solid var(--accent-border); padding-left: 8px; }
 .clinic-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
 .clinic-add { width: 108px; font-size: 12px; padding: 3px 5px; }
 .clinic-count { width: 100%; }
@@ -954,6 +973,18 @@ table.tbl { border-collapse: collapse; width: 100%; }
 .cpec-c-private { background: var(--border-soft); border: 1px solid var(--border-soft); color: var(--muted); font-style: italic; }
 .cpec-ref-main { display: block; }
 .cpec-ref-months { display: block; font-size: 11px; color: var(--faint); font-style: italic; }
+
+/* ---------------- setup / new-year page ---------------- */
+
+.setup-status { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.setup-status .chip { white-space: normal; text-align: left; }
+.setup-hint { margin-bottom: 10px; }
+.setup-paste {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.danger-zone { border-color: var(--red-border); }
+.danger-zone h2 { color: var(--red-text); }
 
 /* ---------------- toast ---------------- */
 

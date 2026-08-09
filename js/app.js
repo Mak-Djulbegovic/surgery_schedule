@@ -10,6 +10,7 @@
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
   var LS_PREFIX = 'surgsched:v1:day:';
+  var DATA_OVERRIDE_KEY = 'surgsched:v1:dataOverride';
   var SAVE_DEBOUNCE_MS = 300;
   var WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   var CATEGORIES = ['cataract', 'cornea', 'glaucoma', 'plastics', 'peds', 'retina', 'trauma', 'other'];
@@ -32,7 +33,23 @@
   var assignExpanded = {};                    // caseId -> true (compact row expanded inline)
   var caseSectionOpen = { wills: true, private: true, jhn: true, other: true };
 
+  // New-year setup (UISPEC5 §E): the built-in data object is captured at boot
+  // so 'Remove imported configuration' can always revert to it; usingOverride
+  // tracks whether window.SCHED_DATA currently comes from localStorage.
+  var BUILTIN_DATA = null;
+  var usingOverride = false;
+  // Why the stored override is NOT active (parse/validation/render failure at
+  // boot) — renderSetup surfaces it with a Remove button so the dead blob is
+  // visible and removable in-app instead of silently re-warning every boot.
+  var overrideBootError = null;
+
   function data() { return window.SCHED_DATA; }
+
+  // Weekday keys from the active data object; imported configurations pass
+  // only minimal validation, so a missing list falls back to Mon–Fri.
+  function dataWeekdays() {
+    return (data() && data().weekdays) || ['mon', 'tue', 'wed', 'thu', 'fri'];
+  }
 
   /* ------------------------------------------------------------------ */
   /* date helpers (all LOCAL — never new Date('YYYY-MM-DD'))             */
@@ -153,6 +170,7 @@
       date: dateISO,
       lectures: '',
       nightFloat: '',
+      nfCleared: false, // user explicitly blanked Night Float — never re-prefill
       vacation: '24 strong',
       cooperBuddyAM: { name: '', note: '' },
       cooperBuddyPM: { name: '', note: '' },
@@ -193,6 +211,7 @@
     var out = defaultState(dateISO);
     if (typeof st.lectures === 'string') out.lectures = st.lectures;
     if (typeof st.nightFloat === 'string') out.nightFloat = st.nightFloat;
+    out.nfCleared = !!st.nfCleared;
     if (typeof st.vacation === 'string') out.vacation = st.vacation;
     if (st.cooperBuddyAM) out.cooperBuddyAM = normBuddy(st.cooperBuddyAM);
     if (st.cooperBuddyPM) out.cooperBuddyPM = normBuddy(st.cooperBuddyPM);
@@ -394,6 +413,7 @@
     }
     if (!App.roster) App.roster = emptyRoster(App.state.date);
     prefillBuddies();
+    prefillNightFloat();
   }
 
   /* Cooper buddy prefill (buddy call schedule) — roster.cooperBuddies may be
@@ -431,12 +451,52 @@
       buddyMatchesPrefill(st.cooperBuddyPM, cb.pm, cb.templatePM);
   }
 
+  /* Night Float prefill (UISPEC5 §B) — roster.nightFloat may be absent while
+     the nfSchedule lands; guard everything. NEVER overwrite a user-typed
+     value: prefill only when the field is empty AND the user has not
+     deliberately blanked it (st.nfCleared) — otherwise every Update/Create
+     recompute would resurrect the call-schedule name and an intentional
+     blank (NF swap/vacancy night) would be unrepresentable. */
+
+  function prefillNightFloat() {
+    var st = App.state;
+    var r = App.roster;
+    if (!st || !r || !r.nightFloat) return;
+    if (st.nfCleared) return;
+    if (!trim(st.nightFloat)) st.nightFloat = String(r.nightFloat);
+  }
+
+  // True while the Night Float field still holds exactly the call-schedule
+  // value — survives reloads, disappears the moment the user edits it.
+  function nfAutoFilled() {
+    var st = App.state;
+    var r = App.roster;
+    return !!(st && r && r.nightFloat && trim(st.nightFloat) === String(r.nightFloat));
+  }
+
+  // 'CPEC' when the NF resident's am/pm duties match, else 'CPEC AM / Peds PM'.
+  // Duties may arrive as plain strings or resolved cells ({ text, notes }).
+  function nfDutyText(duties) {
+    function s(v) {
+      if (v == null) return '';
+      return trim(typeof v === 'string' ? v : v.text);
+    }
+    if (!duties) return '';
+    var am = s(duties.am);
+    var pm = s(duties.pm);
+    if (am && am === pm) return am;
+    var bits = [];
+    if (am) bits.push(am + ' AM');
+    if (pm) bits.push(pm + ' PM');
+    return bits.join(' / ');
+  }
+
   /* ------------------------------------------------------------------ */
   /* header                                                              */
   /* ------------------------------------------------------------------ */
 
   function renderHeader() {
-    $('ayLabel').textContent = data().ayLabel;
+    $('ayLabel').textContent = data().ayLabel || '';
     var chips = $('dayChips');
     clearNode(chips);
     var r = App.roster;
@@ -459,7 +519,7 @@
   /* tab 1 — Day Roster                                                  */
   /* ------------------------------------------------------------------ */
 
-  function cellDiv(cell) {
+  function cellDiv(cell, extraNote) {
     var isSurg = /^Surg \d+$/.test(cell.text || '');
     var wrap = el('div', {}, [
       el('div', { class: 'cell-text' + (isSurg ? ' is-surg' : ''), text: cell.text || '—' })
@@ -467,6 +527,7 @@
     (cell.notes || []).forEach(function (n) {
       wrap.appendChild(el('div', { class: 'cell-note', text: n }));
     });
+    if (extraNote) wrap.appendChild(el('div', { class: 'cell-note nf-note', text: extraNote }));
     return wrap;
   }
 
@@ -500,11 +561,16 @@
           nameTd.appendChild(document.createTextNode(' '));
           nameTd.appendChild(el('span', { class: 'badge badge-tm', text: 'TM' }));
         }
+        // The NF resident's daytime duties are covered by Day Float this week
+        // (UISPEC5 §B) — amber note on both sessions. r.nightFloat may be
+        // absent (older engine.js).
+        var nfNote = (r.nightFloat && res.name === r.nightFloat)
+          ? 'Night Float this week — daytime covered by Day Float' : null;
         tbody.appendChild(el('tr', {}, [
           nameTd,
           el('td', {}, [el('span', { class: 'res-block', text: 'B' + res.block })]),
-          el('td', {}, [cellDiv(res.am)]),
-          el('td', {}, [cellDiv(res.pm)])
+          el('td', {}, [cellDiv(res.am, nfNote)]),
+          el('td', {}, [cellDiv(res.pm, nfNote)])
         ]));
       });
     });
@@ -547,6 +613,11 @@
       (r.specialClinicsToday || []).forEach(function (sc) {
         chips.appendChild(chipEl(sc, 'chip-special'));
       });
+      // Dress code (UISPEC5 §D): Bilyk or Sergott in clinic → amber chip.
+      var dressNames = dressCodeNames();
+      if (dressNames.length) {
+        chips.appendChild(chipEl(dressNames.join(' & ') + ' — business casual + white coat', 'chip-dress'));
+      }
     }
 
     var surgKeys = Object.keys(r.surg || {}).sort(function (a, b) { return (+a) - (+b); });
@@ -587,7 +658,18 @@
       if (buddyBits.length) cooperVal += ' + ' + buddyBits.join(' / ');
       row.appendChild(glanceKV('Cooper Consults', cooperVal));
     }
-    if ((r.dayFloat || []).length) row.appendChild(glanceKV('Day Float', r.dayFloat.join(', ')));
+    if ((r.dayFloat || []).length) {
+      // 'Tang — covering Perez’s daytime (CPEC)' while the NF resident's
+      // daytime duties fall to Day Float (UISPEC5 §B). Just the name when the
+      // NF resident IS the day float, or when no coverage info exists.
+      var dfVal = r.dayFloat.join(', ');
+      var cov = r.dayFloatCoverage;
+      if (cov && cov.nf && r.dayFloat.indexOf(cov.nf) === -1) {
+        var duty = nfDutyText(cov.nfDuties);
+        dfVal += ' — covering ' + cov.nf + '’s daytime' + (duty ? ' (' + duty + ')' : '');
+      }
+      row.appendChild(glanceKV('Day Float', dfVal));
+    }
     if ((r.taskmasters || []).length) row.appendChild(glanceKV('Taskmaster', r.taskmasters.join(' & ')));
     host.appendChild(row);
   }
@@ -623,6 +705,26 @@
     n.classList.toggle('hidden', !on);
   }
 
+  function updateNfHint() {
+    var n = $('nfHint');
+    if (!n) return;
+    var txt = '';
+    if (nfAutoFilled()) {
+      txt = 'from the call schedule — edit freely';
+    } else {
+      // Field holds something other than the call-schedule name (manual swap,
+      // stale copy…) — say so instead of hiding the mismatch.
+      var st = App.state;
+      var r = App.roster;
+      if (st && r && r.nightFloat && trim(st.nightFloat) &&
+          trim(st.nightFloat) !== String(r.nightFloat)) {
+        txt = 'call schedule has ' + r.nightFloat + ' for this week';
+      }
+    }
+    n.textContent = txt;
+    n.classList.toggle('hidden', !txt);
+  }
+
   function renderManualInputs() {
     var host = $('manualInputs');
     clearNode(host);
@@ -634,8 +736,19 @@
     host.appendChild(labeledField('Lectures / Events', lectures));
 
     var nf = el('input', { type: 'text', placeholder: 'resident name', value: st.nightFloat });
-    nf.addEventListener('input', function () { st.nightFloat = nf.value; touch(); renderSummary(); });
-    host.appendChild(labeledField('Night Float', nf));
+    nf.addEventListener('input', function () {
+      st.nightFloat = nf.value;
+      // Emptying the field is an explicit choice — remember it so recomputes
+      // (Update/Create/date revisits) don't resurrect the call-schedule name.
+      st.nfCleared = !trim(nf.value);
+      touch();
+      renderSummary();
+      updateNfHint();
+    });
+    var nfField = labeledField('Night Float', nf);
+    nfField.appendChild(el('span', { class: 'field-hint hidden', id: 'nfHint' }));
+    host.appendChild(nfField);
+    updateNfHint();
 
     var buddies = el('div', {}, [
       buddyRow('AM', st.cooperBuddyAM),
@@ -943,9 +1056,109 @@
     return cc;
   }
 
+  /* Dress code (UISPEC5 §D): Bilyk or Sergott in clinic → business casual +
+     white coat. Detected from roster.specialClinicsToday plus any clinic
+     label / count / note text; the Clinics-card banner re-evaluates as the
+     user types into count/note fields, the glance chip on every summary
+     render (Update/Create). */
+
+  function dressCodeNames() {
+    var found = [];
+    function scan(s) {
+      s = String(s == null ? '' : s);
+      if (found.indexOf('Bilyk') === -1 && /bilyk/i.test(s)) found.push('Bilyk');
+      if (found.indexOf('Sergott') === -1 && /sergott/i.test(s)) found.push('Sergott');
+    }
+    var r = App.roster || {};
+    (r.specialClinicsToday || []).forEach(scan);
+    Object.keys(r.clinics || {}).forEach(scan);
+    var counts = (App.state && App.state.clinicCounts) || {};
+    Object.keys(counts).forEach(function (k) {
+      scan(k.split('|')[0]);
+      var v = counts[k] || {};
+      scan(v.count);
+      scan(v.extra);
+    });
+    return found;
+  }
+
+  function updateDressBanner() {
+    var n = $('clinicDressBanner');
+    if (!n) return;
+    var names = dressCodeNames();
+    n.textContent = names.length
+      ? names.join(' & ') + ' clinic today — business casual + white coat' : '';
+    n.classList.toggle('hidden', !names.length);
+  }
+
+  // One Clinics-card row. session 'am'/'pm' gets the usual badge; the
+  // standing 'day' session (CPEC PO, UISPEC5 §C) renders no badge — its
+  // export line carries no session suffix either.
+  function clinicRowEl(label, session, opts) {
+    opts = opts || {};
+    var eff = effectiveClinicStaff(label, session);
+    var key = label + '|' + session;
+    var cc = App.state.clinicCounts[key];
+
+    var row = el('div', { class: 'clinic-row' + (opts.standing ? ' clinic-standing' : '') });
+    var labelSpan = el('span', { class: 'clinic-label' }, [label + ' ']);
+    if (session === 'am' || session === 'pm') {
+      labelSpan.appendChild(el('span', {
+        class: 'badge ' + (session === 'am' ? 'badge-am' : 'badge-pm'),
+        text: session.toUpperCase()
+      }));
+    }
+    if (opts.subLabel) labelSpan.appendChild(el('span', { class: 'clinic-sub', text: opts.subLabel }));
+    row.appendChild(labelSpan);
+
+    var chips = el('span', { class: 'clinic-chips' });
+    eff.staff.forEach(function (name) {
+      chips.appendChild(nameChip(name, function () { removeClinicStaff(label, session, name); }));
+    });
+    var addSel = residentSelect('', function (v) {
+      addClinicStaff(label, session, v);
+    }, '+ add…');
+    addSel.className = 'clinic-add';
+    chips.appendChild(addSel);
+    row.appendChild(chips);
+
+    var countIn = el('input', {
+      type: 'text', class: 'clinic-count', placeholder: 'e.g. 29x3',
+      value: (cc && cc.count) || ''
+    });
+    countIn.addEventListener('input', function () {
+      clinicCountEntry(key).count = countIn.value;
+      touch();
+      updateDressBanner();
+    });
+    row.appendChild(countIn);
+
+    var extraIn = el('input', {
+      type: 'text', class: 'clinic-extra', placeholder: 'note',
+      value: (cc && cc.extra) || ''
+    });
+    extraIn.addEventListener('input', function () {
+      clinicCountEntry(key).extra = extraIn.value;
+      touch();
+      updateDressBanner();
+    });
+    row.appendChild(extraIn);
+
+    return row;
+  }
+
   function renderClinicRows() {
     var host = $('clinicRows');
     clearNode(host);
+    updateDressBanner();
+
+    // Standing CPEC PO row (UISPEC5 §C) — always shown, staffed manually
+    // (typically the operating PGY-4s); it reaches the output only once
+    // staffed or counted. Stored under 'CPEC PO|day' end-to-end.
+    host.appendChild(clinicRowEl('CPEC PO', 'day', {
+      standing: true, subLabel: 'daily post-op checks — typically the operating PGY-4s'
+    }));
+
     var clinics = App.roster.clinics || {};
     var labels = Object.keys(clinics).sort();
     var any = false;
@@ -957,46 +1170,10 @@
         var cc = App.state.clinicCounts[key];
         if (!eff.base.length && !hasOverride && !cc) return;
         any = true;
-
-        var row = el('div', { class: 'clinic-row' });
-        row.appendChild(el('span', { class: 'clinic-label' }, [
-          label + ' ',
-          el('span', { class: 'badge ' + (session === 'am' ? 'badge-am' : 'badge-pm'), text: session.toUpperCase() })
-        ]));
-
-        var chips = el('span', { class: 'clinic-chips' });
-        eff.staff.forEach(function (name) {
-          chips.appendChild(nameChip(name, function () { removeClinicStaff(label, session, name); }));
-        });
-        var addSel = residentSelect('', function (v) {
-          addClinicStaff(label, session, v);
-        }, '+ add…');
-        addSel.className = 'clinic-add';
-        chips.appendChild(addSel);
-        row.appendChild(chips);
-
-        var countIn = el('input', {
-          type: 'text', class: 'clinic-count', placeholder: 'e.g. 29x3',
-          value: (cc && cc.count) || ''
-        });
-        countIn.addEventListener('input', function () {
-          clinicCountEntry(key).count = countIn.value; touch();
-        });
-        row.appendChild(countIn);
-
-        var extraIn = el('input', {
-          type: 'text', class: 'clinic-extra', placeholder: 'note',
-          value: (cc && cc.extra) || ''
-        });
-        extraIn.addEventListener('input', function () {
-          clinicCountEntry(key).extra = extraIn.value; touch();
-        });
-        row.appendChild(extraIn);
-
-        host.appendChild(row);
+        host.appendChild(clinicRowEl(label, session));
       });
     });
-    if (!any) host.appendChild(el('p', { class: 'empty-note', text: 'No clinic sessions on this date.' }));
+    if (!any) host.appendChild(el('p', { class: 'empty-note', text: 'No block-schedule clinic sessions on this date.' }));
   }
 
   /* CPEC surgical block sheet lineup card (UISPEC3 §D). Engine.cpecForDate /
@@ -1657,14 +1834,14 @@
     var r = App.roster || {};
     var tbl = el('table', { class: 'tbl cpec-ref-tbl' });
     tbl.appendChild(el('thead', {}, [el('tr', {},
-      [el('th', { text: '' })].concat(data().weekdays.map(function (d) {
+      [el('th', { text: '' })].concat(dataWeekdays().map(function (d) {
         return el('th', { text: CPEC_DAY_LABELS[d] || d });
       }))
     )]));
     var body = el('tbody');
     [1, 2, 3, 4, 5].forEach(function (nth) {
       var row = el('tr', {}, [el('td', { class: 'cpec-ref-nth', text: ordinal(nth) })]);
-      data().weekdays.forEach(function (d) {
+      dataWeekdays().forEach(function (d) {
         var entries = (sheet.entries[nth] || {})[d] || [];
         var isToday = !r.isWeekend && r.inYear && r.nth === nth && r.weekdayKey === d;
         var td = el('td', { class: isToday ? 'cpec-today' : null });
@@ -1879,13 +2056,13 @@
       var gCard = refCard(y.label + ' — block grid');
       var gTbl = el('table', { class: 'tbl grid-tbl' });
       gTbl.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Block' })].concat(
-        d.weekdays.map(function (wk) { return el('th', { text: dayLabel[wk] || wk }); })
+        dataWeekdays().map(function (wk) { return el('th', { text: dayLabel[wk] || wk }); })
       ))]));
       var gBody = el('tbody');
       Object.keys(y.grid).sort(function (a, b) { return (+a) - (+b); }).forEach(function (block) {
         var cells = [el('td', {}, [el('strong', { text: block }),
           (y.taskmasterBlocks || []).indexOf(+block) !== -1 ? el('span', { class: 'badge badge-tm', text: ' TM' }) : null])];
-        d.weekdays.forEach(function (wk) {
+        dataWeekdays().forEach(function (wk) {
           var cell = y.grid[block][wk] || {};
           cells.push(el('td', {}, [
             el('div', { class: 'g-line' }, [el('span', { class: 'badge badge-am', text: 'AM' }), ' ' + (cell.am || '—')]),
@@ -1913,7 +2090,7 @@
         var label = fmtMDYY(parseISO(range.start)) + ' – ' + fmtMDYY(parseISO(range.end));
         var cells = [el('td', { text: label })];
         y.residents.forEach(function (n) {
-          var block = range.blocks[n];
+          var block = (range.blocks || {})[n];
           var tm = (y.taskmasterBlocks || []).indexOf(block) !== -1;
           cells.push(el('td', { class: tm ? 'tm' : null, text: block == null ? '—' : String(block) }));
         });
@@ -1923,6 +2100,296 @@
       bCard.appendChild(el('div', { class: 'table-scroll' }, [bTbl]));
       host.appendChild(bCard);
     });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Setup / new-year import-export (UISPEC5 §E)                         */
+  /* ------------------------------------------------------------------ */
+
+  // Minimal validation for an uploaded configuration object. Returns an
+  // error string, or null when the object is usable.
+  function validateConfig(obj) {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return 'not a JSON object';
+    if (typeof obj.ayStart !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(obj.ayStart)) {
+      return 'missing or invalid ayStart (want YYYY-MM-DD)';
+    }
+    if (typeof obj.ayEnd !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(obj.ayEnd)) {
+      return 'missing or invalid ayEnd (want YYYY-MM-DD)';
+    }
+    if (!obj.years || typeof obj.years !== 'object') return 'missing years';
+    var yks = ['pgy2', 'pgy3', 'pgy4'];
+    for (var i = 0; i < yks.length; i++) {
+      var y = obj.years[yks[i]];
+      if (!y || typeof y !== 'object') return 'missing years.' + yks[i];
+      if (!Array.isArray(y.residents)) return 'years.' + yks[i] + '.residents must be an array';
+      if (!Array.isArray(y.blockRanges)) return 'years.' + yks[i] + '.blockRanges must be an array';
+      if (!y.grid || typeof y.grid !== 'object') return 'missing years.' + yks[i] + '.grid';
+      // The renderers/engine dereference every grid row (grid[block][wk]) —
+      // a null/non-object row would crash them AFTER validation passed.
+      var blocks = Object.keys(y.grid);
+      for (var b = 0; b < blocks.length; b++) {
+        var row = y.grid[blocks[b]];
+        if (!row || typeof row !== 'object') {
+          return 'years.' + yks[i] + '.grid["' + blocks[b] + '"] must be an object of weekday cells';
+        }
+      }
+    }
+    // Optional sections that the renderers dereference when present.
+    if (obj.specialClinics != null) {
+      if (!Array.isArray(obj.specialClinics)) return 'specialClinics must be an array';
+      for (var s = 0; s < obj.specialClinics.length; s++) {
+        var sc = obj.specialClinics[s];
+        if (!sc || typeof sc !== 'object' || typeof sc.session !== 'string') {
+          return 'specialClinics[' + s + '] needs a session string (\'am\'/\'pm\'/\'all\')';
+        }
+        if (sc.nth != null && !Array.isArray(sc.nth)) {
+          return 'specialClinics[' + s + '].nth must be an array of week numbers';
+        }
+      }
+    }
+    return null;
+  }
+
+  // Boot-time: apply a stored override BEFORE any render. A corrupt or
+  // invalid override must never brick the app — ignore it (with a warning).
+  function applyStoredOverrideAtBoot() {
+    var raw = lsGet(DATA_OVERRIDE_KEY);
+    if (!raw) return;
+    try {
+      var obj = JSON.parse(raw);
+      var err = validateConfig(obj);
+      if (err) throw new Error(err);
+      window.SCHED_DATA = obj;
+      usingOverride = true;
+      overrideBootError = null;
+    } catch (e) {
+      overrideBootError = (e && e.message) || String(e);
+      if (window.console) {
+        console.warn('Stored configuration override ignored: ' + overrideBootError);
+      }
+    }
+  }
+
+  // After the active data object changes at runtime, EVERYTHING derived from
+  // it must be rebuilt — including the static tabs (reference/howto/cpec),
+  // the header ayLabel, and the date pickers' min/max.
+  function rerenderEverything() {
+    residentYearMap = null; // yearOf() caches resident→year from the old data
+    var d = data();
+    [$('datePicker'), $('homeDate')].forEach(function (inp) {
+      if (inp && d.ayStart && d.ayEnd) {
+        inp.min = d.ayStart;
+        inp.max = d.ayEnd;
+      }
+    });
+    computeRoster();
+    renderHeader();
+    renderReference();
+    renderHowto();
+    renderCpecReference();
+    renderRosterTab();
+    renderCasesTab();
+    renderAssignTab();
+    renderPreview();
+    renderHome();
+    renderSetup();
+  }
+
+  function importConfigText(text) {
+    var obj;
+    try {
+      obj = JSON.parse(String(text));
+    } catch (e) {
+      toast('Not valid JSON — ' + ((e && e.message) || e), false);
+      return false;
+    }
+    var err = validateConfig(obj);
+    if (err) {
+      toast('Configuration rejected — ' + err, false);
+      return false;
+    }
+    // Trial-render BEFORE persisting: a config that passes the minimal
+    // validation can still crash a renderer, and a stored crasher would
+    // re-break every subsequent boot (with Setup — the only in-app way to
+    // remove it — unreachable). Persist only after a full successful render;
+    // on a throw, revert to the previous data and repair the DOM with it.
+    var prevData = window.SCHED_DATA;
+    var prevUsing = usingOverride;
+    window.SCHED_DATA = obj;
+    usingOverride = true;
+    try {
+      rerenderEverything();
+    } catch (e2) {
+      window.SCHED_DATA = prevData;
+      usingOverride = prevUsing;
+      try { rerenderEverything(); } catch (e3) { }
+      if (window.console) console.error('Imported configuration crashed rendering — not stored', e2);
+      toast('Configuration rejected — it breaks the app (' + ((e2 && e2.message) || e2) + '). Nothing was stored.', false);
+      return false;
+    }
+    lsSet(DATA_OVERRIDE_KEY, JSON.stringify(obj));
+    overrideBootError = null;
+    renderSetup(); // the status card may still show a stale failed-load notice
+    toast('Configuration imported — now using ' + (obj.ayLabel || 'the uploaded data') + ' (this browser only)');
+    return true;
+  }
+
+  function removeOverride() {
+    lsRemove(DATA_OVERRIDE_KEY);
+    window.SCHED_DATA = BUILTIN_DATA;
+    usingOverride = false;
+    overrideBootError = null;
+    rerenderEverything();
+    toast('Imported configuration removed — back to the built-in ' + (BUILTIN_DATA && BUILTIN_DATA.ayLabel || 'data'));
+  }
+
+  function downloadConfig() {
+    try {
+      var json = JSON.stringify(data(), null, 2);
+      var blob = new Blob([json], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = el('a', { href: url, download: 'surg-schedule-config.json' });
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      toast('Downloaded surg-schedule-config.json');
+    } catch (e) {
+      toast('Download failed — ' + ((e && e.message) || e), false);
+    }
+  }
+
+  function deleteAllSavedDays() {
+    var keys = lsKeys().filter(function (k) { return k.indexOf(LS_PREFIX) === 0; });
+    if (!keys.length) {
+      toast('No saved schedule days in this browser', false);
+      return;
+    }
+    if (!window.confirm('Delete all ' + keys.length + ' saved schedule day(s) from this browser? This cannot be undone.')) return;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    keys.forEach(lsRemove);
+    App.state = defaultState(App.state.date);
+    stateDirty = false; // fresh defaults — don't resurrect a key on next save
+    computeRoster();
+    renderAll();
+    renderHome();
+    renderSetup();
+    toast('Deleted ' + keys.length + ' saved day(s) — the app starts fresh');
+  }
+
+  function renderSetup() {
+    var host = $('setupBody');
+    if (!host) return;
+    clearNode(host);
+    var d = data();
+
+    // 1. How it works
+    var intro = refCard('Set up a new academic year');
+    intro.appendChild(el('p', {
+      class: 'ref-para',
+      text: 'All schedule knowledge lives in one configuration object — the block schedules and ' +
+        'block dates, the CPEC surgical block sheet, Cooper buddy call, the Night Float schedule, ' +
+        'and the assignment hierarchy. Download it, edit or replace the data for the new academic ' +
+        'year, then upload it back. Uploaded configurations live only in this browser — nothing is sent anywhere.'
+    }));
+    host.appendChild(intro);
+
+    // 2. Download
+    var dl = refCard('Download current configuration');
+    dl.appendChild(el('p', {
+      class: 'field-hint setup-hint',
+      text: 'Saves the ACTIVE configuration (including any import) as surg-schedule-config.json.'
+    }));
+    dl.appendChild(el('button', {
+      type: 'button', class: 'btn btn-primary', text: 'Download configuration (JSON)',
+      onclick: downloadConfig
+    }));
+    host.appendChild(dl);
+
+    // 3. Upload (file input + paste alternative)
+    var up = refCard('Upload configuration');
+    up.appendChild(el('p', {
+      class: 'field-hint setup-hint',
+      text: 'Pick the edited JSON file — or paste its contents below. It is validated before it replaces anything.'
+    }));
+    var fileIn = el('input', { type: 'file', accept: '.json,application/json' });
+    fileIn.addEventListener('change', function () {
+      var f = fileIn.files && fileIn.files[0];
+      if (!f) return;
+      if (typeof FileReader === 'undefined') {
+        toast('This browser cannot read files — paste the JSON instead', false);
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        importConfigText(reader.result);
+        fileIn.value = '';
+      };
+      reader.onerror = function () { toast('Could not read the file', false); };
+      reader.readAsText(f);
+    });
+    up.appendChild(labeledField('Configuration file', fileIn));
+    var ta = el('textarea', { rows: '6', class: 'setup-paste', placeholder: '…or paste the configuration JSON here' });
+    up.appendChild(labeledField('Paste JSON', ta));
+    up.appendChild(el('button', {
+      type: 'button', class: 'btn', text: 'Apply pasted JSON',
+      onclick: function () {
+        if (!trim(ta.value)) {
+          toast('Paste the configuration JSON first', false);
+          return;
+        }
+        importConfigText(ta.value);
+      }
+    }));
+    host.appendChild(up);
+
+    // 4. Active configuration status
+    var status = refCard('Active configuration');
+    var line = el('div', { class: 'setup-status' });
+    line.appendChild(el('span', {
+      class: 'chip ' + (usingOverride ? 'chip-special' : 'chip-day'),
+      text: usingOverride
+        ? 'Imported (' + (d.ayLabel || 'no ayLabel') + ') — stored in this browser'
+        : 'Built-in ' + (d.ayLabel || '')
+    }));
+    if (usingOverride) {
+      line.appendChild(el('button', {
+        type: 'button', class: 'btn btn-small', text: 'Remove imported configuration',
+        onclick: removeOverride
+      }));
+    }
+    status.appendChild(line);
+    // A stored override that failed to load at boot (corrupt JSON, failed
+    // validation, or a render crash) is otherwise invisible: the status says
+    // "Built-in" while the dead blob persists and re-warns on every boot.
+    // Surface it here with the only in-app way to remove it.
+    if (!usingOverride && lsGet(DATA_OVERRIDE_KEY) != null) {
+      status.appendChild(el('p', {
+        class: 'field-hint setup-hint',
+        text: 'A stored configuration could not be loaded' +
+          (overrideBootError ? ' — ' + overrideBootError : '') +
+          '. The built-in data is in use; remove the stored copy or upload a fixed file above.'
+      }));
+      status.appendChild(el('button', {
+        type: 'button', class: 'btn btn-small', text: 'Remove stored configuration',
+        onclick: removeOverride
+      }));
+    }
+    host.appendChild(status);
+
+    // 5. Danger zone — hand the app to the next class fresh
+    var dz = refCard('Danger zone');
+    dz.classList.add('danger-zone');
+    var nDays = savedDayISOs().length;
+    dz.appendChild(el('p', {
+      class: 'field-hint setup-hint',
+      text: nDays + ' saved schedule day(s) in this browser. Delete them all to hand the app to the next class fresh — the configuration above is untouched.'
+    }));
+    dz.appendChild(el('button', {
+      type: 'button', class: 'btn btn-danger', text: 'Delete all saved schedule days',
+      onclick: deleteAllSavedDays
+    }));
+    host.appendChild(dz);
   }
 
   /* ------------------------------------------------------------------ */
@@ -1973,7 +2440,28 @@
       toast('Could not read the saved day ' + src, false);
       return;
     }
-    App.state.nightFloat = String(prev.nightFloat || '');
+    // Night Float rotates weekly (Sun–Thu). Blindly copying yesterday's value
+    // across the rotation boundary would install LAST week's resident (e.g.
+    // copy Fri 7/24 'Perez' onto Mon 7/27 when the call schedule says
+    // 'Camacho'). When the call schedule knows both days and the week rolled
+    // over in between, take the current week's name; otherwise copy as before
+    // (preserving intentional within-week swaps).
+    var prevNF = String(prev.nightFloat || '');
+    var curRosterNF = (App.roster && App.roster.nightFloat) ? String(App.roster.nightFloat) : '';
+    var srcRosterNF = '';
+    try {
+      if (curRosterNF && window.Engine && window.Engine.resolveDay) {
+        var srcRoster = window.Engine.resolveDay(src, data());
+        srcRosterNF = (srcRoster && srcRoster.nightFloat) ? String(srcRoster.nightFloat) : '';
+      }
+    } catch (e2) { }
+    if (curRosterNF && srcRosterNF !== curRosterNF) {
+      App.state.nightFloat = curRosterNF;
+      App.state.nfCleared = false;
+    } else {
+      App.state.nightFloat = prevNF;
+      App.state.nfCleared = !!prev.nfCleared;
+    }
     App.state.vacation = String(prev.vacation || '');
     App.state.lectures = String(prev.lectures || '');
     // Carry over who is on call, but re-anchor the dates to THIS schedule day.
@@ -2093,7 +2581,7 @@
   /* button walks Home ↔ tabs instead of leaving the site               */
   /* ------------------------------------------------------------------ */
 
-  var VALID_ROUTES = ['home', 'roster', 'cases', 'assign', 'preview', 'howto', 'cpec', 'reference'];
+  var VALID_ROUTES = ['home', 'roster', 'cases', 'assign', 'preview', 'howto', 'cpec', 'reference', 'setup'];
 
   function routeFromHash() {
     var h = String(window.location.hash || '').replace(/^#\/?/, '');
@@ -2149,6 +2637,7 @@
     if (tab === 'assign') renderAssignTab();
     if (tab === 'preview') renderPreview();
     if (tab === 'cpec') renderCpecReference(); // re-render so the selected date's cell is highlighted
+    if (tab === 'setup') renderSetup(); // status line + saved-day count stay fresh
     // 'howto' and 'reference' are static — rendered once at boot.
     syncHash(tab);
   }
@@ -2170,6 +2659,11 @@
       return;
     }
 
+    // Capture the built-in data object (for 'Remove imported configuration'),
+    // then apply any stored override BEFORE the first render (UISPEC5 §E).
+    BUILTIN_DATA = window.SCHED_DATA;
+    applyStoredOverrideAtBoot();
+
     var dp = $('datePicker');
     var initial = tomorrowISO();
     dp.value = initial;
@@ -2177,13 +2671,16 @@
 
     // Steer both date pickers to the academic year (defaults stay "tomorrow"
     // from the real clock — nothing is pinned to any particular month).
-    var d = data();
-    [dp, $('homeDate')].forEach(function (inp) {
-      if (inp && d.ayStart && d.ayEnd) {
-        inp.min = d.ayStart;
-        inp.max = d.ayEnd;
-      }
-    });
+    function applyPickerRange() {
+      var d = data();
+      [dp, $('homeDate')].forEach(function (inp) {
+        if (inp && d.ayStart && d.ayEnd) {
+          inp.min = d.ayStart;
+          inp.max = d.ayEnd;
+        }
+      });
+    }
+    applyPickerRange();
 
     var tabs = document.querySelectorAll('.tabbar .tab');
     for (var i = 0; i < tabs.length; i++) {
@@ -2199,6 +2696,10 @@
       if (m) m.removeAttribute('open');
     }
     $('btnYesterday').addEventListener('click', function () { closeMoreMenu(); startFromYesterday(); });
+    var btnSetupMenu = $('btnSetupMenu');
+    if (btnSetupMenu) {
+      btnSetupMenu.addEventListener('click', function () { closeMoreMenu(); setTab('setup'); });
+    }
     $('btnClear').addEventListener('click', function () { closeMoreMenu(); clearDay(); });
     document.addEventListener('click', function (ev) {
       var m = $('moreMenu');
@@ -2252,13 +2753,39 @@
         enterApp((homeDate && homeDate.value) || tomorrowISO(), 'reference');
       });
     }
+    var btnHomeSetup = $('btnHomeSetup');
+    if (btnHomeSetup) {
+      btnHomeSetup.addEventListener('click', function () {
+        enterApp((homeDate && homeDate.value) || tomorrowISO(), 'setup');
+      });
+    }
 
     window.addEventListener('beforeunload', saveNow);
 
-    renderReference();
-    renderHowto();
-    renderCpecReference();
-    setDate(initial);
+    // First render. A stored override that passed validation can still crash
+    // a renderer — that must never brick the boot (Reference/Howto/CPEC empty,
+    // routing dead, Setup unreachable), so fall back to the built-in data and
+    // surface the problem instead. The dead blob stays in localStorage;
+    // renderSetup shows it with a Remove button.
+    function firstRender() {
+      renderReference();
+      renderHowto();
+      renderCpecReference();
+      setDate(initial);
+    }
+    try {
+      firstRender();
+    } catch (bootErr) {
+      if (!usingOverride) throw bootErr; // built-in data — a real bug, don't hide it
+      overrideBootError = 'it breaks rendering (' + ((bootErr && bootErr.message) || bootErr) + ')';
+      if (window.console) console.error('Stored configuration crashed rendering — using built-in data', bootErr);
+      window.SCHED_DATA = BUILTIN_DATA;
+      usingOverride = false;
+      residentYearMap = null; // cached from the bad data
+      applyPickerRange();
+      firstRender();
+      toast('Stored configuration could not be loaded — using the built-in data. Remove or replace it on the Setup page.', false);
+    }
 
     // Land on Home (body starts with .home-active from the markup) — unless
     // the URL deep-links a tab (#/cases etc.), then go straight there.

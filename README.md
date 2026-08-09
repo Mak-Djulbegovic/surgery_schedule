@@ -68,13 +68,25 @@ docs/                 architecture & UI specs, screenshots
 .github/workflows/    GitHub Pages deployment
 ```
 
-## Updating for a new academic year
+## New academic year
 
-Every schedule fact is data, not code — all in **`js/data.js`**:
+Every schedule fact is data, not code. The easiest path is the in-app
+**Setup page** (Home → "Set up a new year", or the ⋯ menu → "Setup / new
+year"): download the active configuration as `surg-schedule-config.json`,
+edit or replace the data for the new year, and upload it back — no code
+changes, no redeploy. Uploaded configurations are validated first and live
+only in that browser (a "Remove imported configuration" button reverts to
+the built-in data). The Setup page's danger zone also deletes all saved
+schedule days, for handing the app to the next class fresh.
+
+To change the built-in defaults instead, edit **`js/data.js`** — the same
+object the Setup page exports:
 
 - `years.pgy2/pgy3/pgy4`: resident lists, block-date ranges, weekly grids,
   footnote override rules (`nth` weekday / month scoped)
 - `buddyCall`: Cooper buddy template + named ranges
+- `nfSchedule`: weekly Night Float ranges from the call sheet
+- `cpecSheet`: the CPEC surgical block schedule
 - `hierarchy`, `schedulingNotes`, `specialClinics`, reference content
 
 Transcribe the new year's PDFs into that one file and the whole app follows.
