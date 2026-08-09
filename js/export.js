@@ -132,24 +132,29 @@
   }
 
   // 'Cornea PM (29x3): **Momenaei, Williamson, Aguwa**'
+  // Session 'day' (the CPEC PO standing clinic, UISPEC5 §C) renders with NO
+  // session suffix: 'CPEC PO (…): **names**'. Labels are collected from the
+  // roster clinics plus any count OR staff-override key, so a clinic that is
+  // only staffed manually (no roster group, no count yet) still prints.
   function clinicLines(day, roster) {
     var clinics = roster.clinics || {};
     var counts = day.clinicCounts || {};
+    var overrides = day.clinicStaffOverrides || {};
     var labels = Object.keys(clinics);
-    Object.keys(counts).forEach(function (k) {
+    Object.keys(counts).concat(Object.keys(overrides)).forEach(function (k) {
       var label = k.split('|')[0];
       if (label && labels.indexOf(label) === -1) labels.push(label);
     });
     labels.sort();
     var lines = [];
     labels.forEach(function (label) {
-      ['am', 'pm'].forEach(function (session) {
+      ['day', 'am', 'pm'].forEach(function (session) {
         var staff = clinicStaff(day, roster, label, session);
         var cc = counts[label + '|' + session] || {};
         var count = trim(cc.count);
         var extra = trim(cc.extra);
         if (!staff.length && !count && !extra) return;
-        var head = label + ' ' + session.toUpperCase();
+        var head = session === 'day' ? label : label + ' ' + session.toUpperCase();
         var paren = [];
         if (count) paren.push(count);
         if (extra) paren.push(extra);

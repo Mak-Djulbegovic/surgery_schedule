@@ -358,6 +358,40 @@ contains(html, 'Cornea PM (29x3): <b>Momenaei, Williamson, Aguwa</b>',
 contains(text, 'Tuesday night (7/21/26): **Djulbegovic**', 'text: add-on line');
 contains(html, 'Tuesday night (7/21/26): <b>Djulbegovic</b>', 'html: add-on line');
 
+// CPEC PO standing clinic (UISPEC5 §C): session 'day' renders NO session
+// suffix — 'CPEC PO (…): **names**' — and a label staffed only via
+// clinicStaffOverrides (no roster group, no count entry) still prints.
+var dayPO = JSON.parse(JSON.stringify(day));
+dayPO.roster = roster;
+dayPO.clinicStaffOverrides = {
+  'CPEC PO|day': { removed: [], added: ['Djulbegovic', 'Samuel', 'Cheng', 'Calotti'] }
+};
+var textPO = ExportFmt.buildText(dayPO);
+contains(textPO, 'CPEC PO: **Djulbegovic, Samuel, Cheng, Calotti**',
+  "text: CPEC PO 'day' line staffed via overrides only (no count entry)");
+ok(textPO.indexOf('CPEC PO AM') === -1 && textPO.indexOf('CPEC PO PM') === -1 &&
+   textPO.indexOf('CPEC PO DAY') === -1,
+  "text: 'day' session renders without any session suffix");
+contains(ExportFmt.buildHTML(dayPO), 'CPEC PO: <b>Djulbegovic, Samuel, Cheng, Calotti</b>',
+  "html: CPEC PO 'day' line");
+
+// With a count the parenthetical joins the suffix-less head; the Cornea PM
+// line (am/pm sessions) is untouched by the 'day' addition.
+dayPO.clinicCounts['CPEC PO|day'] = { count: '4 post-ops', extra: '' };
+var textPO2 = ExportFmt.buildText(dayPO);
+contains(textPO2, 'CPEC PO (4 post-ops): **Djulbegovic, Samuel, Cheng, Calotti**',
+  "text: CPEC PO 'day' line with a count");
+contains(textPO2, 'Cornea PM (29x3): **Momenaei, Williamson, Aguwa**',
+  "text: am/pm clinic lines unchanged next to a 'day' line");
+
+// Empty 'CPEC PO|day' entries (no staff, blank count) stay out of the output.
+var dayPOEmpty = JSON.parse(JSON.stringify(day));
+dayPOEmpty.roster = roster;
+dayPOEmpty.clinicCounts['CPEC PO|day'] = { count: '', extra: '' };
+dayPOEmpty.clinicStaffOverrides = { 'CPEC PO|day': { removed: [], added: [] } };
+ok(ExportFmt.buildText(dayPOEmpty).indexOf('CPEC PO') === -1,
+  'text: unstaffed/uncounted CPEC PO row never prints');
+
 // Empty JHN section renders '-none'
 var day2 = JSON.parse(JSON.stringify(day));
 day2.roster = roster; // keep live roster reference shape
