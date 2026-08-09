@@ -671,6 +671,60 @@ ok(allSvcText.indexOf('1030 & 1300') === -1,
   'caseLine: serviceTimes suppressed when the service clause is suppressed');
 
 /* ================================================================== */
+/* (10) UISPEC5 §A — Night Float + day-float coverage through the      */
+/* integration surface (real DATA.nfSchedule + Engine.resolveDay)      */
+
+// (a) 2026-07-22 — Perez week: nightFloat + dayFloatCoverage shape.
+var nfDay = Engine.resolveDay('2026-07-22', DATA);
+eq(nfDay.nightFloat, 'Perez', 'nf integration: 7/22 nightFloat = Perez');
+ok(nfDay.dayFloatCoverage && typeof nfDay.dayFloatCoverage === 'object',
+  'nf integration: 7/22 dayFloatCoverage present');
+eq(nfDay.dayFloatCoverage && nfDay.dayFloatCoverage.nf, 'Perez',
+  'nf integration: 7/22 dayFloatCoverage.nf = Perez');
+includes(nfDay.dayFloatCoverage && nfDay.dayFloatCoverage.coveredBy, 'Tang',
+  'nf integration: 7/22 dayFloatCoverage.coveredBy includes Tang');
+
+// (b) 2026-08-10 — Tang week (Tang is also the day float that block).
+var nfDay2 = Engine.resolveDay('2026-08-10', DATA);
+eq(nfDay2.nightFloat, 'Tang', 'nf integration: 8/10 nightFloat = Tang');
+
+// (c) 2026-09-02 — week not filled in the call sheet: both null.
+var nfGap = Engine.resolveDay('2026-09-02', DATA);
+eq(nfGap.nightFloat, null, 'nf integration: 9/2 nightFloat null (week not filled)');
+eq(nfGap.dayFloatCoverage, null, 'nf integration: 9/2 dayFloatCoverage null (week not filled)');
+
+/* ================================================================== */
+/* (11) UISPEC5 §C — CPEC PO clinic line via buildText (exact render)  */
+
+// (d) clinicStaffOverrides['CPEC PO|day'] added ['Cheng'] +
+// clinicCounts['CPEC PO|day'] {count:'4'} → a line that is EXACTLY
+// 'CPEC PO (4): **Cheng**' (session 'day' = no AM/PM suffix), while the
+// existing am/pm clinic lines ('Cornea PM (…)') keep rendering.
+var dayPOx = JSON.parse(JSON.stringify(day));
+dayPOx.roster = roster;
+dayPOx.clinicStaffOverrides = { 'CPEC PO|day': { removed: [], added: ['Cheng'] } };
+dayPOx.clinicCounts['CPEC PO|day'] = { count: '4' };
+var textPOx = ExportFmt.buildText(dayPOx);
+ok(textPOx.split('\n').indexOf('CPEC PO (4): **Cheng**') !== -1,
+  "cpec po (d): buildText contains the exact line 'CPEC PO (4): **Cheng**' — got " +
+  JSON.stringify(textPOx.split('\n').filter(function (l) { return l.indexOf('CPEC PO') !== -1; })));
+ok(textPOx.indexOf('CPEC PO AM') === -1 && textPOx.indexOf('CPEC PO PM') === -1,
+  "cpec po (d): the 'day' session line carries no AM/PM suffix");
+contains(textPOx, 'Cornea PM (29x3): **Momenaei, Williamson, Aguwa**',
+  "cpec po (d): existing 'Cornea PM (…)' line still renders alongside the day line");
+ok(/Cornea PM \(/.test(textPOx),
+  "cpec po (d): am/pm sessions keep their session suffix");
+
+// (e) No CPEC PO data → buildText output is byte-identical to the baseline
+// text built earlier from the same day state (and contains no CPEC PO line).
+var dayNoPO = JSON.parse(JSON.stringify(day));
+dayNoPO.roster = roster;
+eq(ExportFmt.buildText(dayNoPO), text,
+  'cpec po (e): buildText unchanged (byte-identical) when no CPEC PO data present');
+ok(text.indexOf('CPEC PO') === -1,
+  'cpec po (e): baseline output has no CPEC PO line without staff/count data');
+
+/* ================================================================== */
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures > 0) process.exit(1);
 console.log('OK');

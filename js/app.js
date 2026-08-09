@@ -38,6 +38,10 @@
   // tracks whether window.SCHED_DATA currently comes from localStorage.
   var BUILTIN_DATA = null;
   var usingOverride = false;
+  // Why the stored override is NOT active (parse/validation/render failure at
+  // boot) — renderSetup surfaces it with a Remove button so the dead blob is
+  // visible and removable in-app instead of silently re-warning every boot.
+  var overrideBootError = null;
 
   function data() { return window.SCHED_DATA; }
 
@@ -166,6 +170,7 @@
       date: dateISO,
       lectures: '',
       nightFloat: '',
+      nfCleared: false, // user explicitly blanked Night Float — never re-prefill
       vacation: '24 strong',
       cooperBuddyAM: { name: '', note: '' },
       cooperBuddyPM: { name: '', note: '' },
@@ -206,6 +211,7 @@
     var out = defaultState(dateISO);
     if (typeof st.lectures === 'string') out.lectures = st.lectures;
     if (typeof st.nightFloat === 'string') out.nightFloat = st.nightFloat;
+    out.nfCleared = !!st.nfCleared;
     if (typeof st.vacation === 'string') out.vacation = st.vacation;
     if (st.cooperBuddyAM) out.cooperBuddyAM = normBuddy(st.cooperBuddyAM);
     if (st.cooperBuddyPM) out.cooperBuddyPM = normBuddy(st.cooperBuddyPM);
@@ -447,12 +453,16 @@
 
   /* Night Float prefill (UISPEC5 §B) — roster.nightFloat may be absent while
      the nfSchedule lands; guard everything. NEVER overwrite a user-typed
-     value: prefill only when the field is empty. */
+     value: prefill only when the field is empty AND the user has not
+     deliberately blanked it (st.nfCleared) — otherwise every Update/Create
+     recompute would resurrect the call-schedule name and an intentional
+     blank (NF swap/vacancy night) would be unrepresentable. */
 
   function prefillNightFloat() {
     var st = App.state;
     var r = App.roster;
     if (!st || !r || !r.nightFloat) return;
+    if (st.nfCleared) return;
     if (!trim(st.nightFloat)) st.nightFloat = String(r.nightFloat);
   }
 
@@ -698,9 +708,21 @@
   function updateNfHint() {
     var n = $('nfHint');
     if (!n) return;
-    var on = nfAutoFilled();
-    n.textContent = on ? 'from the call schedule — edit freely' : '';
-    n.classList.toggle('hidden', !on);
+    var txt = '';
+    if (nfAutoFilled()) {
+      txt = 'from the call schedule — edit freely';
+    } else {
+      // Field holds something other than the call-schedule name (manual swap,
+      // stale copy…) — say so instead of hiding the mismatch.
+      var st = App.state;
+      var r = App.roster;
+      if (st && r && r.nightFloat && trim(st.nightFloat) &&
+          trim(st.nightFloat) !== String(r.nightFloat)) {
+        txt = 'call schedule has ' + r.nightFloat + ' for this week';
+      }
+    }
+    n.textContent = txt;
+    n.classList.toggle('hidden', !txt);
   }
 
   function renderManualInputs() {
@@ -716,6 +738,9 @@
     var nf = el('input', { type: 'text', placeholder: 'resident name', value: st.nightFloat });
     nf.addEventListener('input', function () {
       st.nightFloat = nf.value;
+      // Emptying the field is an explicit choice — remember it so recomputes
+      // (Update/Create/date revisits) don't resurrect the call-schedule name.
+      st.nfCleared = !trim(nf.value);
       touch();
       renderSummary();
       updateNfHint();
@@ -2099,6 +2124,28 @@
       if (!Array.isArray(y.residents)) return 'years.' + yks[i] + '.residents must be an array';
       if (!Array.isArray(y.blockRanges)) return 'years.' + yks[i] + '.blockRanges must be an array';
       if (!y.grid || typeof y.grid !== 'object') return 'missing years.' + yks[i] + '.grid';
+      // The renderers/engine dereference every grid row (grid[block][wk]) —
+      // a null/non-object row would crash them AFTER validation passed.
+      var blocks = Object.keys(y.grid);
+      for (var b = 0; b < blocks.length; b++) {
+        var row = y.grid[blocks[b]];
+        if (!row || typeof row !== 'object') {
+          return 'years.' + yks[i] + '.grid["' + blocks[b] + '"] must be an object of weekday cells';
+        }
+      }
+    }
+    // Optional sections that the renderers dereference when present.
+    if (obj.specialClinics != null) {
+      if (!Array.isArray(obj.specialClinics)) return 'specialClinics must be an array';
+      for (var s = 0; s < obj.specialClinics.length; s++) {
+        var sc = obj.specialClinics[s];
+        if (!sc || typeof sc !== 'object' || typeof sc.session !== 'string') {
+          return 'specialClinics[' + s + '] needs a session string (\'am\'/\'pm\'/\'all\')';
+        }
+        if (sc.nth != null && !Array.isArray(sc.nth)) {
+          return 'specialClinics[' + s + '].nth must be an array of week numbers';
+        }
+      }
     }
     return null;
   }
@@ -2114,9 +2161,11 @@
       if (err) throw new Error(err);
       window.SCHED_DATA = obj;
       usingOverride = true;
+      overrideBootError = null;
     } catch (e) {
+      overrideBootError = (e && e.message) || String(e);
       if (window.console) {
-        console.warn('Stored configuration override ignored: ' + ((e && e.message) || e));
+        console.warn('Stored configuration override ignored: ' + overrideBootError);
       }
     }
   }
@@ -2159,10 +2208,28 @@
       toast('Configuration rejected — ' + err, false);
       return false;
     }
-    lsSet(DATA_OVERRIDE_KEY, JSON.stringify(obj));
+    // Trial-render BEFORE persisting: a config that passes the minimal
+    // validation can still crash a renderer, and a stored crasher would
+    // re-break every subsequent boot (with Setup — the only in-app way to
+    // remove it — unreachable). Persist only after a full successful render;
+    // on a throw, revert to the previous data and repair the DOM with it.
+    var prevData = window.SCHED_DATA;
+    var prevUsing = usingOverride;
     window.SCHED_DATA = obj;
     usingOverride = true;
-    rerenderEverything();
+    try {
+      rerenderEverything();
+    } catch (e2) {
+      window.SCHED_DATA = prevData;
+      usingOverride = prevUsing;
+      try { rerenderEverything(); } catch (e3) { }
+      if (window.console) console.error('Imported configuration crashed rendering — not stored', e2);
+      toast('Configuration rejected — it breaks the app (' + ((e2 && e2.message) || e2) + '). Nothing was stored.', false);
+      return false;
+    }
+    lsSet(DATA_OVERRIDE_KEY, JSON.stringify(obj));
+    overrideBootError = null;
+    renderSetup(); // the status card may still show a stale failed-load notice
     toast('Configuration imported — now using ' + (obj.ayLabel || 'the uploaded data') + ' (this browser only)');
     return true;
   }
@@ -2171,6 +2238,7 @@
     lsRemove(DATA_OVERRIDE_KEY);
     window.SCHED_DATA = BUILTIN_DATA;
     usingOverride = false;
+    overrideBootError = null;
     rerenderEverything();
     toast('Imported configuration removed — back to the built-in ' + (BUILTIN_DATA && BUILTIN_DATA.ayLabel || 'data'));
   }
@@ -2291,6 +2359,22 @@
       }));
     }
     status.appendChild(line);
+    // A stored override that failed to load at boot (corrupt JSON, failed
+    // validation, or a render crash) is otherwise invisible: the status says
+    // "Built-in" while the dead blob persists and re-warns on every boot.
+    // Surface it here with the only in-app way to remove it.
+    if (!usingOverride && lsGet(DATA_OVERRIDE_KEY) != null) {
+      status.appendChild(el('p', {
+        class: 'field-hint setup-hint',
+        text: 'A stored configuration could not be loaded' +
+          (overrideBootError ? ' — ' + overrideBootError : '') +
+          '. The built-in data is in use; remove the stored copy or upload a fixed file above.'
+      }));
+      status.appendChild(el('button', {
+        type: 'button', class: 'btn btn-small', text: 'Remove stored configuration',
+        onclick: removeOverride
+      }));
+    }
     host.appendChild(status);
 
     // 5. Danger zone — hand the app to the next class fresh
@@ -2356,7 +2440,28 @@
       toast('Could not read the saved day ' + src, false);
       return;
     }
-    App.state.nightFloat = String(prev.nightFloat || '');
+    // Night Float rotates weekly (Sun–Thu). Blindly copying yesterday's value
+    // across the rotation boundary would install LAST week's resident (e.g.
+    // copy Fri 7/24 'Perez' onto Mon 7/27 when the call schedule says
+    // 'Camacho'). When the call schedule knows both days and the week rolled
+    // over in between, take the current week's name; otherwise copy as before
+    // (preserving intentional within-week swaps).
+    var prevNF = String(prev.nightFloat || '');
+    var curRosterNF = (App.roster && App.roster.nightFloat) ? String(App.roster.nightFloat) : '';
+    var srcRosterNF = '';
+    try {
+      if (curRosterNF && window.Engine && window.Engine.resolveDay) {
+        var srcRoster = window.Engine.resolveDay(src, data());
+        srcRosterNF = (srcRoster && srcRoster.nightFloat) ? String(srcRoster.nightFloat) : '';
+      }
+    } catch (e2) { }
+    if (curRosterNF && srcRosterNF !== curRosterNF) {
+      App.state.nightFloat = curRosterNF;
+      App.state.nfCleared = false;
+    } else {
+      App.state.nightFloat = prevNF;
+      App.state.nfCleared = !!prev.nfCleared;
+    }
     App.state.vacation = String(prev.vacation || '');
     App.state.lectures = String(prev.lectures || '');
     // Carry over who is on call, but re-anchor the dates to THIS schedule day.
@@ -2566,13 +2671,16 @@
 
     // Steer both date pickers to the academic year (defaults stay "tomorrow"
     // from the real clock — nothing is pinned to any particular month).
-    var d = data();
-    [dp, $('homeDate')].forEach(function (inp) {
-      if (inp && d.ayStart && d.ayEnd) {
-        inp.min = d.ayStart;
-        inp.max = d.ayEnd;
-      }
-    });
+    function applyPickerRange() {
+      var d = data();
+      [dp, $('homeDate')].forEach(function (inp) {
+        if (inp && d.ayStart && d.ayEnd) {
+          inp.min = d.ayStart;
+          inp.max = d.ayEnd;
+        }
+      });
+    }
+    applyPickerRange();
 
     var tabs = document.querySelectorAll('.tabbar .tab');
     for (var i = 0; i < tabs.length; i++) {
@@ -2654,10 +2762,30 @@
 
     window.addEventListener('beforeunload', saveNow);
 
-    renderReference();
-    renderHowto();
-    renderCpecReference();
-    setDate(initial);
+    // First render. A stored override that passed validation can still crash
+    // a renderer — that must never brick the boot (Reference/Howto/CPEC empty,
+    // routing dead, Setup unreachable), so fall back to the built-in data and
+    // surface the problem instead. The dead blob stays in localStorage;
+    // renderSetup shows it with a Remove button.
+    function firstRender() {
+      renderReference();
+      renderHowto();
+      renderCpecReference();
+      setDate(initial);
+    }
+    try {
+      firstRender();
+    } catch (bootErr) {
+      if (!usingOverride) throw bootErr; // built-in data — a real bug, don't hide it
+      overrideBootError = 'it breaks rendering (' + ((bootErr && bootErr.message) || bootErr) + ')';
+      if (window.console) console.error('Stored configuration crashed rendering — using built-in data', bootErr);
+      window.SCHED_DATA = BUILTIN_DATA;
+      usingOverride = false;
+      residentYearMap = null; // cached from the bad data
+      applyPickerRange();
+      firstRender();
+      toast('Stored configuration could not be loaded — using the built-in data. Remove or replace it on the Setup page.', false);
+    }
 
     // Land on Home (body starts with .home-active from the markup) — unless
     // the URL deep-links a tab (#/cases etc.), then go straight there.
