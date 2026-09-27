@@ -174,6 +174,24 @@
   /* chain token resolution                                              */
   /* ------------------------------------------------------------------ */
 
+  function cooperSeniorFrom(roster) {
+    var d = getData();
+    var block = null;
+    if (d && d.years && d.years.pgy4) {
+      block = d.years.pgy4.cooperBlock;
+      if (block == null && typeof require !== 'undefined') {
+        try { block = require('./engine.js').cooperBlockOf(d); } catch (e) { block = null; }
+      } else if (block == null && typeof window !== 'undefined' && window.Engine && window.Engine.cooperBlockOf) {
+        block = window.Engine.cooperBlockOf(d);
+      }
+    }
+    var list = (roster && roster.residents) || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].year === 'pgy4' && list[i].block === block) return list[i].name;
+    }
+    return null;
+  }
+
   // -> { label, names: [..], freeJunior?: true }
   // `sessions` (optional, e.g. ['pm']) restricts which roster sessions the
   // OR-block / clinic tokens draw from; case chains use both sessions.
@@ -206,8 +224,12 @@
       return { label: FREE_JUNIOR_LABEL, names: [], freeJunior: true };
     }
     if (token === 'COOPER') {
-      var cooper = (roster && roster.cooperConsults) || [];
-      return { label: 'Cooper Consults', names: cooper.length ? [cooper[0]] : [] };
+      // The how-to's "Cooper" is the PGY-4 on the Cooper block (chief,
+      // 9/2026) — resolved by the engine; hand-built rosters fall back to
+      // the resident list + data.
+      var cs = roster ? roster.cooperSenior : null;
+      if (cs === undefined) cs = cooperSeniorFrom(roster);
+      return { label: 'Cooper (PGY-4)', names: cs ? [cs] : [] };
     }
     if (token === 'WILLS_OR') {
       return { label: 'Wills OR', names: orBlockPeople(roster, 'Wills OR', sessions).map(function (p) { return p.name; }) };
@@ -345,6 +367,7 @@
       var why = null;
       if (st.kind === 'out') why = st.label;
       else if (st.kind === 'case') why = busyText(st);
+      else if (st.cls === 'offsite') why = st.label; // at Cooper — not pulled to Wills
       else if (spansOverlap(extra[cand.name], spans)) why = 'suggested for another case at this time';
       else if (cand.requireFree && st.kind !== 'free') why = st.label;
       if (!why && !primary) { primary = cand; primaryStatus = st; }
@@ -375,8 +398,7 @@
   // Who covers `pulled.clinic` over its window: the clinic-coverage chain
   // (Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 → Wills OR →
   // Retina), then any free senior, then any free junior. A coverer must be
-  // free (not out, in a case, or already in a clinic); the Cooper resident on
-  // consults may cover because the how-to names them.
+  // free — not out, in a case, in a clinic, on fixed duty or off-site.
   function findClinicCover(pulled, roster, data, board, excludeNames, excludeId) {
     var hierarchy = (data && data.hierarchy) || {};
     var chain = (hierarchy.clinicCoverage && hierarchy.clinicCoverage.chain) || [];
@@ -403,7 +425,7 @@
     var ok = [];
     cands.forEach(function (cand) {
       var st = board.statusDuring(cand.name, pulled.start, pulled.end, { exclude: excludeId });
-      var fine = st.kind === 'free' || (st.kind === 'duty' && cand.token === 'COOPER');
+      var fine = st.kind === 'free';
       steps.push({ name: cand.name, source: cand.source, status: st, verdict: fine ? (ok.length ? 'alt' : 'take') : 'skip', why: fine ? null : busyText(st) });
       if (fine) ok.push(cand);
     });

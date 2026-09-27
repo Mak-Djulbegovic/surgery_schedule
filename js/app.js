@@ -803,7 +803,7 @@
       ]);
       // How-to Step 2: Surg 3 and 4 are all day even when the grid shows a
       // clinic — the clinic is where they go when they have no case.
-      var allDay = n === '3' || n === '4';
+      var allDay = !!s.allDay;
       if (s.am && !s.pm) {
         tile.appendChild(el('div', {
           class: 'glance-sess' + (allDay ? ' glance-allday' : ''),
@@ -2459,7 +2459,7 @@
     var card = el('div', { class: 'card' });
     card.appendChild(el('h2', {}, ['Everyone’s day ', el('span', { class: 'h-note', text: '7 AM – 5 PM · the line is ' + S.fmtClock(t) })]));
     var legend = el('div', { class: 'tl-legend' });
-    [['free', 'free'], ['case', 'in a case'], ['clinic', 'clinic'], ['duty', 'ER / consults / Day Float'], ['out', 'out']].forEach(function (k) {
+    [['free', 'free'], ['case', 'in a case'], ['clinic', 'clinic'], ['duty', 'ER / consults / Day Float / off-site'], ['out', 'out']].forEach(function (k) {
       legend.appendChild(el('span', { class: 'tl-key' }, [el('span', { class: 'tl-swatch ' + KIND_CLASS[k[0]] }), k[1]]));
     });
     card.appendChild(legend);
@@ -2662,7 +2662,7 @@
   }
 
   var CHAIN_TOKEN_LABELS = {
-    COOPER: 'Cooper',
+    COOPER: 'Cooper (PGY-4)',
     WILLS_OR: 'Wills OR',
     RETINA: 'Retina',
     PEDS_OR_JUNIOR: 'junior on Peds OR',

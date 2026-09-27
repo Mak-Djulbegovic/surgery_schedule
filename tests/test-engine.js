@@ -541,6 +541,31 @@ eq(nf5.nightFloat, null, 'NF absent nfSchedule: nightFloat null');
 eq(nf5.dayFloatCoverage, null, 'NF absent nfSchedule: dayFloatCoverage null');
 eq(nf5.surg['1'] && nf5.surg['1'].name, 'Cheng', 'NF absent nfSchedule: rest of resolveDay unaffected');
 
+/* ---------- updated AY PDF (9/2026): PGY-4 Block 4 Thursday AM = CPEC (YAG clinic) ---------- */
+var yag = Engine.resolveDay('2026-10-01', DATA); // Thu; Cheng is pgy4 block 4 (9/21–10/11)
+var cheng = byName(yag, 'Cheng');
+eq(cheng && cheng.block, 4, '10/1: Cheng on block 4');
+eq(cheng && cheng.am.text, 'CPEC', 'Block 4 Thu AM is CPEC (was Retina OR)');
+includes(cheng && cheng.am.notes, 'YAG clinic', 'Block 4 Thu AM carries the YAG clinic note');
+eq(cheng && cheng.pm.text, 'Retina OR', 'Block 4 Thu PM stays Retina OR');
+ok(!((yag.orBlocks['Retina OR'] || {}).am || []).some(function (p) { return p.name === 'Cheng'; }), 'Cheng not on Retina OR AM');
+includes(names((yag.orBlocks['Retina OR'] || {}).pm), 'Cheng', 'Cheng on Retina OR PM');
+
+/* ---------- Surg 3/4 are all day (how-to Step 2) ---------- */
+var d722 = Engine.resolveDay('2026-07-22', DATA);
+eq(d722.surg['3'].allDay, true, 'Surg 3 flagged all day');
+eq(d722.surg['4'].allDay, true, 'Surg 4 flagged all day');
+eq(d722.surg['1'].allDay, undefined, 'Surg 1 not flagged (already both sessions)');
+eq(d722.surg['3'].pm, false, 'the grid itself is unchanged: Surg 3 PM text is still Cornea');
+
+/* ---------- "Cooper" in the chains = PGY-4 on the Cooper block ---------- */
+eq(d722.cooperSenior, 'Shields', '7/22: Shields is on the Cooper block (7)');
+eq(Engine.resolveDay('2026-09-28', DATA).cooperSenior, 'Samuel', '9/28: Samuel is on the Cooper block');
+eq(Engine.resolveDay('2026-09-26', DATA).cooperSenior, null, 'weekend: no Cooper senior');
+var noKey = JSON.parse(JSON.stringify(DATA));
+delete noKey.years.pgy4.cooperBlock;
+eq(Engine.cooperBlockOf(noKey), 7, 'Cooper block derived from the grid when the key is absent');
+
 /* ---------- summary ---------- */
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures > 0) {

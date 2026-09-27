@@ -1566,6 +1566,9 @@ const SCHED_DATA = {
       short: 'PGY-4',
       residents: ['Bair', 'Aguwa', 'Samuel', 'Wibbelsman', 'Calotti', 'Djulbegovic', 'Cheng', 'Shields'],
       taskmasterBlocks: [],
+      // Block 7 = the Cooper block (Cooper Clinic Thu, Cooper OR Fri). Its
+      // resident is the "Cooper" in the how-to's chains (chief, 9/2026).
+      cooperBlock: 7,
       blockRanges: [
         { start: '2026-07-20', end: '2026-08-09', blocks: { Bair: 3, Aguwa: 6, Samuel: 4, Wibbelsman: 5, Calotti: 8, Djulbegovic: 2, Cheng: 1, Shields: 7 } },
         { start: '2026-08-10', end: '2026-08-30', blocks: { Bair: 4, Aguwa: 7, Samuel: 5, Wibbelsman: 6, Calotti: 1, Djulbegovic: 3, Cheng: 2, Shields: 8 } },
@@ -1610,7 +1613,7 @@ const SCHED_DATA = {
           mon: { am: 'Surg 1', pm: 'Surg 1' },
           tue: { am: 'CPEC', pm: 'CPEC' },
           wed: { am: 'Retina', pm: 'Retina' },
-          thu: { am: 'Retina OR', pm: 'Retina OR' },
+          thu: { am: 'CPEC', pm: 'Retina OR' },   // AM changed in the UPDATED AY PDF (9/2026): CPEC, YAG clinic
           fri: { am: 'Retina', pm: 'Retina' }
         },
         5: {
@@ -1646,6 +1649,8 @@ const SCHED_DATA = {
         // Block 4: Tabas cataracts 3rd Wednesday; Dunn cataracts every 4th Friday
         { block: 4, day: 'wed', session: 'am', nth: [3], set: 'Tabas Cataracts', note: 'Tabas cataracts 3rd Wednesday' },
         { block: 4, day: 'wed', session: 'pm', nth: [3], set: 'Tabas Cataracts', note: 'Tabas cataracts 3rd Wednesday' },
+        // Block 4: Thursday AM YAG clinic (updated AY PDF, 9/2026)
+        { block: 4, day: 'thu', session: 'am', note: 'YAG clinic' },
         { block: 4, day: 'fri', session: 'am', nth: [4], set: 'Dunn Cataracts', note: 'Dunn cataracts every 4th Friday' },
         { block: 4, day: 'fri', session: 'pm', nth: [4], set: 'Dunn Cataracts', note: 'Dunn cataracts every 4th Friday' },
         // Block 5: Tue — if no cases, then Oncology 2nd and 4th
@@ -1662,13 +1667,18 @@ const SCHED_DATA = {
         'Surg 2 = Trauma / Cataracts; cover Cornea/Glaucoma if Surg 3/4 has PM cases',
         'Surg 3 = Cornea / Trauma needing graft / Peds',
         'Surg 4 = Glaucoma / Peds / Plastics',
-        'Block 4: Tabas cataracts 3rd Wednesday; Dunn cataracts every 4th Friday',
+        'Block 4: Tabas cataracts 3rd Wednesday; YAG clinic Thursday AM; Dunn cataracts every 4th Friday',
         'Block 5: Tue — if no cases, then Oncology 2nd and 4th',
         'Block 7: Markovitz Cherry Hill PM cases 4th Tuesday',
         'Block 8: Thu — if no cases, then observe refractive'
       ]
     }
   },
+
+  // How-to Step 2: "Surg 3 and 4 are all day even if they have clinic" —
+  // the grid's PM clinic is where they go when they have no case. The copied
+  // schedule prints them as all day ('Surg 3 - Bair'), chief 9/2026.
+  allDaySurg: ['3', '4'],
 
   surgRoleMeta: {
     'Surg 1': 'Cataracts',
@@ -1684,7 +1694,7 @@ const SCHED_DATA = {
   //   PEDS_OR_JUNIOR   = 1st or 2nd year on Peds OR that day
   //   PLASTICS_OR_PGY2 = 1st year on Plastics OR that day
   //   FREE_JUNIOR      = free/willing 1st or 2nd year at the discretion of Surg 2
-  //   COOPER           = Cooper Consults resident
+  //   COOPER           = PGY-4 on the Cooper block (years.pgy4.cooperBlock)
   //   WILLS_OR         = resident on Wills OR block
   //   RETINA           = resident on Retina block
   hierarchy: {
@@ -1710,9 +1720,13 @@ const SCHED_DATA = {
   // available to take a case or cover a clinic. dutyTexts are fixed duties
   // that are not pulled. Day Float only ever covers the Night Float resident.
   // noCoverTexts need no coverage when the resident is out.
+  // offsiteTexts: at another hospital — never pulled into a Wills case or
+  // clinic by a chain (ASSUMPTION, 9/2026: Cooper Clinic / Cooper OR are at
+  // Cooper; remove them here if those residents can be pulled).
   availability: {
     freeTexts: ['CPEC', 'PT'],
     dutyTexts: ['ER', 'Jeff Consults', 'Cooper Consults'],
+    offsiteTexts: ['Cooper Clinic', 'Cooper OR'],
     noCoverTexts: ['PT', 'Day Float']
   },
 
@@ -2082,9 +2096,29 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       orBlocks: {},
       specialClinicsToday: [],
       cooperBuddies: { am: null, pm: null, templateAM: null, templatePM: null },
+      cooperSenior: null,
       nightFloat: null,
       dayFloatCoverage: null
     };
+  }
+
+  // The pgy4 block whose resident is the how-to chains' "Cooper":
+  // years.pgy4.cooperBlock, else the pgy4 block whose grid has Cooper
+  // Clinic / Cooper OR (imported configurations may predate the key).
+  function cooperBlockOf(data) {
+    var y = data && data.years && data.years.pgy4;
+    if (!y) return null;
+    if (y.cooperBlock != null) return y.cooperBlock;
+    var blocks = Object.keys(y.grid || {});
+    for (var i = 0; i < blocks.length; i++) {
+      var row = y.grid[blocks[i]] || {};
+      var days = Object.keys(row);
+      for (var j = 0; j < days.length; j++) {
+        var cell = row[days[j]] || {};
+        if (/^Cooper (Clinic|OR)$/.test(cell.am || '') || /^Cooper (Clinic|OR)$/.test(cell.pm || '')) return +blocks[i];
+      }
+    }
+    return null;
   }
 
   function pushUnique(arr, v) {
@@ -2179,6 +2213,22 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
           var cl = day.clinics[text] || (day.clinics[text] = { am: [], pm: [] });
           cl[session].push({ name: name, year: yearKey });
         }
+      }
+    }
+
+    // How-to Step 2: Surg 3 and 4 are all day even when the grid shows a
+    // clinic for one session (data.allDaySurg; defaults to ['3', '4']).
+    var allDaySurg = data.allDaySurg || ['3', '4'];
+    Object.keys(day.surg).forEach(function (n) {
+      if (allDaySurg.indexOf(n) !== -1) day.surg[n].allDay = true;
+    });
+
+    // "Cooper" in the chains = the PGY-4 on the Cooper block today.
+    var cb = cooperBlockOf(data);
+    if (cb != null) {
+      for (var ci = 0; ci < day.residents.length; ci++) {
+        var cr = day.residents[ci];
+        if (cr.year === 'pgy4' && cr.block === cb) { day.cooperSenior = cr.name; break; }
       }
     }
 
@@ -2340,6 +2390,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     findBlockRange: findBlockRange,
     resolveCell: resolveCell,
     resolveDay: resolveDay,
+    cooperBlockOf: cooperBlockOf,
     cpecForDate: cpecForDate,
     cpecCoverName: cpecCoverName
   };
@@ -2396,6 +2447,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   // coverage when the resident is out. Override in data.availability.
   var DEFAULT_FREE = ['CPEC', 'PT'];
   var DEFAULT_DUTY = ['ER', 'Jeff Consults', 'Cooper Consults'];
+  var DEFAULT_OFFSITE = ['Cooper Clinic', 'Cooper OR'];
   var DEFAULT_NO_COVER = ['PT', 'Day Float'];
 
   var RANK = { off: 0, free: 1, duty: 2, clinic: 3, 'case': 4, out: 5 };
@@ -2536,12 +2588,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   /* block-text classification                                           */
   /* ------------------------------------------------------------------ */
 
-  // 'surg' | 'or' | 'free' | 'duty' | 'dayfloat' | 'clinic' | 'off'
+  // 'surg' | 'or' | 'free' | 'duty' | 'offsite' | 'dayfloat' | 'clinic' | 'off'
   function classifyText(text, data) {
     var t = trim(text);
     if (!t) return 'off';
     var av = (data && data.availability) || {};
     if (/^Surg \d+$/.test(t)) return 'surg';
+    // at another hospital (Cooper) — checked before the OR rule
+    if ((av.offsiteTexts || DEFAULT_OFFSITE).indexOf(t) !== -1) return 'offsite';
     // OR blocks, plus the PGY-4 attending cataract days (Tabas / Dunn)
     if (/\bOR\b/.test(t) || /\bCataracts\b/.test(t)) return 'or';
     if (t === 'Day Float') return 'dayfloat';
@@ -2552,13 +2606,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
 
   function kindOfClass(cls) {
     if (cls === 'surg' || cls === 'or' || cls === 'free') return 'free';
-    if (cls === 'duty' || cls === 'dayfloat') return 'duty';
+    if (cls === 'duty' || cls === 'dayfloat' || cls === 'offsite') return 'duty';
     if (cls === 'off') return 'off';
     return 'clinic';
   }
 
   function dutyLabel(cls, text) {
     if (cls === 'surg' || cls === 'or') return text + ', no case';
+    if (cls === 'offsite') return text + ' (off-site)';
     return text;
   }
 
@@ -3200,6 +3255,24 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   /* chain token resolution                                              */
   /* ------------------------------------------------------------------ */
 
+  function cooperSeniorFrom(roster) {
+    var d = getData();
+    var block = null;
+    if (d && d.years && d.years.pgy4) {
+      block = d.years.pgy4.cooperBlock;
+      if (block == null && typeof require !== 'undefined') {
+        try { block = require('./engine.js').cooperBlockOf(d); } catch (e) { block = null; }
+      } else if (block == null && typeof window !== 'undefined' && window.Engine && window.Engine.cooperBlockOf) {
+        block = window.Engine.cooperBlockOf(d);
+      }
+    }
+    var list = (roster && roster.residents) || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].year === 'pgy4' && list[i].block === block) return list[i].name;
+    }
+    return null;
+  }
+
   // -> { label, names: [..], freeJunior?: true }
   // `sessions` (optional, e.g. ['pm']) restricts which roster sessions the
   // OR-block / clinic tokens draw from; case chains use both sessions.
@@ -3232,8 +3305,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       return { label: FREE_JUNIOR_LABEL, names: [], freeJunior: true };
     }
     if (token === 'COOPER') {
-      var cooper = (roster && roster.cooperConsults) || [];
-      return { label: 'Cooper Consults', names: cooper.length ? [cooper[0]] : [] };
+      // The how-to's "Cooper" is the PGY-4 on the Cooper block (chief,
+      // 9/2026) — resolved by the engine; hand-built rosters fall back to
+      // the resident list + data.
+      var cs = roster ? roster.cooperSenior : null;
+      if (cs === undefined) cs = cooperSeniorFrom(roster);
+      return { label: 'Cooper (PGY-4)', names: cs ? [cs] : [] };
     }
     if (token === 'WILLS_OR') {
       return { label: 'Wills OR', names: orBlockPeople(roster, 'Wills OR', sessions).map(function (p) { return p.name; }) };
@@ -3371,6 +3448,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       var why = null;
       if (st.kind === 'out') why = st.label;
       else if (st.kind === 'case') why = busyText(st);
+      else if (st.cls === 'offsite') why = st.label; // at Cooper — not pulled to Wills
       else if (spansOverlap(extra[cand.name], spans)) why = 'suggested for another case at this time';
       else if (cand.requireFree && st.kind !== 'free') why = st.label;
       if (!why && !primary) { primary = cand; primaryStatus = st; }
@@ -3401,8 +3479,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   // Who covers `pulled.clinic` over its window: the clinic-coverage chain
   // (Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 → Wills OR →
   // Retina), then any free senior, then any free junior. A coverer must be
-  // free (not out, in a case, or already in a clinic); the Cooper resident on
-  // consults may cover because the how-to names them.
+  // free — not out, in a case, in a clinic, on fixed duty or off-site.
   function findClinicCover(pulled, roster, data, board, excludeNames, excludeId) {
     var hierarchy = (data && data.hierarchy) || {};
     var chain = (hierarchy.clinicCoverage && hierarchy.clinicCoverage.chain) || [];
@@ -3429,7 +3506,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var ok = [];
     cands.forEach(function (cand) {
       var st = board.statusDuring(cand.name, pulled.start, pulled.end, { exclude: excludeId });
-      var fine = st.kind === 'free' || (st.kind === 'duty' && cand.token === 'COOPER');
+      var fine = st.kind === 'free';
       steps.push({ name: cand.name, source: cand.source, status: st, verdict: fine ? (ok.length ? 'alt' : 'take') : 'skip', why: fine ? null : busyText(st) });
       if (fine) ok.push(cand);
     });
@@ -4077,7 +4154,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       surgKeys.forEach(function (n) {
         var s = surg[n] || {};
         var line = [seg('Surg ' + n + ' - ')];
-        if (s.am && s.pm) {
+        // allDay (Surg 3/4 — how-to Step 2): all day even with a clinic
+        if ((s.am && s.pm) || (s.allDay && (s.am || s.pm))) {
           line.push(seg(s.name, true));
         } else if (s.am) {
           line.push(seg(s.name + ' AM', true));
@@ -5144,7 +5222,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       ]);
       // How-to Step 2: Surg 3 and 4 are all day even when the grid shows a
       // clinic — the clinic is where they go when they have no case.
-      var allDay = n === '3' || n === '4';
+      var allDay = !!s.allDay;
       if (s.am && !s.pm) {
         tile.appendChild(el('div', {
           class: 'glance-sess' + (allDay ? ' glance-allday' : ''),
@@ -6800,7 +6878,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var card = el('div', { class: 'card' });
     card.appendChild(el('h2', {}, ['Everyone’s day ', el('span', { class: 'h-note', text: '7 AM – 5 PM · the line is ' + S.fmtClock(t) })]));
     var legend = el('div', { class: 'tl-legend' });
-    [['free', 'free'], ['case', 'in a case'], ['clinic', 'clinic'], ['duty', 'ER / consults / Day Float'], ['out', 'out']].forEach(function (k) {
+    [['free', 'free'], ['case', 'in a case'], ['clinic', 'clinic'], ['duty', 'ER / consults / Day Float / off-site'], ['out', 'out']].forEach(function (k) {
       legend.appendChild(el('span', { class: 'tl-key' }, [el('span', { class: 'tl-swatch ' + KIND_CLASS[k[0]] }), k[1]]));
     });
     card.appendChild(legend);
@@ -7003,7 +7081,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   }
 
   var CHAIN_TOKEN_LABELS = {
-    COOPER: 'Cooper',
+    COOPER: 'Cooper (PGY-4)',
     WILLS_OR: 'Wills OR',
     RETINA: 'Retina',
     PEDS_OR_JUNIOR: 'junior on Peds OR',

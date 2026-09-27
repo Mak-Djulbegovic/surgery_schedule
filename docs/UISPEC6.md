@@ -28,7 +28,7 @@ Every resident, every 5 minutes from 7:00 to 17:00, is one of:
 | out | typed absence; the Night Float resident (post-call, out all day) |
 | case | assigned to a case whose busy span covers that minute |
 | clinic | own block clinic, a clinic they were added to, an absent resident's clinic they cover, or a clinic they cover as a case backup |
-| duty | ER, Jeff/Cooper consults, Day Float |
+| duty | ER, Jeff/Cooper consults, Day Float, off-site (Cooper Clinic / Cooper OR) |
 | free | CPEC, PT, or a Surg role / OR block with nothing booked |
 
 Rules and where they come from:
@@ -65,8 +65,9 @@ Unchanged without a board (old tests pass as before). With a board:
   Surg 2" note (willingness can't be computed).
 - **Globe**: Surg 2 takes it even from a clinic they were covering; that
   clinic passes down the clinic-coverage chain (chief, 9/2026). Coverers must
-  be free (not out / in a case / in a clinic); the Cooper resident may cover
-  because the how-to names them.
+  be free (not out / in a case / in a clinic / on duty / off-site).
+- **Off-site** residents (Cooper Clinic, Cooper OR) are skipped by every
+  chain, with the reason shown.
 - **Plastics add-ons**: new chain `plasticsAddOn` — junior on Plastics OR →
   free junior → Surg 2 → … (chief: "PGY-2 and PGY-3 go first to plastics").
 
@@ -90,18 +91,27 @@ Unchanged without a board (old tests pass as before). With a board:
   list (conservative).
 - Sessions: AM before 12:00, PM from 12:00; the board runs 7:00–17:00.
 
-## Open questions (not built — waiting on the chief)
+## Decided by the chief (9/27/2026)
 
-1. PGY-4 Block 4 **Thursday AM**: the updated PDF says CPEC (YAG clinic, in
-   red); data.js still says Retina OR. Not changed without sign-off.
-2. Copied `Surg 3 - Bair AM | none PM` vs all-day `Surg 3 - Bair`.
-3. `d/s` in "Hamou d/s PM" — meaning / whether it is a separate option.
-4. `COOPER` in the chains resolves to the PGY-2 on Cooper consults; the
-   how-to's chains are otherwise seniors — should it be the PGY-4 on the
-   Cooper block?
-5. "1st or 2nd year on plastics" for add-ons is coded as *on Plastics OR*;
-   should the junior on the plastics block (e.g. in Plastics clinic) count?
-6. Day-of use on other devices: data lives in one browser (localStorage).
+- **Block 4 Thursday AM** is CPEC (YAG clinic), per the updated AY PDF —
+  data.js fixed (PM stays Retina OR).
+- **Surg 3/4 print all day**: `Surg 3 - Bair`, never `AM | none PM`
+  (`data.allDaySurg`, engine flag `surg[n].allDay`).
+- **"Cooper" in the chains = the PGY-4 on the Cooper block** (block 7,
+  `data.years.pgy4.cooperBlock`; engine `roster.cooperSenior`) — no longer
+  the PGY-2 on Cooper consults.
+- **Plastics junior in Plastics clinic stays in clinic**; with no free
+  junior, plastics add-ons fall to the seniors (Surg 2 first). This is what
+  the chains already do — pinned by tests.
+- `d/s` is ignored; no "send to phone" link.
+
+## Still assumptions (say so if wrong)
+
+- **Off-site**: Cooper Clinic / Cooper OR are at Cooper, so a chain never
+  pulls those residents into a Wills case or clinic (they stay pickable by
+  hand). `data.availability.offsiteTexts` — empty it to turn this off.
+- Case lengths (`data.caseMinutes`) and the whole-list rule above.
+- Day-of use on other devices: data lives in one browser (localStorage).
 
 ## Tests
 

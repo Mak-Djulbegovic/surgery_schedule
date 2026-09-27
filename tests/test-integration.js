@@ -251,7 +251,7 @@ ok(c4 && (c4.alternates || []).some(function (a) { return /free junior/.test(a);
 var c5 = findByCase(res, 'c5');
 eq(c5 && c5.name, 'Calotti', 'trauma add-on → Calotti (Surg 2)');
 ok(c5 && /→ Surg 2/.test(c5.reasons.join(' ')), 'trauma: reason cites Surg 2');
-ok(c5 && JSON.stringify(c5.alternates) === JSON.stringify(['Aguwa', 'Bair', 'Illiano', 'Cheng', 'Wibbelsman']),
+ok(c5 && JSON.stringify(c5.alternates) === JSON.stringify(['Aguwa', 'Bair', 'Shields', 'Cheng', 'Wibbelsman']),
   'trauma: alternates = Surg 3, Surg 4, Cooper, Surg 1, Surg 5 — got ' + JSON.stringify(c5 && c5.alternates));
 
 // c6: private Garg x5, serviceCount 0 → no suggestion
@@ -302,12 +302,12 @@ contains(text, 'Surg 1 - **Cheng**', 'text: Surg 1 line bolded per SPEC sample')
 contains(textStripped, 'Surg 1 - Cheng', 'text (bold-stripped): contains "Surg 1 - Cheng"');
 contains(html, '<b>Cheng</b>', 'html: contains <b>Cheng</b>');
 
-// AM-only rendering for Surg 3/4
-contains(text, 'Surg 3 - **Aguwa AM** | none PM', 'text: Surg 3 AM-only rendering');
-contains(text, 'Surg 4 - **Bair AM** | none PM', 'text: Surg 4 AM-only rendering');
-contains(textStripped, 'Aguwa AM', 'text (stripped): contains "Aguwa AM"');
-contains(html, '<b>Aguwa AM</b> | none PM', 'html: Surg 3 AM-only rendering');
-contains(html, '<b>Bair AM</b> | none PM', 'html: Surg 4 AM-only rendering');
+// Surg 3/4 print all day even with a PM clinic (how-to Step 2; chief 9/2026)
+contains(text, 'Surg 3 - **Aguwa**\n', 'text: Surg 3 all day');
+contains(text, 'Surg 4 - **Bair**\n', 'text: Surg 4 all day');
+ok(text.indexOf('none PM') === -1, 'text: no "none PM" for all-day Surg roles');
+contains(html, 'Surg 3 - <b>Aguwa</b></div>', 'html: Surg 3 all day');
+contains(html, 'Surg 4 - <b>Bair</b></div>', 'html: Surg 4 all day');
 
 // Section headers in SPEC order
 var headers = ['Lectures/Events', 'Assignments', 'WER: ', 'Wills/ASC', 'Privates',

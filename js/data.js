@@ -236,6 +236,9 @@ const SCHED_DATA = {
       short: 'PGY-4',
       residents: ['Bair', 'Aguwa', 'Samuel', 'Wibbelsman', 'Calotti', 'Djulbegovic', 'Cheng', 'Shields'],
       taskmasterBlocks: [],
+      // Block 7 = the Cooper block (Cooper Clinic Thu, Cooper OR Fri). Its
+      // resident is the "Cooper" in the how-to's chains (chief, 9/2026).
+      cooperBlock: 7,
       blockRanges: [
         { start: '2026-07-20', end: '2026-08-09', blocks: { Bair: 3, Aguwa: 6, Samuel: 4, Wibbelsman: 5, Calotti: 8, Djulbegovic: 2, Cheng: 1, Shields: 7 } },
         { start: '2026-08-10', end: '2026-08-30', blocks: { Bair: 4, Aguwa: 7, Samuel: 5, Wibbelsman: 6, Calotti: 1, Djulbegovic: 3, Cheng: 2, Shields: 8 } },
@@ -280,7 +283,7 @@ const SCHED_DATA = {
           mon: { am: 'Surg 1', pm: 'Surg 1' },
           tue: { am: 'CPEC', pm: 'CPEC' },
           wed: { am: 'Retina', pm: 'Retina' },
-          thu: { am: 'Retina OR', pm: 'Retina OR' },
+          thu: { am: 'CPEC', pm: 'Retina OR' },   // AM changed in the UPDATED AY PDF (9/2026): CPEC, YAG clinic
           fri: { am: 'Retina', pm: 'Retina' }
         },
         5: {
@@ -316,6 +319,8 @@ const SCHED_DATA = {
         // Block 4: Tabas cataracts 3rd Wednesday; Dunn cataracts every 4th Friday
         { block: 4, day: 'wed', session: 'am', nth: [3], set: 'Tabas Cataracts', note: 'Tabas cataracts 3rd Wednesday' },
         { block: 4, day: 'wed', session: 'pm', nth: [3], set: 'Tabas Cataracts', note: 'Tabas cataracts 3rd Wednesday' },
+        // Block 4: Thursday AM YAG clinic (updated AY PDF, 9/2026)
+        { block: 4, day: 'thu', session: 'am', note: 'YAG clinic' },
         { block: 4, day: 'fri', session: 'am', nth: [4], set: 'Dunn Cataracts', note: 'Dunn cataracts every 4th Friday' },
         { block: 4, day: 'fri', session: 'pm', nth: [4], set: 'Dunn Cataracts', note: 'Dunn cataracts every 4th Friday' },
         // Block 5: Tue — if no cases, then Oncology 2nd and 4th
@@ -332,13 +337,18 @@ const SCHED_DATA = {
         'Surg 2 = Trauma / Cataracts; cover Cornea/Glaucoma if Surg 3/4 has PM cases',
         'Surg 3 = Cornea / Trauma needing graft / Peds',
         'Surg 4 = Glaucoma / Peds / Plastics',
-        'Block 4: Tabas cataracts 3rd Wednesday; Dunn cataracts every 4th Friday',
+        'Block 4: Tabas cataracts 3rd Wednesday; YAG clinic Thursday AM; Dunn cataracts every 4th Friday',
         'Block 5: Tue — if no cases, then Oncology 2nd and 4th',
         'Block 7: Markovitz Cherry Hill PM cases 4th Tuesday',
         'Block 8: Thu — if no cases, then observe refractive'
       ]
     }
   },
+
+  // How-to Step 2: "Surg 3 and 4 are all day even if they have clinic" —
+  // the grid's PM clinic is where they go when they have no case. The copied
+  // schedule prints them as all day ('Surg 3 - Bair'), chief 9/2026.
+  allDaySurg: ['3', '4'],
 
   surgRoleMeta: {
     'Surg 1': 'Cataracts',
@@ -354,7 +364,7 @@ const SCHED_DATA = {
   //   PEDS_OR_JUNIOR   = 1st or 2nd year on Peds OR that day
   //   PLASTICS_OR_PGY2 = 1st year on Plastics OR that day
   //   FREE_JUNIOR      = free/willing 1st or 2nd year at the discretion of Surg 2
-  //   COOPER           = Cooper Consults resident
+  //   COOPER           = PGY-4 on the Cooper block (years.pgy4.cooperBlock)
   //   WILLS_OR         = resident on Wills OR block
   //   RETINA           = resident on Retina block
   hierarchy: {
@@ -380,9 +390,13 @@ const SCHED_DATA = {
   // available to take a case or cover a clinic. dutyTexts are fixed duties
   // that are not pulled. Day Float only ever covers the Night Float resident.
   // noCoverTexts need no coverage when the resident is out.
+  // offsiteTexts: at another hospital — never pulled into a Wills case or
+  // clinic by a chain (ASSUMPTION, 9/2026: Cooper Clinic / Cooper OR are at
+  // Cooper; remove them here if those residents can be pulled).
   availability: {
     freeTexts: ['CPEC', 'PT'],
     dutyTexts: ['ER', 'Jeff Consults', 'Cooper Consults'],
+    offsiteTexts: ['Cooper Clinic', 'Cooper OR'],
     noCoverTexts: ['PT', 'Day Float']
   },
 

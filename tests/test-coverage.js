@@ -98,6 +98,15 @@ ok(res[0].warnings.some(function (w) { return /confirm with Surg 2/.test(w); }),
 res = Assign.suggest([{ id: 'p2', section: 'wills', surgeon: 'Bilyk', count: 1, serviceCount: 1, start: '1400', category: 'plastics', addOn: true, assigned: '' }], roster, DATA, x.b);
 eq(Assign.classify({ category: 'plastics', addOn: true }, DATA), 'plasticsAddOn', 'plastics add-on uses the juniors-first chain');
 ok(res[0].name && res[0].name !== 'Djulbegovic', 'plastics add-on goes to a free junior before Surg 2 — got ' + res[0].name);
+// chief 9/2026: the plastics junior in Plastics clinic stays in clinic
+ok(res[0].name !== 'Ransone', 'Ransone (in Plastics clinic PM) is not pulled for the add-on');
+// …and with every junior busy it falls to the seniors (Surg 2 first)
+var allJuniorsBusy = { absences: roster.residents.filter(function (r) { return r.year !== 'pgy4'; }).map(function (r, i) {
+  return { id: 'j' + i, name: r.name, am: true, pm: true, reason: 'other', coverAM: 'NC', coverPM: 'NC' };
+}) };
+x = board(allJuniorsBusy);
+res = Assign.suggest([{ id: 'p3', section: 'wills', surgeon: 'Bilyk', count: 1, serviceCount: 1, start: '1400', category: 'plastics', addOn: true, assigned: '' }], roster, DATA, x.b);
+eq(res[0].name, 'Djulbegovic', 'no free junior → senior coverage, Surg 2 first');
 
 // a pulled-from-clinic pick carries a backup warning
 x = board({});
@@ -120,6 +129,31 @@ eq(Assign.backupPlan(x.day.cases[0], roster, DATA, x.day.cases, x.b), null, 'AM 
 res = Assign.suggest([{ id: 'k3', section: 'wills', surgeon: 'Hark', count: 1, serviceCount: 1, start: '1300', category: 'cornea', addOn: false, assigned: '' }], roster, DATA);
 eq(res[0].name, 'Bair', 'no board: chain order only');
 eq(res[0].skipped, undefined, 'no board: no availability fields');
+
+/* ---------- "Cooper" = PGY-4 on the Cooper block; off-site is skipped ---------- */
+// Mon 9/28: Samuel (Cooper block) is on Wills OR with no case → a chain member
+x = board({ cases: [
+  { id: 'b1', section: 'wills', surgeon: 'Hark', count: 1, serviceCount: 1, start: '1300', category: 'cornea', assigned: 'Bair', backup: '' },
+  { id: 'b2', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1300', category: 'cataract', assigned: 'Djulbegovic', backup: '' },
+  { id: 'b3', section: 'wills', surgeon: 'Moster', count: 2, serviceCount: 2, start: '1300', category: 'glaucoma', assigned: 'Calotti', backup: '' }
+] });
+plan = Assign.planAddOn('globe', 810, roster, DATA, x.b);
+eq(plan.pick && plan.pick.name, 'Samuel', 'Surg 2/3/4 in cases → the Cooper-block senior (Samuel) takes the globe');
+eq(plan.pick && plan.pick.via, 'Cooper (PGY-4)', '…via the Cooper (PGY-4) chain step');
+// Thu 10/1: Samuel is at Cooper Clinic — off-site, skipped
+var r101 = Engine.resolveDay('2026-10-01', DATA);
+var b101 = Status.build(r101, { nightFloat: 'Perez', absences: [], clinicStaffOverrides: {}, cases: [
+  { id: 'b1', section: 'wills', surgeon: 'A', count: 1, serviceCount: 1, start: '1300', category: 'cornea', assigned: r101.surg['2'].name, backup: '' },
+  { id: 'b2', section: 'wills', surgeon: 'B', count: 1, serviceCount: 1, start: '1300', category: 'cornea', assigned: r101.surg['3'].name, backup: '' },
+  { id: 'b3', section: 'wills', surgeon: 'C', count: 1, serviceCount: 1, start: '1300', category: 'glaucoma', assigned: r101.surg['4'].name, backup: '' }
+] }, DATA);
+eq(b101.statusAt('Samuel', 810).cls, 'offsite', 'Thu: Samuel at Cooper Clinic is off-site');
+ok(b101.freeAt(810).indexOf('Samuel') === -1, 'off-site is never listed as free');
+plan = Assign.planAddOn('globe', 810, r101, DATA, b101);
+var sam = plan.steps.filter(function (s) { return s.name === 'Samuel'; })[0];
+eq(sam && sam.verdict, 'skip', 'Thu: the Cooper senior is skipped for a Wills globe');
+ok(sam && /off-site/.test(sam.why || ''), 'skip reason says off-site — got ' + (sam && sam.why));
+ok(plan.pick && plan.pick.name !== 'Samuel', 'the globe goes past Cooper to the next in chain');
 
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures) process.exitCode = 1; else console.log('OK');

@@ -321,7 +321,8 @@
       surgKeys.forEach(function (n) {
         var s = surg[n] || {};
         var line = [seg('Surg ' + n + ' - ')];
-        if (s.am && s.pm) {
+        // allDay (Surg 3/4 — how-to Step 2): all day even with a clinic
+        if ((s.am && s.pm) || (s.allDay && (s.am || s.pm))) {
           line.push(seg(s.name, true));
         } else if (s.am) {
           line.push(seg(s.name + ' AM', true));

@@ -44,6 +44,7 @@
   // coverage when the resident is out. Override in data.availability.
   var DEFAULT_FREE = ['CPEC', 'PT'];
   var DEFAULT_DUTY = ['ER', 'Jeff Consults', 'Cooper Consults'];
+  var DEFAULT_OFFSITE = ['Cooper Clinic', 'Cooper OR'];
   var DEFAULT_NO_COVER = ['PT', 'Day Float'];
 
   var RANK = { off: 0, free: 1, duty: 2, clinic: 3, 'case': 4, out: 5 };
@@ -184,12 +185,14 @@
   /* block-text classification                                           */
   /* ------------------------------------------------------------------ */
 
-  // 'surg' | 'or' | 'free' | 'duty' | 'dayfloat' | 'clinic' | 'off'
+  // 'surg' | 'or' | 'free' | 'duty' | 'offsite' | 'dayfloat' | 'clinic' | 'off'
   function classifyText(text, data) {
     var t = trim(text);
     if (!t) return 'off';
     var av = (data && data.availability) || {};
     if (/^Surg \d+$/.test(t)) return 'surg';
+    // at another hospital (Cooper) — checked before the OR rule
+    if ((av.offsiteTexts || DEFAULT_OFFSITE).indexOf(t) !== -1) return 'offsite';
     // OR blocks, plus the PGY-4 attending cataract days (Tabas / Dunn)
     if (/\bOR\b/.test(t) || /\bCataracts\b/.test(t)) return 'or';
     if (t === 'Day Float') return 'dayfloat';
@@ -200,13 +203,14 @@
 
   function kindOfClass(cls) {
     if (cls === 'surg' || cls === 'or' || cls === 'free') return 'free';
-    if (cls === 'duty' || cls === 'dayfloat') return 'duty';
+    if (cls === 'duty' || cls === 'dayfloat' || cls === 'offsite') return 'duty';
     if (cls === 'off') return 'off';
     return 'clinic';
   }
 
   function dutyLabel(cls, text) {
     if (cls === 'surg' || cls === 'or') return text + ', no case';
+    if (cls === 'offsite') return text + ' (off-site)';
     return text;
   }
 
