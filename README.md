@@ -3,11 +3,12 @@
 A lightweight web app that helps the chief residents build the **daily surgery
 schedule** for an ophthalmology residency program. Pick a date and everything
 derivable from the annual block schedules fills itself in — Surg 1–5, consult
-and ER coverage, clinic staffing, Cooper buddy call. You add what only the
-EMRs know (the case list and patient counts), press **Suggest**, and the app
-proposes a resident for every case using the program's assignment hierarchy.
-The finished schedule copies out in the exact document format the program
-already uses.
+and ER coverage, clinic staffing, Cooper buddy call. You say who is out, add
+what only the EMRs know (the case list and patient counts), and the app
+proposes a resident for every case using the program's assignment hierarchy —
+skipping anyone who is out or already in a case at that time — and shows who
+is free, and who covers whom, at any minute of the day. The finished schedule
+copies out in the exact document format the program already uses.
 
 **No install, no server, no accounts.** It's plain HTML/CSS/JS — open
 `index.html` in any browser (or use the single-file build in `dist/`).
@@ -19,27 +20,44 @@ Everything you type stays in your own browser (localStorage), saved per date.
 
 | Automatic (from the block schedules) | Manual (from the EMRs / calendars) |
 |---|---|
-| Surg 1–5 assignments for any date | OR case list (surgeon, counts, start, service vs private) |
-| WER, Jeff/Cooper Consults, Day Float, taskmasters | Clinic patient counts |
-| Clinic staffing rosters (AM/PM) | Night float, vacation, lectures |
-| Nth-weekday rules (Peds OR 4th Tues, Plastics OR 4th Wed, …) | Add-on call names |
-| Cooper buddy call (template + named blocks) | Any override you want — nothing is locked |
+| Surg 1–5 assignments for any date | Who is out, and who covers each session (or NC) |
+| WER, Jeff/Cooper Consults, Day Float, taskmasters | OR case list (surgeon, counts, start, service vs private) |
+| Clinic staffing rosters (AM/PM) | Clinic patient counts |
+| Nth-weekday rules (Peds OR 4th Tues, Plastics OR 4th Wed, …) | Lectures, add-on call names |
+| Cooper buddy call, Night Float (from the call schedule) | Any override you want — nothing is locked |
+| Who is free / in a case / in clinic at any time, and every clinic gap | |
 
-- **Assign tab** applies the "How to Surgical Schedule" hierarchy: scheduled
-  cornea → Surg 3, glaucoma → Surg 4, cataracts → Surg 1/5/Wills OR, peds →
-  junior on Peds OR → …, trauma → Surg 2 first, remaining cases
-  chronologically through Surg 2 → 3 → 4 → Cooper → 1 → 5 — with workload
-  and clinic-conflict warnings, and clinic-coverage backup suggestions
-  ("Calotti to cover glaucoma clinic during case if after 1 PM…").
-  Suggestions never auto-assign; you accept or override each one.
-- **Preview & Copy** renders the day in the standard document format and
-  copies it with formatting for pasting into Google Docs, Word, or email.
-- **Reference & How-to tabs** carry the full block grids, assignment chains,
-  scheduling notes, and onboarding tips, so new schedulers don't need the
-  binder.
+The six tabs follow the "How to Surgical Schedule" order:
 
-![Day roster](docs/screenshots/roster.png)
-![Assign tab](docs/screenshots/assign.png)
+1. **Out today** — "No one out — 24 strong", or who is out (all day / AM /
+   PM) and who covers each session, or NC. Prints as
+   `Ransone (CPEC/Plastics) c/b Patel AM (Uveitis) | Hamou PM (CPEC)`.
+   Anyone out disappears from every dropdown.
+2. **Roster** — Surg 1–5 (Surg 3 and 4 all day), WER, consults, Night Float
+   and the Day Float covering them.
+3. **Surgery** — the CPEC-sheet cataracts, then the case list, with the
+   resident picked on each case: a one-click suggestion from the how-to
+   chains (scheduled cornea → Surg 3, …, trauma → Surg 2, remaining cases
+   Surg 2 → 3 → 4 → Cooper → 1 → 5) that skips anyone out or already in a case
+   then, and a dropdown grouped by who is free / in clinic / busy. When a
+   case pulls someone out of clinic, the backup who covers it is suggested
+   too. Nothing is assigned until you click.
+4. **Clinics** — counts, plus who is out or pulled into a case and who
+   covers; anything left short is listed on top.
+5. **Coverage** — who is free now (or at any time you pick), what happens if
+   a globe comes in (Surg 2 takes it; the clinic they held passes down the
+   coverage chain), everyone's day on one timeline, add-on call names.
+6. **Preview & Copy** — the day in the standard document format, copied
+   with formatting for Google Docs, Word, or email.
+
+A Free AM / Free PM strip stays under the tabs; How-to, the CPEC sheet, the
+block grids and Setup live in the **Library** menu. The rules the app
+encodes — and the assumptions still to calibrate — are listed in
+[docs/UISPEC6.md](docs/UISPEC6.md).
+
+![Out today](docs/screenshots/out.png)
+![Surgery](docs/screenshots/surgery.png)
+![Coverage](docs/screenshots/coverage.png)
 
 ## Quick start
 
@@ -59,7 +77,8 @@ index.html            app shell (tabs, panels)
 css/style.css         styling
 js/data.js            ← ALL schedule knowledge lives here (see below)
 js/engine.js          date → who-is-where resolution (blocks, overrides, nth-weekday)
-js/assign.js          case classification + assignment/backup suggestions
+js/status.js          who is out / in a case / in clinic / free, minute by minute
+js/assign.js          case classification + availability-aware assignment/backup suggestions
 js/export.js          document formatting + clipboard
 js/app.js             UI controller and per-date persistence
 tests/                plain-Node test suites (no dependencies)
@@ -88,6 +107,9 @@ object the Setup page exports:
 - `nfSchedule`: weekly Night Float ranges from the call sheet
 - `cpecSheet`: the CPEC surgical block schedule
 - `hierarchy`, `schedulingNotes`, `specialClinics`, reference content
+- `availability` (which assignments count as free / fixed duty) and
+  `caseMinutes` (estimated minutes per case, used to guess when a resident
+  is free again)
 
 Transcribe the new year's PDFs into that one file and the whole app follows.
 Run the tests afterwards to catch typos:
@@ -96,6 +118,9 @@ Run the tests afterwards to catch typos:
 node tests/test-engine.js
 node tests/test-assign.js
 node tests/test-integration.js
+node tests/test-status.js
+node tests/test-coverage.js
+node tests/test-vacation.js
 ```
 
 The suites verify the engine against a fully known example day (7/22/2026)

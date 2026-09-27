@@ -367,9 +367,30 @@ const SCHED_DATA = {
     scheduledPlastics: { label: 'Scheduled plastics (incl. Gibbon/JHN)', chain: ['PLASTICS_OR_PGY2', 'FREE_JUNIOR', 'Surg 4', 'Surg 2'], note: 'Run the master daily schedule for JHN/Gibbon and specifically check for combo cases with Wills attendings.' },
     peds: { label: 'Peds', chain: ['PEDS_OR_JUNIOR', 'FREE_JUNIOR', 'Surg 4', 'Surg 3'], note: 'Strabismus requires a resident — juniors on Peds get priority; schedule a senior backup if cases may run into evening clinic. Non-strab peds cases do not require coverage but attendings prefer one. If short, check with the Peds fellow.' },
     traumaPlasticsAddOn: { label: 'Trauma and plastics add-ons', chain: ['PLASTICS_OR_JUNIOR', 'Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'], note: 'The junior on Plastics OR takes only TABs and add-on outpatient plastics; trauma goes to Surg 2 first (unless corneal tissue is needed — then cornea).' },
+    // Added 9/2026 from the chief's note "PGY-2 and PGY-3 go first to plastics
+    // cases": plastics add-ons try a free junior before the senior chain.
+    plasticsAddOn: { label: 'Plastics add-ons (TABs, lids, outpatient)', chain: ['PLASTICS_OR_JUNIOR', 'FREE_JUNIOR', 'Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'], note: 'PGY-2s and PGY-3s go first to plastics cases: the junior on Plastics OR, then a free junior (Surg 2’s discretion — TABs / lid procedures can go to free 1st and 2nd years), then Surg 2 onward.' },
     jhnAddOn: { label: 'Add-ons at JHN/Gibbon/Jeff Surgicenter', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'], note: 'Add-on cases at JHN/Gibbon/JSC go to Surg 2 first if available.' },
     remaining: { label: 'Remaining cases (chronological order)', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'] },
     clinicCoverage: { label: 'Clinic coverage', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5', 'WILLS_OR', 'RETINA'], note: 'The PM clinic manager is helpful with clinic assignments.' }
+  },
+
+  // Availability rules (chief, 9/2026). A resident whose block text is in
+  // freeTexts — or a Surg role / OR block with nothing booked — counts as
+  // available to take a case or cover a clinic. dutyTexts are fixed duties
+  // that are not pulled. Day Float only ever covers the Night Float resident.
+  // noCoverTexts need no coverage when the resident is out.
+  availability: {
+    freeTexts: ['CPEC', 'PT'],
+    dutyTexts: ['ER', 'Jeff Consults', 'Cooper Consults'],
+    noCoverTexts: ['PT', 'Day Float']
+  },
+
+  // Minutes per case, turnover included — ESTIMATES the app uses to guess
+  // when a resident is free again when no 'until' time is typed. Calibrate.
+  caseMinutes: {
+    cataract: 30, cornea: 90, glaucoma: 90, plastics: 60,
+    peds: 60, retina: 90, trauma: 120, other: 60
   },
 
   schedulingNotes: [

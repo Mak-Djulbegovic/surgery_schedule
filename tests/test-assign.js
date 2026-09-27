@@ -125,7 +125,8 @@ eq(Assign.classify({ category: 'cornea', addOn: true }), 'addOnCornea', 'cornea 
 eq(Assign.classify({ category: 'glaucoma', addOn: true }), 'addOnGlaucoma', 'glaucoma add-on -> addOnGlaucoma');
 eq(Assign.classify({ category: 'trauma' }), 'traumaPlasticsAddOn', 'trauma -> traumaPlasticsAddOn');
 eq(Assign.classify({ category: 'trauma', addOn: true }), 'traumaPlasticsAddOn', 'trauma add-on -> traumaPlasticsAddOn');
-eq(Assign.classify({ category: 'plastics', addOn: true }), 'traumaPlasticsAddOn', 'plastics add-on -> traumaPlasticsAddOn');
+eq(Assign.classify({ category: 'plastics', addOn: true }), 'plasticsAddOn', 'plastics add-on -> plasticsAddOn (juniors-first chain, 9/2026)');
+eq(Assign.classify({ category: 'plastics', addOn: true }, { hierarchy: {} }), 'traumaPlasticsAddOn', 'plastics add-on falls back to the combined chain when the data has no plasticsAddOn');
 eq(Assign.classify({ category: 'plastics' }), 'scheduledPlastics', 'plastics -> scheduledPlastics');
 eq(Assign.classify({ category: 'cornea' }), 'scheduledCornea', 'cornea -> scheduledCornea');
 eq(Assign.classify({ category: 'glaucoma' }), 'scheduledGlaucoma', 'glaucoma -> scheduledGlaucoma');

@@ -21,17 +21,34 @@
     { key: 'jhn', label: 'JHN/TJUH/JSC' },
     { key: 'other', label: 'Other (Stadium / Cherry Hill)' }
   ];
+  // Surgery-tab order follows the how-to: Wills, then Stadium/Cherry Hill,
+  // then JHN/Gibbon; privates (no resident) last. The copied schedule keeps
+  // its own order (export.js).
+  var SURGERY_ORDER = ['wills', 'other', 'jhn', 'private'];
+  var WORKFLOW_TABS = ['out', 'roster', 'surgery', 'clinics', 'coverage', 'preview'];
+  var TAB_TITLES = {
+    out: 'Out today', roster: 'Roster', surgery: 'Surgery', clinics: 'Clinics',
+    coverage: 'Coverage', preview: 'Preview & Copy'
+  };
+  var REASONS = [
+    { key: 'vacation', label: 'Vacation' },
+    { key: 'sick', label: 'Sick' },
+    { key: 'conference', label: 'Conference' },
+    { key: 'other', label: 'Other' }
+  ];
 
   var App = {
     state: null,     // per-date persisted state (SPEC state shape)
     roster: null,    // Engine DayRoster for state.date
-    activeTab: 'roster'
+    board: null,     // Status board (who is doing what, when) for state.date
+    activeTab: 'out'
   };
 
   // Local UI state — never persisted.
-  var assignFilter = 'needs';                 // 'needs' | 'assigned' | 'all'
-  var assignExpanded = {};                    // caseId -> true (compact row expanded inline)
   var caseSectionOpen = { wills: true, private: true, jhn: true, other: true };
+  var coverageTime = null;   // minutes; null = default (now if today, else 1 PM)
+  var coverageFollowNow = true;
+  var planKind = 'globe';
 
   // New-year setup (UISPEC5 §E): the built-in data object is captured at boot
   // so 'Remove imported configuration' can always revert to it; usingOverride
@@ -171,7 +188,11 @@
       lectures: '',
       nightFloat: '',
       nfCleared: false, // user explicitly blanked Night Float — never re-prefill
-      vacation: '24 strong',
+      // Who is out (Out today tab): [{ id, name, am, pm, reason, coverAM,
+      // coverPM }] — cover is a resident, 'NC' (not covered) or '' (undecided).
+      absences: [],
+      outConfirmed: false, // pressed "No one out" — nobody is on vacation
+      vacation: '',        // extra notes for the Vacation section (legacy text)
       cooperBuddyAM: { name: '', note: '' },
       cooperBuddyPM: { name: '', note: '' },
       addOns: defaultAddOns(dateISO),
@@ -202,7 +223,23 @@
       notes: String(c.notes || ''),
       assigned: String(c.assigned || ''),
       backup: String(c.backup || ''),
-      backupNote: String(c.backupNote || '')
+      backupNote: String(c.backupNote || ''),
+      until: String(c.until || '')   // typed end time, or set by "Done" day-of
+    };
+  }
+
+  var absSeq = 0;
+  function normAbsence(a) {
+    if (!a || typeof a !== 'object' || !trim(a.name)) return null;
+    var reason = REASONS.some(function (r) { return r.key === a.reason; }) ? a.reason : 'vacation';
+    return {
+      id: String(a.id || ('a' + Date.now().toString(36) + (absSeq++))),
+      name: trim(a.name),
+      am: a.am !== false,
+      pm: a.pm !== false,
+      reason: reason,
+      coverAM: trim(a.coverAM),
+      coverPM: trim(a.coverPM)
     };
   }
 
@@ -213,6 +250,13 @@
     if (typeof st.nightFloat === 'string') out.nightFloat = st.nightFloat;
     out.nfCleared = !!st.nfCleared;
     if (typeof st.vacation === 'string') out.vacation = st.vacation;
+    // Days saved before the Out today tab carry the old default '24 strong'
+    // as typed text; it now computes itself, so drop the stale default.
+    if (!Array.isArray(st.absences) && /^\s*24 strong\s*$/i.test(out.vacation)) out.vacation = '';
+    if (Array.isArray(st.absences)) {
+      out.absences = st.absences.map(normAbsence).filter(function (a) { return !!a; });
+    }
+    out.outConfirmed = !!st.outConfirmed;
     if (st.cooperBuddyAM) out.cooperBuddyAM = normBuddy(st.cooperBuddyAM);
     if (st.cooperBuddyPM) out.cooperBuddyPM = normBuddy(st.cooperBuddyPM);
     if (Array.isArray(st.addOns)) {
@@ -286,11 +330,37 @@
     saveTimer = setTimeout(saveNow, SAVE_DEBOUNCE_MS);
   }
 
-  // Call after every manual input: debounced persist + live preview refresh.
+  // Call after every manual input: debounced persist, live preview refresh,
+  // and a debounced recompute of who-is-where (strip + tab badges).
   function touch() {
     stateDirty = true;
     scheduleSave();
     if (App.activeTab === 'preview') renderPreview();
+    scheduleLive();
+  }
+
+  var liveTimer = null;
+  function scheduleLive() {
+    if (liveTimer) clearTimeout(liveTimer);
+    liveTimer = setTimeout(function () { liveTimer = null; refreshLive(); }, 120);
+  }
+
+  // Rebuild the status board from the current state.
+  function computeBoard() {
+    App.board = null;
+    try {
+      if (window.Status && window.Status.build && App.roster) {
+        App.board = window.Status.build(App.roster, App.state, data());
+      }
+    } catch (e) {
+      if (window.console) console.error('Status.build failed', e);
+    }
+  }
+
+  function refreshLive() {
+    computeBoard();
+    renderAvailStrip();
+    renderBadges();
   }
 
   function exportDay() {
@@ -375,6 +445,103 @@
     return sel;
   }
 
+  /* Availability-aware resident picker ("when should someone stop appearing
+     in a dropdown"). Residents are grouped by what they are doing over
+     opts.spans (a case's busy spans) or opts.session ('am'/'pm'): free first,
+     then in clinic (would need a backup), fixed duty, already in a case.
+     Anyone OUT is not offered at all — unless already the value, so a stale
+     pick stays visible. Everyone else stays pickable: the chief can always
+     override, and back-to-back cases for one attending are normal.
+     opts: { spans, session, exclude (case id), suggested, emptyLabel,
+             extra: [{ value, text }], hideNames: [names] } */
+  var KIND_GROUPS = [
+    { kind: 'free', label: 'Free' },
+    { kind: 'clinic', label: 'In clinic — would need a backup' },
+    { kind: 'duty', label: 'On duty (ER / consults / Day Float)' },
+    { kind: 'case', label: 'Already in a case then' },
+    { kind: 'out', label: 'Out' },
+    { kind: 'off', label: 'Residents' }
+  ];
+  var PICK_YEAR_ORDER = ['pgy4', 'pgy3', 'pgy2'];
+
+  function statusFor(name, opts) {
+    var b = App.board;
+    if (!b || !b.byName[name]) return null;
+    if (opts.spans && opts.spans.length) return b.statusDuringSpans(name, opts.spans, { exclude: opts.exclude });
+    if (opts.session === 'am' || opts.session === 'pm') {
+      var from = opts.session === 'am' ? b.dayStart : b.noon;
+      var to = opts.session === 'am' ? b.noon : b.dayEnd;
+      return b.statusDuring(name, from, to, { exclude: opts.exclude });
+    }
+    return null;
+  }
+
+  function statusShort(st) {
+    if (!st) return '';
+    if (st.kind === 'case') {
+      var S = window.Status;
+      return 'in ' + st.label + (S && st.until != null ? ' until ' + S.fmtClock(st.until) : '');
+    }
+    return st.label || '';
+  }
+
+  // Shorter still, for places that already name the role: a Surg role or
+  // OR block with nothing booked is just "free".
+  function statusBrief(st) {
+    if (!st) return '';
+    if (st.kind === 'free' && /, no case$/.test(st.label || '')) return 'free';
+    if (st.kind === 'free') return 'free (' + st.label + ')';
+    if (st.kind === 'clinic' && !st.covering) return 'in ' + (st.clinic || st.label);
+    return statusShort(st);
+  }
+
+  function residentPicker(value, onChange, opts) {
+    opts = opts || {};
+    var sel = el('select', { class: 'sel picker' });
+    sel.appendChild(el('option', { value: '', text: opts.emptyLabel || '—' }));
+    (opts.extra || []).forEach(function (x) { sel.appendChild(el('option', { value: x.value, text: x.text })); });
+    var names = [];
+    PICK_YEAR_ORDER.forEach(function (yk) {
+      var y = data().years[yk];
+      if (y) y.residents.forEach(function (n) { names.push({ name: n, year: y.short || yk }); });
+    });
+    var hide = opts.hideNames || [];
+    var sugg = opts.suggested || '';
+    var groups = {};
+    names.forEach(function (x) {
+      var n = x.name;
+      if (n === sugg) return;
+      if (hide.indexOf(n) !== -1 && n !== value) return;
+      var st = statusFor(n, opts);
+      var kind = st ? st.kind : 'off';
+      if (kind === 'out' && n !== value) return; // out → not offered
+      (groups[kind] || (groups[kind] = [])).push({ name: n, year: x.year, st: st });
+    });
+    if (sugg) {
+      var og0 = el('optgroup', { label: 'Suggested' });
+      var sst = statusFor(sugg, opts);
+      og0.appendChild(el('option', { value: sugg, text: sugg + (sst && sst.label ? ' — ' + statusShort(sst) : '') }));
+      sel.appendChild(og0);
+    }
+    KIND_GROUPS.forEach(function (g) {
+      var list = groups[g.kind];
+      if (!list || !list.length) return;
+      var og = el('optgroup', { label: g.label });
+      list.forEach(function (x) {
+        var detail = x.st && x.st.label ? ' — ' + statusShort(x.st) : '';
+        og.appendChild(el('option', { value: x.name, text: x.name + ' (' + x.year + ')' + detail }));
+      });
+      sel.appendChild(og);
+    });
+    sel.value = value || '';
+    if (value && sel.value !== value) {
+      sel.appendChild(el('option', { value: value, text: value }));
+      sel.value = value;
+    }
+    sel.addEventListener('change', function () { onChange(sel.value); });
+    return sel;
+  }
+
   function nameChip(name, onRemove) {
     var chip = el('span', { class: 'name-chip ' + yearOf(name) + (onRemove ? '' : ' no-x') }, [name]);
     if (onRemove) {
@@ -414,6 +581,7 @@
     if (!App.roster) App.roster = emptyRoster(App.state.date);
     prefillBuddies();
     prefillNightFloat();
+    computeBoard();
   }
 
   /* Cooper buddy prefill (buddy call schedule) — roster.cooperBuddies may be
@@ -633,8 +801,24 @@
         el('div', { class: 'glance-role', text: 'Surg ' + n }),
         el('div', { class: 'glance-name', text: s.name })
       ]);
-      if (s.am && !s.pm) tile.appendChild(el('div', { class: 'glance-sess', text: 'AM only · PM: ' + (s.pmText || '—') }));
-      else if (s.pm && !s.am) tile.appendChild(el('div', { class: 'glance-sess', text: 'PM only · AM: ' + (s.amText || '—') }));
+      // How-to Step 2: Surg 3 and 4 are all day even when the grid shows a
+      // clinic — the clinic is where they go when they have no case.
+      var allDay = n === '3' || n === '4';
+      if (s.am && !s.pm) {
+        tile.appendChild(el('div', {
+          class: 'glance-sess' + (allDay ? ' glance-allday' : ''),
+          text: allDay ? 'All day · ' + (s.pmText || '—') + ' PM if no case' : 'AM only · PM: ' + (s.pmText || '—')
+        }));
+      } else if (s.pm && !s.am) {
+        tile.appendChild(el('div', {
+          class: 'glance-sess' + (allDay ? ' glance-allday' : ''),
+          text: allDay ? 'All day · ' + (s.amText || '—') + ' AM if no case' : 'PM only · AM: ' + (s.amText || '—')
+        }));
+      }
+      if (App.board && App.board.isOut(s.name, 'am') && App.board.isOut(s.name, 'pm')) {
+        tile.classList.add('glance-out');
+        tile.appendChild(el('div', { class: 'glance-sess', text: 'OUT today — see Out today' }));
+      }
       var m = meta['Surg ' + n];
       if (m) tile.appendChild(el('div', { class: 'glance-sub', text: m.split(';')[0] }));
       grid.appendChild(tile);
@@ -779,14 +963,6 @@
       updateBuddyHint();
     }
 
-    var vac = el('textarea', { rows: '2', placeholder: '24 strong' });
-    vac.value = st.vacation;
-    vac.addEventListener('input', function () { st.vacation = vac.value; touch(); });
-    host.appendChild(labeledField('Vacation', vac));
-
-    var addOnsField = labeledField('Add-ons (call coverage)', addOnsEditor());
-    addOnsField.classList.add('field-wide');
-    host.appendChild(addOnsField);
   }
 
   // Shared add-ons editor — rendered on both the Day Roster tab and the
@@ -830,10 +1006,15 @@
         line.appendChild(el('span', { class: 'addon-preview', text: addOnLabel(row) || '—' }));
       }
 
-      line.appendChild(residentSelect(row.name, function (v) {
+      // Anyone on vacation/sick that day is not offered for that day's rows.
+      // (Not the Night Float resident — nights are exactly when they work.)
+      var outToday = row.date === st.date
+        ? (st.absences || []).filter(function (a) { return a.am && a.pm; }).map(function (a) { return a.name; })
+        : [];
+      line.appendChild(residentPicker(row.name, function (v) {
         row.name = v;
         touch();
-      }, 'resident…'));
+      }, { emptyLabel: 'resident…', hideNames: outToday }));
       line.appendChild(el('button', {
         type: 'button', class: 'btn-icon danger', title: 'Remove row', text: '×',
         onclick: function () {
@@ -861,14 +1042,13 @@
   }
 
   function renderAddOnsCard() {
-    var host = $('addOnsCases');
+    var host = $('addOnsCoverage');
     if (!host) return;
     clearNode(host);
     host.appendChild(addOnsEditor());
   }
 
   function renderAddOnsEverywhere() {
-    renderManualInputs();
     renderAddOnsCard();
   }
 
@@ -879,7 +1059,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* tab 2 — Cases & Clinics                                             */
+  /* tab 3 — Surgery (cases + the resident on each, in one place)        */
   /* ------------------------------------------------------------------ */
 
   function newCase(section) {
@@ -889,21 +1069,23 @@
       id: id, section: section, surgeon: '', count: 1,
       serviceCount: section === 'private' ? 0 : 1,
       start: '', serviceTimes: '', category: 'cataract', addOn: false,
-      notes: '', assigned: '', backup: ''
+      notes: '', assigned: '', backup: '', backupNote: '', until: ''
     };
   }
 
   function addCase(section) {
     App.state.cases.push(newCase(section));
     touch();
-    renderCasesTab();
+    computeBoard();
+    renderSurgeryTab();
   }
 
   function removeCase(id) {
     App.state.cases = App.state.cases.filter(function (c) { return c.id !== id; });
     if (App.state.suggestions) delete App.state.suggestions[id];
     touch();
-    renderCasesTab();
+    computeBoard();
+    renderSurgeryTab();
   }
 
   function duplicateCase(id) {
@@ -916,9 +1098,11 @@
     App.state.seq += 1;
     copy.assigned = '';
     copy.backup = '';
+    copy.backupNote = '';
     App.state.cases.splice(idx + 1, 0, copy);
     touch();
-    renderCasesTab();
+    computeBoard();
+    renderSurgeryTab();
   }
 
   function textInput(value, placeholder, onInput) {
@@ -942,22 +1126,39 @@
     ]);
   }
 
+  // Fields that change WHEN someone is busy re-run the availability check a
+  // moment after typing stops. Deliberately NOT on 'change': that fires on
+  // blur, i.e. in the middle of a click on a suggestion chip, and the
+  // re-render would swallow the click. Only the resident areas re-render —
+  // never the inputs — so typing keeps its focus.
+  var assignRefreshTimer = null;
+  function scheduleAssignRefresh() {
+    if (assignRefreshTimer) clearTimeout(assignRefreshTimer);
+    assignRefreshTimer = setTimeout(function () { assignRefreshTimer = null; refreshAssignAreas(); }, 350);
+  }
+  function onTimingChange(input) {
+    input.addEventListener('input', scheduleAssignRefresh);
+  }
+
   function caseCard(c) {
     var card = el('div', { class: 'case-card', 'data-case-id': c.id });
 
     card.appendChild(miniField('Surgeon',
       textInput(c.surgeon, 'Surgeon', function (v) { c.surgeon = v; touch(); }), 'cf-surgeon'));
-    card.appendChild(miniField('Cases',
-      numInput(c.count, function (v) { c.count = v; touch(); }), 'cf-num'));
-    card.appendChild(miniField('Service',
-      numInput(c.serviceCount, function (v) { c.serviceCount = v; touch(); }), 'cf-num'));
-    card.appendChild(miniField('Start',
-      textInput(c.start, '0730', function (v) { c.start = v; touch(); }), 'cf-start'));
+    var cnt = numInput(c.count, function (v) { c.count = v; touch(); });
+    onTimingChange(cnt);
+    card.appendChild(miniField('Cases', cnt, 'cf-num'));
+    var svc = numInput(c.serviceCount, function (v) { c.serviceCount = v; touch(); });
+    onTimingChange(svc);
+    card.appendChild(miniField('Service', svc, 'cf-num'));
+    var start = textInput(c.start, '0730', function (v) { c.start = v; touch(); });
+    onTimingChange(start);
+    card.appendChild(miniField('Start', start, 'cf-start'));
 
     var cat = el('select');
     CATEGORIES.forEach(function (k) { cat.appendChild(el('option', { value: k, text: k })); });
     cat.value = c.category;
-    cat.addEventListener('change', function () { c.category = cat.value; touch(); });
+    cat.addEventListener('change', function () { c.category = cat.value; touch(); refreshAssignAreas(); });
     card.appendChild(miniField('Category', cat, 'cf-cat'));
 
     var box = el('input', { type: 'checkbox' });
@@ -967,6 +1168,7 @@
       c.addOn = box.checked;
       pill.classList.toggle('on', box.checked);
       touch();
+      refreshAssignAreas();
     });
     card.appendChild(el('div', { class: 'cf-pill' }, [pill]));
 
@@ -975,18 +1177,273 @@
       el('button', { type: 'button', class: 'btn-icon danger', title: 'Remove case', text: '×', onclick: function () { removeCase(c.id); } })
     ]));
 
-    card.appendChild(miniField('Service case time(s)',
-      textInput(c.serviceTimes, 'when the resident/service cases are — e.g. 9:30 AM',
-        function (v) { c.serviceTimes = v; touch(); }), 'cf-svctimes'));
+    var svcT = textInput(c.serviceTimes, 'when the service cases are — e.g. 9:30 AM',
+      function (v) { c.serviceTimes = v; touch(); });
+    onTimingChange(svcT);
+    card.appendChild(miniField('Service case time(s)', svcT, 'cf-svctimes'));
+    var until = textInput(c.until, 'est.', function (v) { c.until = v; touch(); });
+    until.setAttribute('data-until', c.id);
+    onTimingChange(until);
+    card.appendChild(miniField('Done by', until, 'cf-until'));
     card.appendChild(miniField('Notes',
       textInput(c.notes, 'no Peds OR…', function (v) { c.notes = v; touch(); }), 'cf-notes'));
+
+    var assign = el('div', { class: 'case-assign', 'data-assign-for': c.id });
+    card.appendChild(assign);
+    renderCaseAssign(c, assign);
     return card;
+  }
+
+  /* live suggestions — recomputed from the board on every refresh */
+
+  var suggMap = {};
+  function computeSuggestions() {
+    suggMap = {};
+    if (!window.Assign || !window.Assign.suggest) return;
+    try {
+      window.Assign.suggest(App.state.cases, App.roster, data(), App.board).forEach(function (s) {
+        suggMap[s.caseId] = s;
+      });
+    } catch (e) {
+      if (window.console) console.error('suggest failed', e);
+    }
+  }
+
+  function needsResident(c) { return c.serviceCount > 0 && !trim(c.assigned); }
+
+  function spanText(spans) {
+    var S = window.Status;
+    if (!S || !spans || !spans.length) return '';
+    return spans.map(function (sp) { return S.fmtClock(sp.start) + '–' + S.fmtClock(sp.end); }).join(', ');
+  }
+
+  function isToday() { return App.state && App.state.date === isoOf(new Date()); }
+  function nowMinutes() { var d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
+
+  function assignedCheck(c, info) {
+    var b = App.board;
+    var name = trim(c.assigned);
+    if (!b || !name || !b.byName[name] || !info) return null;
+    var st = b.statusDuringSpans(name, info.spans, { exclude: c.id });
+    if (st.kind === 'out') return { cls: 'warn-line bad', text: '⚠ ' + name + ' is out (' + st.label + ') — pick someone else' };
+    if (st.kind === 'case') return { cls: 'warn-line bad', text: '⚠ ' + name + ' is double-booked — ' + statusShort(st) };
+    if (st.kind === 'clinic') return { kind: 'clinic', cls: 'status-line', text: name + ' leaves ' + (st.clinic || 'clinic') + (st.covering && st.covering !== name ? ' (covering for ' + st.covering + ')' : '') + ' for this case' };
+    if (st.kind === 'duty') return { cls: 'status-line', text: name + ' is on ' + st.label };
+    return { cls: 'status-line ok', text: '✓ ' + name + ' is free then (' + st.label + ')' };
+  }
+
+  function renderCaseAssign(c, host) {
+    clearNode(host);
+    var b = App.board;
+    var info = b && b.caseInfo[c.id];
+    var sugg = suggMap[c.id];
+    var assigned = trim(c.assigned);
+    var service = c.serviceCount > 0;
+
+    // Timing line: when the resident is busy for this case
+    if (info && (service || assigned)) {
+      var t = 'Resident busy ' + spanText(info.spans) + (info.estimated ? ' (est. — type "Done by" to fix)' : '');
+      if (info.unknownStart) t += ' · no start time, assumed 7:30';
+      var timing = el('div', { class: 'assign-timing', text: t });
+      if (isToday() && assigned && info.spans.length) {
+        var now = nowMinutes();
+        var last = info.spans[info.spans.length - 1];
+        if (now >= info.spans[0].start && now < last.end) {
+          timing.appendChild(el('button', {
+            type: 'button', class: 'btn btn-small', text: 'Done now',
+            title: 'Mark the case finished — ' + assigned + ' is free from now',
+            onclick: function () {
+              c.until = window.Status.fmtHHMM(nowMinutes());
+              touch();
+              refreshAssignAreas();
+              var inp = document.querySelector('input[data-until="' + c.id + '"]');
+              if (inp) inp.value = c.until;
+              toast(assigned + ' marked free from now');
+            }
+          }));
+        }
+      }
+      host.appendChild(timing);
+    }
+
+    if (!service && !assigned) {
+      host.appendChild(el('div', { class: 'assign-row-inline' }, [
+        el('span', { class: 'mini-label', text: 'Resident' }),
+        el('span', { class: 'field-hint', text: 'Private — no resident needed' }),
+        residentPicker('', function (v) { c.assigned = v; touch(); refreshAssignAreas(); },
+          { spans: info && info.spans, exclude: c.id, emptyLabel: 'assign anyway…' })
+      ]));
+      return;
+    }
+
+    // Resident row: one-click suggestion + availability-grouped dropdown
+    var row = el('div', { class: 'assign-row-inline' });
+    row.appendChild(el('span', { class: 'mini-label', text: 'Resident' }));
+    if (!assigned && sugg && sugg.name) {
+      row.appendChild(el('button', {
+        type: 'button', class: 'btn btn-small btn-primary sugg-chip',
+        title: (sugg.reasons || []).join(' · '),
+        text: '✓ ' + sugg.name + ' · ' + suggVia(sugg),
+        onclick: function () { c.assigned = sugg.name; touch(); refreshAssignAreas(); }
+      }));
+    }
+    row.appendChild(residentPicker(assigned, function (v) {
+      c.assigned = v;
+      touch();
+      refreshAssignAreas();
+    }, { spans: info && info.spans, exclude: c.id, suggested: !assigned && sugg ? sugg.name : '', emptyLabel: 'unassigned' }));
+    if (!assigned) row.appendChild(el('span', { class: 'unassigned-text', text: '⚠ UNASSIGNED' }));
+    host.appendChild(row);
+
+    // Clinic backup: who covers the clinic this case pulls the resident from
+    var plan = null;
+    if (assigned && window.Assign && window.Assign.backupPlan && b) {
+      try { plan = window.Assign.backupPlan(c, App.roster, data(), App.state.cases, b); } catch (e) { plan = null; }
+    }
+
+    if (assigned) {
+      var chk = assignedCheck(c, info);
+      // the backup box below already says who leaves which clinic
+      if (chk && !(plan && chk.kind === 'clinic')) host.appendChild(el('div', { class: chk.cls, text: chk.text }));
+    } else if (sugg) {
+      var why = el('div', { class: 'sugg-why' });
+      (sugg.reasons || []).forEach(function (r) { why.appendChild(el('span', { class: 'sugg-reason', text: r })); });
+      if ((sugg.skipped || []).length) {
+        why.appendChild(el('span', {
+          class: 'sugg-skipped',
+          text: 'Skipped: ' + sugg.skipped.slice(0, 4).map(function (s) { return s.name + ' (' + s.why + ')'; }).join('; ')
+        }));
+      }
+      host.appendChild(why);
+      (sugg.warnings || []).forEach(function (w) { host.appendChild(el('div', { class: 'warn-line', text: '⚠ ' + w })); });
+    }
+
+    if (plan || trim(c.backup)) host.appendChild(backupRow(c, plan));
+  }
+
+  function suggVia(s) {
+    var r = (s.reasons && s.reasons[0]) || '';
+    var i = r.lastIndexOf('→ ');
+    var via = i === -1 ? r : r.slice(i + 2);
+    return via.replace(/ \(remaining-cases chain\)$/, '');
+  }
+
+  function backupNoteFor(c, plan) {
+    var S = window.Status;
+    var t = 'to cover ' + String(plan.clinic || 'clinic').toLowerCase() + ' clinic';
+    if (plan.owner && plan.owner !== trim(c.assigned)) t += ' (for ' + plan.owner + ')';
+    t += ' during case';
+    var info = App.board && App.board.caseInfo[c.id];
+    if (S && info && plan.window && info.start < plan.window.start) t += ' if it runs past ' + S.fmtClock(plan.window.start);
+    if (plan.second) t += ', 2nd backup ' + plan.second.name + ' (' + plan.second.source + ')';
+    return t;
+  }
+
+  function backupRow(c, plan) {
+    var S = window.Status;
+    var wrap = el('div', { class: 'backup-box' + (plan && !trim(c.backup) ? ' needs' : '') });
+    var head = plan
+      ? trim(c.assigned) + ' leaves ' + plan.clinic + ' clinic' + (plan.owner !== trim(c.assigned) ? ' (for ' + plan.owner + ')' : '') +
+        (S && plan.window ? ' ' + S.fmtClock(plan.window.start) + '–' + S.fmtClock(plan.window.end) : '') + ' → backup covers it'
+      : 'Backup';
+    wrap.appendChild(el('div', { class: 'backup-head', text: head }));
+    var row = el('div', { class: 'assign-row-inline' });
+    if (plan && plan.primary && !trim(c.backup)) {
+      row.appendChild(el('button', {
+        type: 'button', class: 'btn btn-small sugg-chip-2',
+        text: '✓ ' + plan.primary.name + ' · ' + plan.primary.source,
+        onclick: function () {
+          c.backup = plan.primary.name;
+          c.backupNote = backupNoteFor(c, plan);
+          touch();
+          refreshAssignAreas();
+        }
+      }));
+    } else if (plan && !plan.primary && !trim(c.backup)) {
+      row.appendChild(el('span', { class: 'warn-line', text: '⚠ Nobody on the coverage chain is free — pick someone or mark NC' }));
+    }
+    var spans = plan && plan.window ? [{ start: plan.window.start, end: plan.window.end }] : null;
+    row.appendChild(residentPicker(c.backup === 'NC' ? 'NC' : c.backup, function (v) {
+      c.backup = v;
+      if (v && v !== 'NC' && plan && !trim(c.backupNote)) c.backupNote = backupNoteFor(c, plan);
+      touch();
+      refreshAssignAreas();
+    }, {
+      spans: spans, exclude: c.id, emptyLabel: 'backup…', hideNames: [trim(c.assigned)],
+      suggested: plan && plan.primary && !trim(c.backup) ? plan.primary.name : '',
+      extra: [{ value: 'NC', text: 'NC — clinic not covered' }]
+    }));
+    wrap.appendChild(row);
+    var note = el('input', {
+      type: 'text', class: 'covnote',
+      placeholder: 'backup note — e.g. to cover glaucoma clinic during case if after 1 PM',
+      value: c.backupNote || ''
+    });
+    note.addEventListener('input', function () { c.backupNote = note.value; touch(); });
+    wrap.appendChild(note);
+    return wrap;
+  }
+
+  // Re-render every case's resident area (and the counters) against a fresh
+  // board — inputs keep their focus because only these areas are rebuilt.
+  function refreshAssignAreas() {
+    if (assignRefreshTimer) { clearTimeout(assignRefreshTimer); assignRefreshTimer = null; }
+    computeBoard();
+    computeSuggestions();
+    (App.state.cases || []).forEach(function (c) {
+      var host = document.querySelector('.case-assign[data-assign-for="' + c.id + '"]');
+      if (host) renderCaseAssign(c, host);
+    });
+    renderSurgeryToolbar();
+    renderAvailStrip();
+    renderBadges();
+  }
+
+  function acceptAllSuggestions() {
+    computeBoard();
+    computeSuggestions();
+    var n = 0;
+    App.state.cases.forEach(function (c) {
+      var s = suggMap[c.id];
+      if (s && s.name && needsResident(c)) { c.assigned = s.name; n++; }
+    });
+    touch();
+    computeBoard();
+    renderSurgeryTab();
+    toast(n ? 'Accepted ' + n + ' suggestion' + (n === 1 ? '' : 's') : 'Nothing to accept — every service case has a resident');
+  }
+
+  function renderSurgeryToolbar() {
+    var host = $('surgeryToolbar');
+    if (!host) return;
+    clearNode(host);
+    var cases = App.state.cases || [];
+    var svc = cases.filter(function (c) { return c.serviceCount > 0; }).length;
+    var needs = cases.filter(needsResident);
+    var acceptable = needs.filter(function (c) { return suggMap[c.id] && suggMap[c.id].name; }).length;
+    var bar = el('div', { class: 'toolbar card-lite surgery-toolbar' });
+    bar.appendChild(el('span', { class: 'toolbar-count' }, [
+      el('b', { text: String(svc) }), ' service case' + (svc === 1 ? '' : 's') + ' · ',
+      el('b', { class: needs.length ? 'count-warn' : 'count-ok', text: String(needs.length) }),
+      ' need' + (needs.length === 1 ? 's' : '') + ' a resident'
+    ]));
+    bar.appendChild(el('button', {
+      type: 'button', class: 'btn btn-primary', disabled: !acceptable,
+      text: 'Accept all suggestions' + (acceptable ? ' (' + acceptable + ')' : ''),
+      onclick: acceptAllSuggestions
+    }));
+    bar.appendChild(el('span', {
+      class: 'toolbar-note',
+      text: 'Suggestions follow the how-to chains and skip anyone out or already in a case at that time. Nothing is assigned until you click.'
+    }));
+    host.appendChild(bar);
   }
 
   function renderCaseSections() {
     var wrap = $('caseSections');
     clearNode(wrap);
-    CASE_SECTIONS.forEach(function (secDef) {
+    SURGERY_ORDER.forEach(function (key) {
+      var secDef = CASE_SECTIONS.filter(function (s) { return s.key === key; })[0];
       var list = App.state.cases.filter(function (c) { return c.section === secDef.key; });
 
       var det = el('details', { class: 'card case-section', open: !!caseSectionOpen[secDef.key] });
@@ -1003,9 +1460,11 @@
           addCase(secDef.key);
         }
       });
+      var nNeed = list.filter(needsResident).length;
       det.appendChild(el('summary', { class: 'case-summary' }, [
         el('span', { class: 'case-summary-title', text: secDef.label }),
         el('span', { class: 'count-badge', text: list.length + (list.length === 1 ? ' case' : ' cases') }),
+        nNeed ? el('span', { class: 'count-badge count-badge-warn', text: nNeed + ' need a resident' }) : null,
         addBtn
       ]));
 
@@ -1056,7 +1515,8 @@
     if (ai !== -1) ov.added.splice(ai, 1);
     else if (ov.removed.indexOf(name) === -1) ov.removed.push(name);
     touch();
-    renderClinicRows();
+    computeBoard();
+    renderClinicsTab();
   }
 
   function addClinicStaff(label, session, name) {
@@ -1067,7 +1527,8 @@
     if (ri !== -1) ov.removed.splice(ri, 1);
     else if (ov.added.indexOf(name) === -1) ov.added.push(name);
     touch();
-    renderClinicRows();
+    computeBoard();
+    renderClinicsTab();
   }
 
   function clinicCountEntry(key) {
@@ -1111,6 +1572,83 @@
     n.classList.toggle('hidden', !names.length);
   }
 
+  // Who is actually standing in for `owner` in `clinic` over [from, to) —
+  // follows chains (Surg 2 covers, then Surg 2 takes a globe and Surg 4
+  // covers). -> [{ name|'' , start, end }]
+  function coveredBySegments(owner, clinic, from, to) {
+    var b = App.board;
+    var out = [];
+    for (var t = from; t < to; t += 5) {
+      var who = '';
+      for (var i = 0; i < b.order.length && !who; i++) {
+        var m = b.order[i];
+        if (m === owner) continue;
+        var st = b.statusAt(m, t + 1);
+        if (st.kind === 'clinic' && st.clinic === clinic && st.covering === owner) who = m;
+      }
+      var last = out[out.length - 1];
+      if (last && last.name === who && last.end === t) last.end = Math.min(t + 5, to);
+      else out.push({ name: who, start: t, end: Math.min(t + 5, to) });
+    }
+    return out;
+  }
+
+  // What is actually happening to a clinic session's staff: who is out (and
+  // who covers), who is covering someone elsewhere, who is pulled into a case
+  // (and who covers during it). -> { lines: [{text, bad}], away: {name: true} }
+  function clinicStatusNotes(label, session, staff) {
+    var out = { lines: [], away: {} };
+    var b = App.board;
+    var S = window.Status;
+    if (!b || !S || (session !== 'am' && session !== 'pm')) return out;
+    var from = session === 'am' ? b.dayStart : b.noon;
+    var to = session === 'am' ? b.noon : b.dayEnd;
+    staff.forEach(function (name) {
+      if (!b.byName[name]) return;
+      var base = b.base[name][session];
+      if (base.kind === 'out') {
+        out.away[name] = true;
+        var abs = base.absence || {};
+        var cov = session === 'am' ? abs.coverAM : abs.coverPM;
+        out.lines.push({
+          text: name + ' out (' + base.label + ')' + (cov && cov !== 'NC' ? ' → ' + cov + ' covers' : cov === 'NC' ? ' — NC' : ' — nobody covering yet'),
+          bad: !cov
+        });
+        return;
+      }
+      if (base.covering && base.text !== label) {
+        out.away[name] = true;
+        out.lines.push({ text: name + ' is covering ' + base.covering + ' (' + base.text + ') — not here', bad: false });
+        return;
+      }
+      // pulled into a case during the session?
+      var segs = b.segments(name).filter(function (sg) {
+        return sg.kind === 'case' && sg.start < to && from < sg.end;
+      });
+      segs.forEach(function (sg) {
+        var caseId = sg.status && sg.status.caseId;
+        var info = caseId && b.caseInfo[caseId];
+        var s0 = Math.max(sg.start, from);
+        var s1 = Math.min(sg.end, to);
+        var who = coveredBySegments(name, label, s0, s1);
+        var gap = who.some(function (w) { return !w.name; });
+        var txt = name + ' in ' + sg.label + ' ' + S.fmtClock(s0) + '–' + S.fmtClock(s1);
+        if (info && info.backup === 'NC' && !who.some(function (w) { return w.name; })) {
+          txt += ' — NC';
+          gap = false;
+        } else if (who.length === 1) {
+          txt += who[0].name ? ' → ' + who[0].name + ' covers' : ' — nobody covering';
+        } else {
+          txt += ' → ' + who.map(function (w) {
+            return (w.name || 'nobody') + ' ' + S.fmtClock(w.start).replace(/ [AP]M$/, '') + '–' + S.fmtClock(w.end).replace(/ [AP]M$/, '');
+          }).join(', ');
+        }
+        out.lines.push({ text: txt, bad: gap });
+      });
+    });
+    return out;
+  }
+
   // One Clinics-card row. session 'am'/'pm' gets the usual badge; the
   // standing 'day' session (CPEC PO, UISPEC5 §C) renders no badge — its
   // export line carries no session suffix either.
@@ -1132,14 +1670,27 @@
     row.appendChild(labelSpan);
 
     var chips = el('span', { class: 'clinic-chips' });
+    var notes = clinicStatusNotes(label, session, eff.staff);
     eff.staff.forEach(function (name) {
-      chips.appendChild(nameChip(name, function () { removeClinicStaff(label, session, name); }));
+      var chip = nameChip(name, function () { removeClinicStaff(label, session, name); });
+      if (notes.away[name]) chip.classList.add('chip-away');
+      chips.appendChild(chip);
     });
-    var addSel = residentSelect('', function (v) {
+    var addSel = residentPicker('', function (v) {
       addClinicStaff(label, session, v);
-    }, '+ add…');
+    }, {
+      session: (session === 'am' || session === 'pm') ? session : null,
+      emptyLabel: '+ add…', hideNames: eff.staff
+    });
     addSel.className = 'clinic-add';
     chips.appendChild(addSel);
+    if (notes.lines.length) {
+      var sl = el('span', { class: 'clinic-status' });
+      notes.lines.forEach(function (ln) {
+        sl.appendChild(el('span', { class: 'clinic-status-line' + (ln.bad ? ' bad' : ''), text: ln.text }));
+      });
+      chips.appendChild(sl);
+    }
     row.appendChild(chips);
 
     var countIn = el('input', {
@@ -1256,7 +1807,7 @@
     });
   }
 
-  function addCpecCase(e) {
+  function addCpecCase(e, opts) {
     var c = newCase('wills');
     c.surgeon = e.attending || '';
     c.start = e.time || '';           // 'AM TF' goes in start as text
@@ -1268,23 +1819,58 @@
     if (site) noteBits.push(site);
     if (e.note) noteBits.push(e.note);
     c.notes = noteBits.join('; ');
-    c.assigned = cpecCoverName(e.cover);
+    // The sheet says who covers — unless that resident is out today, then
+    // leave it open so the suggestion walks the chain instead.
+    var cover = cpecCoverName(e.cover);
+    var outNote = '';
+    if (cover && App.board && window.Status) {
+      var spans = window.Status.caseSpans(c, data()).spans;
+      if (App.board.statusDuringSpans(cover, spans).kind === 'out') { outNote = cover; cover = ''; }
+    }
+    c.assigned = cover;
     App.state.cases.push(c);
     caseSectionOpen.wills = true;
-    touch();
-    renderCasesTab();
-    toast('Case added from the CPEC sheet — everything stays editable');
+    if (!opts || !opts.batch) {
+      touch();
+      computeBoard();
+      renderSurgeryTab();
+      toast(outNote ? 'Case added — ' + outNote + ' is out today, so it is left unassigned'
+        : 'Case added from the CPEC sheet — everything stays editable', !outNote);
+    }
+    return outNote;
   }
 
-  function addCpecPrivate(e) {
+  function addAllCpec(entries) {
+    var n = 0;
+    var outs = [];
+    entries.forEach(function (e) {
+      if (e.privateOnly || !e.cover) {
+        if (!cpecPrivateAdded(e.attending || '')) { addCpecPrivate(e, { batch: true }); n++; }
+        return;
+      }
+      if (cpecAlreadyAdded(e.attending || '', e.time || '')) return;
+      var o = addCpecCase(e, { batch: true });
+      if (o && outs.indexOf(o) === -1) outs.push(o);
+      n++;
+    });
+    touch();
+    computeBoard();
+    renderSurgeryTab();
+    toast(n ? 'Added ' + n + ' from the CPEC sheet' + (outs.length ? ' — ' + outs.join(', ') + ' out, left unassigned' : '')
+      : 'Everything on the sheet is already added');
+  }
+
+  function addCpecPrivate(e, opts) {
     var c = newCase('private');
     c.surgeon = e.attending || '';
     if (e.count != null) c.count = e.count;
     c.serviceCount = 0;
     App.state.cases.push(c);
     caseSectionOpen.private = true;
+    if (opts && opts.batch) return;
     touch();
-    renderCasesTab();
+    computeBoard();
+    renderSurgeryTab();
     toast('Added to Privates from the CPEC sheet');
   }
 
@@ -1300,9 +1886,19 @@
     var card = el('div', { class: 'card cpec-card' });
     var title = 'CPEC surgical block sheet';
     if (r.nth && r.weekdayLabel) title += ' — ' + ordinal(r.nth) + ' ' + r.weekdayLabel;
-    card.appendChild(el('h2', {}, [
-      title + ' ',
-      el('span', { class: 'h-note', text: 'attending cataract blocks for this date' })
+    var pending = entries.filter(function (e) {
+      return (e.privateOnly || !e.cover) ? !cpecPrivateAdded(e.attending || '') : !cpecAlreadyAdded(e.attending || '', e.time || '');
+    }).length;
+    card.appendChild(el('div', { class: 'card-head' }, [
+      el('h2', {}, [
+        title + ' ',
+        el('span', { class: 'h-note', text: 'step 3–4 of the how-to: scheduled cataracts' })
+      ]),
+      el('button', {
+        type: 'button', class: 'btn btn-small' + (pending ? ' btn-primary' : ''), disabled: !pending,
+        text: pending ? '+ Add all ' + pending : 'all added',
+        onclick: function () { addAllCpec(entries); }
+      })
     ]));
 
     CPEC_GROUPS.forEach(function (g) {
@@ -1340,424 +1936,703 @@
     host.appendChild(card);
   }
 
-  function renderCasesTab() {
+  function renderSurgeryTab() {
+    computeSuggestions();
+    renderSurgeryToolbar();
     renderCpecCard();
     renderCaseSections();
+  }
+
+  function renderClinicsTab() {
+    renderClinicNeeds();
     renderClinicRows();
-    renderAddOnsCard();
   }
 
   /* ------------------------------------------------------------------ */
-  /* tab 3 — Assign                                                      */
+  /* coverage needs — shared by the Clinics and Coverage tabs            */
   /* ------------------------------------------------------------------ */
 
-  function suggestAll() {
-    if (!window.Assign || !window.Assign.suggest) {
-      toast('Assign engine not loaded', false);
+  // Follow a gap's chain of cover to the case that is missing a backup:
+  // Bair's case → backup Djulbegovic → Djulbegovic's globe (no backup).
+  function chainEndCase(caseId, t) {
+    var b = App.board;
+    var guard = 0;
+    while (b && caseId && guard++ < 8) {
+      var info = b.caseInfo[caseId];
+      if (!info || !info.backup || info.backup === 'NC' || !b.byName[info.backup]) return caseId;
+      var st = b.statusAt(info.backup, t);
+      if (st.kind !== 'case' || !st.caseId) return caseId;
+      caseId = st.caseId;
+    }
+    return caseId;
+  }
+
+  function caseById(id) {
+    var found = null;
+    (App.state.cases || []).forEach(function (c) { if (c.id === id) found = c; });
+    return found;
+  }
+
+  function needItem(n) {
+    var S = window.Status;
+    var b = App.board;
+    var row = el('div', { class: 'need-row' });
+    var actions = el('div', { class: 'need-actions' });
+    if (n.type === 'absence') {
+      row.appendChild(el('div', { class: 'need-text' }, [
+        el('b', { text: n.name + ' out ' + n.session.toUpperCase() }),
+        ' — ' + n.duty + ': nobody covering yet' + (n.auto ? ' (Night Float — no Day Float to cover)' : '')
+      ]));
+      if (!n.auto) {
+        actions.appendChild(el('button', {
+          type: 'button', class: 'btn btn-small', text: 'Pick cover on Out today',
+          onclick: function () { setTab('out'); }
+        }));
+      }
+    } else if (n.type === 'clinic') {
+      var when = S ? S.fmtClock(n.start) + '–' + S.fmtClock(n.end) : '';
+      var who = n.owner !== n.holder ? ' (covering for ' + n.owner + ')' : '';
+      row.appendChild(el('div', { class: 'need-text' }, [
+        el('b', { text: n.clinic + ' ' + n.session.toUpperCase() + ' ' + when }),
+        ' — ' + n.holder + who + ' is ' + n.why +
+          (n.whyKind === 'case' ? ' and nobody is covering' : ', so nobody is left for ' + n.holder + '’s spot')
+      ]));
+      if (n.whyKind === 'case' && n.caseId) {
+        var target = caseById(chainEndCase(n.caseId, n.start + 1));
+        var plan = null;
+        if (target && window.Assign && window.Assign.backupPlan && b) {
+          try { plan = window.Assign.backupPlan(target, App.roster, data(), App.state.cases, b); } catch (e) { plan = null; }
+        }
+        if (target && plan && plan.primary) {
+          actions.appendChild(el('button', {
+            type: 'button', class: 'btn btn-small btn-primary',
+            text: '✓ ' + plan.primary.name + ' covers (' + plan.primary.source + ')',
+            onclick: function () {
+              target.backup = plan.primary.name;
+              target.backupNote = backupNoteFor(target, plan);
+              touch();
+              refreshEverything();
+            }
+          }));
+        }
+        if (target) {
+          actions.appendChild(el('button', {
+            type: 'button', class: 'btn btn-small', text: 'NC — leave uncovered',
+            onclick: function () { target.backup = 'NC'; touch(); refreshEverything(); }
+          }));
+        }
+      } else {
+        actions.appendChild(el('button', {
+          type: 'button', class: 'btn btn-small',
+          text: 'Take ' + n.holder + ' off ' + n.clinic + ' ' + n.session.toUpperCase(),
+          onclick: function () { removeClinicStaff(n.clinic, n.session, n.holder); refreshEverything(); }
+        }));
+      }
+    }
+    row.appendChild(actions);
+    return row;
+  }
+
+  function renderNeedsCard(host, title, note) {
+    var b = App.board;
+    var needs = (b && b.needs) || [];
+    var warns = (b && b.warnings) || [];
+    if (!needs.length && !warns.length) {
+      host.appendChild(el('div', { class: 'card ok-card' }, [
+        el('span', { class: 'ok-mark', text: '✓' }),
+        ' Every clinic is covered and every absence has a decision.'
+      ]));
       return;
     }
-    var results = window.Assign.suggest(App.state.cases, App.roster, data());
-    App.state.suggestions = {};
-    results.forEach(function (s) { App.state.suggestions[s.caseId] = s; });
-    touch();
-    renderAssignTab();
-    toast('Suggestions computed for ' + results.length + ' case' + (results.length === 1 ? '' : 's'));
+    var card = el('div', { class: 'card needs-card' + (needs.length ? '' : ' heads-up') });
+    card.appendChild(el('h2', {}, needs.length
+      ? [title + ' ', el('span', { class: 'h-note', text: note })]
+      : ['Heads-up ', el('span', { class: 'h-note', text: 'nothing uncovered — just worth knowing' })]));
+    needs.forEach(function (n) { card.appendChild(needItem(n)); });
+    warns.forEach(function (w) { card.appendChild(el('div', { class: 'warn-line', text: '⚠ ' + w })); });
+    host.appendChild(card);
   }
 
-  function acceptAll() {
-    var n = 0;
-    App.state.cases.forEach(function (c) {
-      var s = App.state.suggestions[c.id];
-      if (s && s.name && !trim(c.assigned)) { c.assigned = s.name; n++; }
+  function renderClinicNeeds() {
+    var host = $('clinicNeeds');
+    if (!host) return;
+    clearNode(host);
+    if (!App.board || !App.board.order.length) return;
+    renderNeedsCard(host, 'Needs coverage', 'clinics left short by vacations or by residents pulled into cases');
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* tab 1 — Out today (how-to Step 1: look up vacation coverage)        */
+  /* ------------------------------------------------------------------ */
+
+  function rosterRes(name) {
+    var list = (App.roster && App.roster.residents) || [];
+    for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i];
+    return null;
+  }
+
+  function dutyOf(name, s) {
+    var r = rosterRes(name);
+    return r ? trim(r[s] && r[s].text) : '';
+  }
+
+  function strengthCount() { return ((App.roster && App.roster.residents) || []).length; }
+
+  // Year-grouped select of residents, minus `hide`.
+  function yearSelect(value, onChange, emptyLabel, hide) {
+    var sel = el('select', { class: 'sel' });
+    sel.appendChild(el('option', { value: '', text: emptyLabel || '—' }));
+    YEAR_ORDER.forEach(function (yk) {
+      var y = data().years[yk];
+      if (!y) return;
+      var og = el('optgroup', { label: y.short });
+      y.residents.forEach(function (n) {
+        if ((hide || []).indexOf(n) !== -1 && n !== value) return;
+        var am = dutyOf(n, 'am');
+        var pm = dutyOf(n, 'pm');
+        var d = am && am === pm ? am : [am, pm].filter(Boolean).join(' / ');
+        og.appendChild(el('option', { value: n, text: n + (d ? ' — ' + d : '') }));
+      });
+      sel.appendChild(og);
     });
-    touch();
-    renderAssignTab();
-    toast(n ? 'Accepted ' + n + ' suggestion' + (n === 1 ? '' : 's') : 'Nothing to accept — suggest first, or all cases already assigned');
+    sel.value = value || '';
+    sel.addEventListener('change', function () { onChange(sel.value); });
+    return sel;
   }
 
-  // 'Huang x7 (0730; svc 1030 & 1300)' — start + service-case times.
-  function caseTitle(c) {
-    var t = (trim(c.surgeon) || '?') + ' x' + c.count;
-    var bits = [];
-    if (trim(c.start)) bits.push(trim(c.start));
-    if (trim(c.serviceTimes)) bits.push('svc ' + trim(c.serviceTimes));
-    if (bits.length) t += ' (' + bits.join('; ') + ')';
-    return t;
-  }
-
-  function sectionLabel(key) {
-    for (var i = 0; i < CASE_SECTIONS.length; i++) {
-      if (CASE_SECTIONS[i].key === key) return CASE_SECTIONS[i].label;
-    }
-    return key;
-  }
-
-  function assignCaseCard(c, collapsible) {
-    var card = el('div', { class: 'assign-card' });
-    var head = el('div', { class: 'assign-head' }, [
-      el('span', { class: 'assign-title', text: caseTitle(c) }),
-      el('span', { class: 'assign-meta', text: sectionLabel(c.section) }),
-      el('span', { class: 'badge badge-cat', text: c.category })
-    ]);
-    if (c.addOn) head.appendChild(el('span', { class: 'badge badge-addon', text: 'ADD-ON' }));
-    if (collapsible) {
-      head.appendChild(el('button', {
-        type: 'button', class: 'btn btn-small assign-collapse', text: 'Done',
-        title: 'Collapse back to one line',
-        onclick: function () { delete assignExpanded[c.id]; renderAssignTab(); }
+  function segmented(options, value, onPick) {
+    var wrap = el('span', { class: 'seg' });
+    options.forEach(function (o) {
+      wrap.appendChild(el('button', {
+        type: 'button', class: 'seg-btn' + (o[0] === value ? ' on' : ''), text: o[1],
+        'aria-pressed': o[0] === value ? 'true' : 'false',
+        onclick: function () { onPick(o[0]); }
       }));
-    }
-    if (window.Assign && window.Assign.classify) {
-      var hier = (data().hierarchy || {})[window.Assign.classify(c)];
-      if (hier) head.appendChild(el('span', { class: 'assign-meta', text: '· ' + hier.label }));
-    }
-    if (c.serviceCount > 0) {
-      head.appendChild(el('span', { class: 'assign-meta', text: '· x' + c.serviceCount + ' service' }));
-    }
-    card.appendChild(head);
-
-    var s = App.state.suggestions[c.id];
-    if (s) {
-      var accepted = s.name && trim(c.assigned) === s.name;
-      var box = el('div', {
-        class: 'sugg-box' + (accepted ? ' sugg-accepted' : (s.name ? '' : ' sugg-none'))
-      });
-      if (s.name) {
-        box.appendChild(el('div', {}, [
-          el('span', { class: 'sugg-name', text: s.name }),
-          accepted ? el('span', { class: 'sugg-reason', text: ' — accepted' }) : null
-        ]));
-      } else {
-        box.appendChild(el('div', {}, [el('span', { class: 'sugg-name', text: 'No suggestion' })]));
-      }
-      (s.reasons || []).forEach(function (rr) {
-        box.appendChild(el('div', { class: 'sugg-reason', text: rr }));
-      });
-      (s.warnings || []).forEach(function (w) {
-        box.appendChild(el('span', { class: 'warn-line', text: '⚠ ' + w }));
-      });
-      if (s.name || (s.alternates || []).length) {
-        var actions = el('div', { class: 'sugg-actions' });
-        var pick = el('select');
-        if (s.name) pick.appendChild(el('option', { value: s.name, text: s.name + ' (suggested)' }));
-        (s.alternates || []).forEach(function (alt) {
-          if (isResidentName(alt)) pick.appendChild(el('option', { value: alt, text: alt }));
-          else pick.appendChild(el('option', { value: '', text: alt, disabled: true }));
-        });
-        actions.appendChild(pick);
-        actions.appendChild(el('button', {
-          type: 'button', class: 'btn btn-small btn-primary', text: 'Accept',
-          onclick: function () {
-            if (!pick.value) return;
-            c.assigned = pick.value;
-            touch();
-            renderAssignTab();
-          }
-        }));
-        box.appendChild(actions);
-      }
-      card.appendChild(box);
-    }
-
-    // Clinic-coverage backup (how-to Step 3): offered when the assigned
-    // resident staffs a PM clinic this case could pull them out of.
-    var plan = null;
-    if (window.Assign && window.Assign.backupPlan) {
-      try { plan = window.Assign.backupPlan(c, App.roster, data(), App.state.cases); } catch (e) { plan = null; }
-    }
-    if (plan && !trim(c.backup)) {
-      var covText = plan.primary.name + ' (' + plan.primary.source + ') to cover ' +
-        plan.clinic + ' clinic during the case if after 1 PM' +
-        (plan.second ? ' · 2nd backup ' + plan.second.name + ' (' + plan.second.source + ')' : '');
-      var covBox = el('div', { class: 'cover-suggest' }, [
-        el('span', { class: 'cover-text', text: 'Clinic backup: ' + covText }),
-        el('button', {
-          type: 'button', class: 'btn btn-small', text: 'Use as backup',
-          onclick: function () {
-            c.backup = plan.primary.name;
-            c.backupNote = 'to cover ' + plan.clinic.toLowerCase() +
-              ' clinic during case if after 1 PM' +
-              (plan.second ? ', 2nd backup ' + plan.second.name + ' (' + plan.second.source + ')' : '');
-            touch();
-            renderAssignTab();
-          }
-        })
-      ]);
-      card.appendChild(covBox);
-    }
-
-    var manual = el('div', { class: 'assign-manual' });
-    // Each label + select is grouped in a .assign-pair so flex wrapping can
-    // never split a label from its control at narrow widths.
-    manual.appendChild(el('span', { class: 'assign-pair' }, [
-      el('label', { text: 'Assigned' }),
-      residentSelect(c.assigned, function (v) {
-        c.assigned = v;
-        touch();
-        renderAssignTab();
-      }, 'unassigned')
-    ]));
-    manual.appendChild(el('span', { class: 'assign-pair' }, [
-      el('label', { text: 'Backup' }),
-      residentSelect(c.backup, function (v) {
-        c.backup = v;
-        touch();
-        renderAssignTab();
-      }, '—')
-    ]));
-    if (!trim(c.assigned) && c.serviceCount > 0) {
-      manual.appendChild(el('span', { class: 'unassigned-text', text: '⚠ UNASSIGNED' }));
-    }
-    card.appendChild(manual);
-
-    var covNote = el('input', {
-      type: 'text', class: 'covnote',
-      placeholder: 'backup note — e.g. to cover glaucoma clinic during case if after 1 PM, 2nd backup …',
-      value: c.backupNote || ''
     });
-    covNote.addEventListener('input', function () { c.backupNote = covNote.value; touch(); });
-    card.appendChild(covNote);
+    return wrap;
+  }
+
+  function outChanged() {
+    touch();
+    computeBoard();
+    renderOutTab();
+    renderAvailStrip();
+    renderBadges();
+  }
+
+  function addAbsence() {
+    var st = App.state;
+    st.absences.push({
+      id: 'a' + Date.now().toString(36) + (absSeq++), name: '', am: true, pm: true,
+      reason: 'vacation', coverAM: '', coverPM: ''
+    });
+    st.outConfirmed = false;
+    touch();
+    renderOutTab();
+  }
+
+  function absenceCard(a, idx) {
+    var st = App.state;
+    var card = el('div', { class: 'abs-card' });
+    var others = st.absences.filter(function (x) { return x !== a; }).map(function (x) { return x.name; });
+
+    var top = el('div', { class: 'abs-top' });
+    top.appendChild(yearSelect(a.name, function (v) { a.name = v; outChanged(); }, 'who is out…', others));
+    var which = a.am && a.pm ? 'day' : (a.am ? 'am' : 'pm');
+    top.appendChild(segmented([['day', 'All day'], ['am', 'AM'], ['pm', 'PM']], which, function (v) {
+      a.am = v !== 'pm';
+      a.pm = v !== 'am';
+      if (!a.am) a.coverAM = '';
+      if (!a.pm) a.coverPM = '';
+      outChanged();
+    }));
+    var reason = el('select', { class: 'sel abs-reason' });
+    REASONS.forEach(function (r) { reason.appendChild(el('option', { value: r.key, text: r.label })); });
+    reason.value = a.reason;
+    reason.addEventListener('change', function () { a.reason = reason.value; outChanged(); });
+    top.appendChild(reason);
+    top.appendChild(el('button', {
+      type: 'button', class: 'btn-icon danger', title: 'Remove', text: '×',
+      onclick: function () { st.absences.splice(idx, 1); outChanged(); }
+    }));
+    card.appendChild(top);
+
+    if (!a.name) {
+      card.appendChild(el('p', { class: 'field-hint', text: 'Pick the resident — their assignments and a coverage picker appear here.' }));
+      return card;
+    }
+
+    // Role warning: a Surg role on vacation changes the whole day
+    var role = App.board && App.board.surgRole[a.name];
+    if (role) {
+      card.appendChild(el('div', { class: 'warn-line' }, [
+        '⚠ ' + a.name + ' is Surg ' + role + ' today — while out, their cases go to the next person in each chain (the Surgery tab does this automatically).'
+      ]));
+    }
+    if ((App.roster.dayFloat || []).indexOf(a.name) !== -1) {
+      card.appendChild(el('div', { class: 'warn-line' }, ['⚠ ' + a.name + ' is the Day Float — check who covers the Night Float resident today.']));
+    }
+
+    ['am', 'pm'].forEach(function (s) {
+      if (!a[s]) return;
+      var key = s === 'am' ? 'coverAM' : 'coverPM';
+      var duty = dutyOf(a.name, s) || '—';
+      var line = el('div', { class: 'abs-sess' });
+      line.appendChild(el('span', { class: 'badge ' + (s === 'am' ? 'badge-am' : 'badge-pm'), text: s.toUpperCase() }));
+      line.appendChild(el('span', { class: 'abs-duty' }, ['would be ', el('b', { text: duty })]));
+      line.appendChild(el('span', { class: 'abs-arrow', text: 'covered by' }));
+      var noCover = ((data().availability || {}).noCoverTexts || ['PT', 'Day Float']).indexOf(duty) !== -1;
+      line.appendChild(residentPicker(a[key], function (v) { a[key] = v; outChanged(); }, {
+        session: s, hideNames: [a.name].concat(others), emptyLabel: noCover ? 'no cover needed…' : 'covered by…',
+        extra: [{ value: 'NC', text: 'NC — not covered' }]
+      }));
+      var cov = a[key];
+      if (cov && cov !== 'NC') {
+        var own = dutyOf(cov, s);
+        if (own) line.appendChild(el('span', { class: 'field-hint', text: cov + ' leaves ' + own }));
+      } else if (!cov && !noCover) {
+        line.appendChild(el('span', { class: 'unassigned-text', text: 'decide: someone or NC' }));
+      }
+      card.appendChild(line);
+    });
+
+    if (window.ExportFmt && window.ExportFmt.absenceLine) {
+      card.appendChild(el('div', { class: 'abs-preview' }, [
+        el('span', { class: 'mini-label', text: 'Copied schedule' }),
+        el('span', { class: 'abs-preview-text', text: window.ExportFmt.absenceLine(a, App.roster) })
+      ]));
+    }
     return card;
   }
 
-  // A case still needs a resident: has service cases and nobody assigned yet.
-  function needsResident(c) { return c.serviceCount > 0 && !trim(c.assigned); }
-
-  function renderAssignFilters() {
-    var host = $('assignFilters');
+  function renderOutTab() {
+    var host = $('outBody');
     if (!host) return;
     clearNode(host);
-    var cases = App.state.cases;
-    var nNeeds = 0, nAssigned = 0;
-    cases.forEach(function (c) {
-      if (needsResident(c)) nNeeds++;
-      if (trim(c.assigned)) nAssigned++;
-    });
-    [
-      { key: 'needs', label: 'Needs resident', count: nNeeds },
-      { key: 'assigned', label: 'Assigned', count: nAssigned },
-      { key: 'all', label: 'All', count: cases.length }
-    ].forEach(function (f) {
-      host.appendChild(el('button', {
-        type: 'button',
-        class: 'filter-chip' + (assignFilter === f.key ? ' active' : ''),
-        onclick: function () {
-          assignFilter = f.key;
-          renderAssignFilters();
-          renderAssignCases();
-        }
-      }, [f.label + ' ', el('span', { class: 'filter-count', text: String(f.count) })]));
-    });
-  }
+    var st = App.state;
+    var r = App.roster || {};
+    var d = parseISO(st.date);
+    var n = strengthCount();
 
-  // Compact one-line row: '✓ Huang x7 (0730) → Bair; backup Calotti' + Edit.
-  function assignCompactRow(c) {
-    var assigned = trim(c.assigned);
-    var row = el('div', { class: 'assign-row' });
-    row.appendChild(el('span', { class: 'row-check' + (assigned ? '' : ' none'), text: assigned ? '✓' : '—' }));
-    row.appendChild(el('span', { class: 'row-title', text: caseTitle(c) }));
-    if (assigned) {
-      row.appendChild(el('span', { class: 'row-arrow', text: '→' }));
-      row.appendChild(el('b', { class: 'row-assigned', text: assigned }));
-      if (trim(c.backup)) row.appendChild(el('span', { class: 'row-meta', text: '; backup ' + trim(c.backup) }));
-    } else {
-      row.appendChild(el('span', { class: 'row-meta', text: 'private — no resident needed' }));
+    var card = el('div', { class: 'card' });
+    card.appendChild(el('h2', {}, [
+      'Who’s out — ' + weekdayName(d) + ' ' + fmtMDYY(d) + ' ',
+      el('span', { class: 'h-note', text: 'step 1 of the how-to: vacation, sick, conferences — check the Google Calendar' })
+    ]));
+    if (!(r.residents || []).length) {
+      card.appendChild(el('p', { class: 'empty-note', text: 'No block schedule for this date — pick a weekday inside the academic year.' }));
+      host.appendChild(card);
+      return;
     }
-    row.appendChild(el('button', {
-      type: 'button', class: 'btn btn-small row-edit', text: 'Edit',
-      onclick: function () { assignExpanded[c.id] = true; renderAssignCases(); }
-    }));
-    return row;
+
+    var named = st.absences.filter(function (a) { return trim(a.name); });
+    if (!st.absences.length) {
+      if (st.outConfirmed) {
+        card.appendChild(el('div', { class: 'ok-banner' }, [
+          el('span', { text: '✓ No resident vacation — ' + n + ' strong' }),
+          el('button', {
+            type: 'button', class: 'btn btn-small', text: 'Undo',
+            onclick: function () { st.outConfirmed = false; outChanged(); }
+          }),
+          el('button', { type: 'button', class: 'btn btn-small', text: '+ Someone’s out', onclick: addAbsence })
+        ]));
+      } else {
+        card.appendChild(el('div', { class: 'out-choice' }, [
+          el('button', {
+            type: 'button', class: 'btn btn-primary out-big', text: '✓ No one out — ' + n + ' strong',
+            onclick: function () { st.outConfirmed = true; outChanged(); }
+          }),
+          el('button', { type: 'button', class: 'btn out-big', text: '+ Someone’s out', onclick: addAbsence })
+        ]));
+      }
+    } else {
+      st.absences.forEach(function (a, i) { card.appendChild(absenceCard(a, i)); });
+      card.appendChild(el('div', { class: 'abs-foot' }, [
+        el('button', { type: 'button', class: 'btn btn-small', text: '+ Add another', onclick: addAbsence }),
+        el('span', { class: 'field-hint', text: (n - named.length) + ' strong' })
+      ]));
+    }
+    host.appendChild(card);
+
+    // Night Float — automatic, and the Day Float rule made visible
+    var b = App.board;
+    var nf = b && b.nightFloat;
+    if (nf) {
+      var nfCard = el('div', { class: 'card' });
+      nfCard.appendChild(el('h2', {}, ['Night Float ', el('span', { class: 'h-note', text: 'from the call schedule — change it on the Roster tab' })]));
+      var nfAbs = b.absences.filter(function (x) { return x.auto; })[0];
+      var duty = [dutyOf(nf, 'am'), dutyOf(nf, 'pm')];
+      var dutyStr = duty[0] === duty[1] ? duty[0] : duty.filter(Boolean).join(' / ');
+      var txt = nf + ' is on Night Float — out for the day (post-call).';
+      if (nfAbs && nfAbs.coverAM) txt += ' Day Float ' + nfAbs.coverAM + ' covers ' + nf + '’s ' + (dutyStr || 'daytime') + '.';
+      else if ((b.dayFloats || []).indexOf(nf) !== -1) txt += ' ' + nf + ' is also the Day Float, so there is no Day Float today — nothing to cover.';
+      else txt += ' No Day Float on the roster today — ' + nf + '’s ' + (dutyStr || 'daytime') + ' is uncovered.';
+      nfCard.appendChild(el('p', { class: 'ref-para', text: txt }));
+      nfCard.appendChild(el('p', { class: 'field-hint', text: 'Day Float only ever covers the Night Float resident — never vacations.' }));
+      host.appendChild(nfCard);
+    }
+
+    var notes = el('div', { class: 'card' });
+    notes.appendChild(el('h2', {}, ['Other notes for the Vacation section ', el('span', { class: 'h-note', text: 'optional — printed after the lines above' })]));
+    var ta = el('textarea', { rows: '2', placeholder: 'e.g. Djulbegovic at AAO Fri' });
+    ta.value = st.vacation;
+    ta.addEventListener('input', function () { st.vacation = ta.value; touch(); });
+    notes.appendChild(ta);
+    host.appendChild(notes);
+
+    host.appendChild(stepFoot('roster'));
   }
 
-  function assignEmptyCard(text, btnLabel, btnTab, primary) {
-    var kids = [el('p', { class: 'empty-note', text: text })];
-    if (btnLabel) {
-      kids.push(el('button', {
-        type: 'button', class: 'btn btn-small' + (primary ? ' btn-primary' : ''), text: btnLabel,
-        onclick: function () { setTab(btnTab); }
+  /* ------------------------------------------------------------------ */
+  /* tab 5 — Coverage: who is free, who backs up whom, what if a globe   */
+  /* ------------------------------------------------------------------ */
+
+  function coverageNow() {
+    var S = window.Status;
+    if (coverageFollowNow && isToday()) {
+      var n = nowMinutes();
+      if (S && n >= S.DAY_START && n < S.DAY_END) return n;
+    }
+    if (coverageTime != null) return coverageTime;
+    return 13 * 60;
+  }
+
+  function setCoverageTime(t, followNow) {
+    coverageTime = t;
+    coverageFollowNow = !!followNow;
+    renderCoverageBody();
+    renderAvailStrip();
+  }
+
+  var KIND_CLASS = { free: 'k-free', 'case': 'k-case', clinic: 'k-clinic', duty: 'k-duty', out: 'k-out', off: 'k-off' };
+
+  function timeBar(t) {
+    var S = window.Status;
+    var bar = el('div', { class: 'toolbar card-lite time-bar' });
+    bar.appendChild(el('span', { class: 'time-label', text: 'As of' }));
+    var inp = el('input', { type: 'time', value: S.fmtHHMM(t).replace(/^(\d\d)(\d\d)$/, '$1:$2'), step: '300' });
+    inp.addEventListener('change', function () {
+      var m = /^(\d{1,2}):(\d{2})/.exec(inp.value);
+      if (m) setCoverageTime((+m[1]) * 60 + (+m[2]), false);
+    });
+    bar.appendChild(inp);
+    if (isToday()) {
+      bar.appendChild(el('button', {
+        type: 'button', class: 'btn btn-small' + (coverageFollowNow ? ' btn-primary' : ''), text: 'Now',
+        onclick: function () { setCoverageTime(null, true); }
       }));
     }
-    return el('div', { class: 'card assign-empty' }, kids);
+    [[450, '7:30'], [600, '10:00'], [780, '1:00'], [900, '3:00']].forEach(function (p) {
+      bar.appendChild(el('button', {
+        type: 'button', class: 'btn btn-small' + (!coverageFollowNow && t === p[0] ? ' btn-primary' : ''), text: p[1],
+        onclick: function () { setCoverageTime(p[0], false); }
+      }));
+    });
+    bar.appendChild(el('span', {
+      class: 'toolbar-note',
+      text: isToday() ? 'Today — follows the clock unless you pick a time.' : 'Planning view — pick a time to test.'
+    }));
+    return bar;
   }
 
-  function renderAssignCases() {
-    var host = $('assignCases');
-    clearNode(host);
-    var cases = App.state.cases;
-
-    if (!cases.length) {
-      host.appendChild(assignEmptyCard(
-        'No cases yet — add them on the Cases & Clinics tab.',
-        'Go to Cases & Clinics', 'cases', false));
-      return;
-    }
-
-    var shown = [];
-    CASE_SECTIONS.forEach(function (secDef) {
-      cases.forEach(function (c) {
-        if (c.section !== secDef.key) return;
-        if (assignFilter === 'needs' && !needsResident(c)) return;
-        if (assignFilter === 'assigned' && !trim(c.assigned)) return;
-        shown.push(c);
+  function freeCard(t) {
+    var S = window.Status;
+    var b = App.board;
+    var card = el('div', { class: 'card' });
+    card.appendChild(el('h2', {}, ['Free at ' + S.fmtClock(t) + ' ', el('span', { class: 'h-note', text: 'no clinic, no case, not out — CPEC, PT, or a Surg/OR block with nothing booked' })]));
+    var free = b.freeAt(t);
+    var seniors = free.filter(function (n) { return b.byName[n].year === 'pgy4'; });
+    var juniors = free.filter(function (n) { return b.byName[n].year !== 'pgy4'; });
+    [['Seniors', seniors], ['Juniors', juniors]].forEach(function (g) {
+      var row = el('div', { class: 'free-row' }, [el('span', { class: 'free-label', text: g[0] })]);
+      if (!g[1].length) row.appendChild(el('span', { class: 'empty-note', text: 'nobody free' }));
+      g[1].forEach(function (n) {
+        var st = b.statusAt(n, t);
+        var until = nextChange(n, t);
+        row.appendChild(el('span', { class: 'free-chip ' + yearOf(n) }, [
+          el('b', { text: n }),
+          el('span', { class: 'free-sub', text: st.label + (until ? ' · until ' + S.fmtClock(until) : '') })
+        ]));
       });
+      card.appendChild(row);
     });
-
-    if (!shown.length) {
-      if (assignFilter === 'needs') {
-        host.appendChild(assignEmptyCard(
-          'Everything has a resident — check the output.',
-          'Go to Preview & Copy', 'preview', true));
-      } else {
-        host.appendChild(assignEmptyCard(
-          'Nothing assigned yet — suggest and accept, or pick residents on the cards.', null, null, false));
-      }
-      return;
+    var pull = b.order.filter(function (n) { return b.statusAt(n, t).kind === 'clinic'; });
+    if (pull.length) {
+      card.appendChild(el('p', { class: 'field-hint' }, [
+        el('b', { text: 'In clinic (can be pulled, then someone covers): ' }),
+        pull.map(function (n) { var st = b.statusAt(n, t); return n + ' (' + (st.clinic || st.label) + ')'; }).join(', ')
+      ]));
     }
+    return card;
+  }
 
-    shown.forEach(function (c) {
-      if (needsResident(c)) host.appendChild(assignCaseCard(c, false));
-      else if (assignExpanded[c.id]) host.appendChild(assignCaseCard(c, true));
-      else host.appendChild(assignCompactRow(c));
+  // When does this resident's status next change after t? (for "free until")
+  function nextChange(name, t) {
+    var b = App.board;
+    var segs = b.segments(name);
+    for (var i = 0; i < segs.length; i++) {
+      if (segs[i].start <= t && t < segs[i].end) return segs[i].end < b.dayEnd ? segs[i].end : null;
+    }
+    return null;
+  }
+
+  function planCard(t) {
+    var S = window.Status;
+    var b = App.board;
+    var card = el('div', { class: 'card plan-card' });
+    card.appendChild(el('h2', {}, ['If something comes in at ' + S.fmtClock(t) + ' ', el('span', { class: 'h-note', text: 'walks the how-to chain against who is busy right then' })]));
+    var kinds = el('div', { class: 'plan-kinds' });
+    (window.Assign.ADDON_KINDS || []).forEach(function (k) {
+      kinds.appendChild(el('button', {
+        type: 'button', class: 'filter-chip' + (planKind === k.key ? ' active' : ''), text: k.label,
+        onclick: function () { planKind = k.key; renderCoverageBody(); }
+      }));
     });
-  }
+    card.appendChild(kinds);
 
-  // "+ case" on an Assignments row: new Wills case pre-assigned to the
-  // resident, then jump to the Cases tab focused on the fresh card.
-  function addCaseForResident(name) {
-    var c = newCase('wills');
-    c.assigned = name;
-    App.state.cases.push(c);
-    caseSectionOpen.wills = true;
-    touch();
-    setTab('cases');
-    var firstInput = document.querySelector('.case-card[data-case-id="' + c.id + '"] input');
-    if (firstInput) { try { firstInput.focus(); } catch (e) { } }
-    toast('Case added for ' + name + ' — fill in surgeon and counts on Cases & Clinics');
-  }
+    var plan = window.Assign.planAddOn(planKind, t, App.roster, data(), b);
+    card.appendChild(el('div', { class: 'field-hint plan-chain', text: plan.hierLabel + ' chain, then the remaining-cases chain, then any free senior, then any free junior.' }));
+    var ol = el('ol', { class: 'plan-steps' });
+    var shownAlt = 0;
+    plan.steps.some(function (s) {
+      if (s.verdict === 'alt') { if (shownAlt >= 2) return true; shownAlt++; }
+      var li = el('li', { class: 'plan-step ' + s.verdict }, [
+        el('span', { class: 'plan-verdict', text: s.verdict === 'take' ? '✓ takes it' : s.verdict === 'skip' ? 'skip' : 'next' }),
+        el('b', { text: s.name }),
+        el('span', { class: 'plan-via', text: ' ' + s.via }),
+        el('span', { class: 'plan-why', text: ' — ' + (s.why || statusBrief(s.status)) })
+      ]);
+      ol.appendChild(li);
+      return false;
+    });
+    card.appendChild(ol);
 
-  function loadRow(name, role, cases, r) {
-    var res = null;
-    (r.residents || []).forEach(function (x) { if (x.name === name) res = x; });
-    var row = el('div', { class: 'load-row' });
-    var top = el('div', { class: 'load-top' }, [
-      el('span', { class: 'res-name ' + yearOf(name), text: name }),
-      role ? el('span', { class: 'load-role', text: role }) : null,
+    if (!plan.pick) {
+      card.appendChild(el('div', { class: 'warn-line bad', text: '⚠ Nobody is free — this one needs the chiefs.' }));
+      return card;
+    }
+    var ho = plan.handoff;
+    if (ho) {
+      var hoText = plan.pick.name + ' leaves ' + ho.clinic + (ho.owner !== plan.pick.name ? ' (covering for ' + ho.owner + ')' : '') + ' → ';
+      card.appendChild(el('div', { class: 'handoff ' + (ho.primary ? '' : 'bad') }, [
+        hoText,
+        ho.primary ? el('b', { text: ho.primary.name }) : el('b', { text: 'nobody free to cover' }),
+        ho.primary ? ' (' + ho.primary.source + ') covers ' + ho.clinic + ' ' + S.fmtClock(ho.window.start) + '–' + S.fmtClock(ho.window.end) : ''
+      ]));
+    }
+    var def = (window.Assign.ADDON_KINDS || []).filter(function (k) { return k.key === planKind; })[0] || {};
+    card.appendChild(el('div', { class: 'plan-actions' }, [
       el('button', {
-        type: 'button', class: 'btn btn-small load-add', text: '+ case',
-        title: 'Add a Wills case assigned to ' + name,
-        onclick: function () { addCaseForResident(name); }
-      })
-    ]);
-    row.appendChild(top);
-    if (res) {
-      row.appendChild(el('div', { class: 'load-role' }, [
-        el('span', { class: 'badge badge-am', text: 'AM' }), ' ' + (res.am.text || '—') + '   ',
-        el('span', { class: 'badge badge-pm', text: 'PM' }), ' ' + (res.pm.text || '—')
-      ]));
-    }
-    if (cases.length) {
-      var chips = el('div');
-      cases.forEach(function (c) {
-        chips.appendChild(el('span', { class: 'case-chip', text: caseTitle(c) }));
-      });
-      row.appendChild(chips);
-    }
-    return row;
+        type: 'button', class: 'btn btn-primary',
+        text: 'Add it as an add-on case → ' + plan.pick.name + (ho && ho.primary ? ' (backup ' + ho.primary.name + ')' : ''),
+        onclick: function () {
+          var c = newCase('wills');
+          c.category = def.category || 'trauma';
+          c.addOn = true;
+          c.count = 1;
+          c.serviceCount = 1;
+          // The surgeon is rarely known yet — name the case by its kind so the
+          // copied line reads '-Globe x1 (1330 start) - …', never '-? x1'.
+          c.surgeon = def.key === 'globe' ? 'Globe/trauma' : (def.label || 'Add-on');
+          c.notes = 'surgeon TBD';
+          c.start = S.fmtHHMM(t);
+          c.assigned = plan.pick.name;
+          if (ho && ho.primary) {
+            c.backup = ho.primary.name;
+            c.backupNote = 'to cover ' + ho.clinic.toLowerCase() + ' clinic' + (ho.owner !== plan.pick.name ? ' (for ' + ho.owner + ')' : '') + ' during case';
+          }
+          App.state.cases.push(c);
+          caseSectionOpen.wills = true;
+          touch();
+          refreshEverything();
+          toast(def.label + ' added at ' + S.fmtClock(t) + ' → ' + plan.pick.name + ' — fill in the surgeon on Surgery');
+        }
+      }),
+      el('span', { class: 'field-hint', text: 'Adds it to Surgery (Wills/ASC) so the board, clinics and the copied schedule all follow.' })
+    ]));
+    return card;
   }
 
-  // Assignments panel: Surgical (Surg 1..6 + anyone on OR blocks) vs
-  // Clinic / Consults (Cooper Consults + any other assigned resident).
-  // No count pills; everyone gets the "+ case" option.
-  function renderLoadPanel() {
-    var host = $('loadPanel');
-    clearNode(host);
-    var r = App.roster;
-    var loads = {};
-    App.state.cases.forEach(function (c) {
-      var a = trim(c.assigned);
-      if (a) (loads[a] = loads[a] || []).push(c);
+  function boardCard(t) {
+    var S = window.Status;
+    var b = App.board;
+    var card = el('div', { class: 'card' });
+    card.appendChild(el('h2', {}, ['Everyone’s day ', el('span', { class: 'h-note', text: '7 AM – 5 PM · the line is ' + S.fmtClock(t) })]));
+    var legend = el('div', { class: 'tl-legend' });
+    [['free', 'free'], ['case', 'in a case'], ['clinic', 'clinic'], ['duty', 'ER / consults / Day Float'], ['out', 'out']].forEach(function (k) {
+      legend.appendChild(el('span', { class: 'tl-key' }, [el('span', { class: 'tl-swatch ' + KIND_CLASS[k[0]] }), k[1]]));
     });
-
-    var seen = {};
-    var roleOf = {};
-    var surgical = [];
-    var clinical = [];
-    function add(list, name, role) {
-      if (!name || seen[name]) return;
-      seen[name] = true;
-      roleOf[name] = role || '';
-      list.push(name);
-    }
-
-    Object.keys(r.surg || {}).sort(function (a, b) { return (+a) - (+b); }).forEach(function (n) {
-      add(surgical, r.surg[n].name, 'Surg ' + n);
+    card.appendChild(legend);
+    var span = b.dayEnd - b.dayStart;
+    var pct = function (m) { return ((Math.min(Math.max(m, b.dayStart), b.dayEnd) - b.dayStart) / span * 100).toFixed(2) + '%'; };
+    // Surg roles first (in order), then the rest by year
+    var order = [];
+    Object.keys(b.surgRole).forEach(function (n) { order.push(n); });
+    order.sort(function (x, y) { return (+b.surgRole[x]) - (+b.surgRole[y]); });
+    ['pgy4', 'pgy3', 'pgy2'].forEach(function (yk) {
+      b.order.forEach(function (n) { if (b.byName[n].year === yk && order.indexOf(n) === -1) order.push(n); });
     });
-    Object.keys(r.orBlocks || {}).sort().forEach(function (blk) {
-      ['am', 'pm'].forEach(function (sess) {
-        (((r.orBlocks[blk] || {})[sess]) || []).forEach(function (p) {
-          add(surgical, typeof p === 'string' ? p : p && p.name, blk);
-        });
-      });
-    });
-    (r.cooperConsults || []).forEach(function (name) {
-      add(clinical, name, 'Cooper Consults');
-    });
-    Object.keys(loads).forEach(function (name) {
-      add(clinical, name, '');
-    });
-
-    if (!surgical.length && !clinical.length) {
-      host.appendChild(el('p', { class: 'empty-note', text: 'No candidates on this date.' }));
-      return;
-    }
-    [
-      { title: 'Surgical', names: surgical },
-      { title: 'Clinic / Consults', names: clinical }
-    ].forEach(function (g) {
-      if (!g.names.length) return;
-      host.appendChild(el('div', { class: 'load-group-title', text: g.title }));
-      g.names.forEach(function (name) {
-        host.appendChild(loadRow(name, roleOf[name], loads[name] || [], r));
-      });
-    });
-  }
-
-  function renderCoveragePanel() {
-    var host = $('coveragePanel');
-    clearNode(host);
-    var cov = [];
-    try {
-      if (window.Assign && window.Assign.clinicCoverage) {
-        cov = window.Assign.clinicCoverage(App.roster, data()) || [];
+    var groupLabel = { pgy4: 'PGY-4', pgy3: 'PGY-3', pgy2: 'PGY-2' };
+    var lastGroup = '';
+    order.forEach(function (n) {
+      var g = b.surgRole[n] ? 'surg' : b.byName[n].year;
+      if (g !== lastGroup) {
+        card.appendChild(el('div', { class: 'tl-group', text: g === 'surg' ? 'Surg roles' : groupLabel[g] }));
+        lastGroup = g;
       }
-    } catch (e) {
-      if (window.console) console.error('clinicCoverage failed', e);
-    }
-    if (!cov.length) {
-      host.appendChild(el('p', { class: 'empty-note', text: 'No coverage chain for this date.' }));
+      var st = b.statusAt(n, t);
+      var row = el('div', { class: 'tl-row' });
+      row.appendChild(el('div', { class: 'tl-name' }, [
+        el('span', { class: 'res-name ' + b.byName[n].year, text: n }),
+        b.surgRole[n] ? el('span', { class: 'tl-role', text: 'Surg ' + b.surgRole[n] }) : null
+      ]));
+      var track = el('div', { class: 'tl-track' });
+      b.segments(n).forEach(function (sg) {
+        if (sg.kind === 'off') return;
+        track.appendChild(el('span', {
+          class: 'tl-seg ' + KIND_CLASS[sg.kind],
+          style: 'left:' + pct(sg.start) + ';width:calc(' + pct(sg.end) + ' - ' + pct(sg.start) + ')',
+          title: S.fmtClock(sg.start) + '–' + S.fmtClock(sg.end) + ': ' + sg.label
+        }));
+      });
+      track.appendChild(el('span', { class: 'tl-now', style: 'left:' + pct(t) }));
+      track.appendChild(el('span', { class: 'tl-noon', style: 'left:' + pct(b.noon) }));
+      row.appendChild(track);
+      row.appendChild(el('div', { class: 'tl-status ' + KIND_CLASS[st.kind], text: statusShort(st) }));
+      card.appendChild(row);
+    });
+    return card;
+  }
+
+  function renderCoverageTab() {
+    renderCoverageBody();
+    renderAddOnsCard();
+  }
+
+  function renderCoverageBody() {
+    var host = $('coverageBody');
+    if (!host) return;
+    clearNode(host);
+    var b = App.board;
+    if (!b || !b.order.length || !window.Status || !window.Assign) {
+      host.appendChild(el('div', { class: 'card' }, [el('p', { class: 'empty-note', text: 'No block schedule for this date — nothing to cover.' })]));
       return;
     }
-    var ol = el('ol', { class: 'coverage-list' });
-    cov.forEach(function (item) {
-      ol.appendChild(el('li', {}, [
-        el('span', { class: 'res-name ' + yearOf(item.name), text: item.name }),
-        el('span', { class: 'coverage-src', text: ' — ' + item.source })
-      ]));
-    });
-    host.appendChild(ol);
+    var t = coverageNow();
+    host.appendChild(timeBar(t));
+    var needsHost = el('div');
+    renderNeedsCard(needsHost, 'Needs coverage', 'fix here or on Clinics / Out today');
+    host.appendChild(needsHost);
+    var grid = el('div', { class: 'cov-grid' }, [freeCard(t), planCard(t)]);
+    host.appendChild(grid);
+    host.appendChild(boardCard(t));
   }
 
-  function renderAssignSide() {
-    renderLoadPanel();
-    renderCoveragePanel();
+  /* ------------------------------------------------------------------ */
+  /* availability strip + tab badges (visible on every workflow tab)     */
+  /* ------------------------------------------------------------------ */
+
+  function renderAvailStrip() {
+    var host = $('availStrip');
+    if (!host) return;
+    clearNode(host);
+    var b = App.board;
+    var S = window.Status;
+    var show = WORKFLOW_TABS.indexOf(App.activeTab) !== -1 && b && b.order.length && S;
+    host.classList.toggle('hidden', !show);
+    if (!show) return;
+    function list(items) {
+      if (!items.length) return [el('span', { class: 'strip-none', text: 'nobody' })];
+      return items.map(function (x, i) {
+        return el('span', { class: 'strip-name ' + yearOf(x.name) + (x.partial ? ' partial' : ''), title: x.title || '' },
+          [x.name + (x.partial ? ' ' + x.partial : '') + (i < items.length - 1 ? ',' : '')]);
+      });
+    }
+    function sessionItems(s) {
+      return b.freeInSession(s).map(function (x) {
+        var partial = '';
+        if (!x.full) {
+          partial = x.ranges.map(function (r) {
+            return S.fmtClock(r.start).replace(/ [AP]M$/, '') + '–' + S.fmtClock(r.end).replace(/ [AP]M$/, '');
+          }).join(', ');
+          partial = '(' + partial + ')';
+        }
+        return { name: x.name, partial: partial, title: x.label };
+      }).sort(function (p, q) { return (p.partial ? 1 : 0) - (q.partial ? 1 : 0); });
+    }
+    var inner = el('div', { class: 'strip-inner' });
+    if (isToday()) {
+      var now = nowMinutes();
+      if (now >= S.DAY_START && now < S.DAY_END) {
+        inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free now (' + S.fmtClock(now) + '):' })].concat(
+          list(b.freeAt(now).map(function (n) { return { name: n, title: b.statusAt(n, now).label }; })))));
+      }
+    }
+    inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free AM:' })].concat(list(sessionItems('am')))));
+    inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free PM:' })].concat(list(sessionItems('pm')))));
+    var nNeeds = b.needs.length;
+    inner.appendChild(el('button', {
+      type: 'button', class: 'strip-link' + (nNeeds ? ' warn' : ''),
+      text: nNeeds ? '⚠ ' + nNeeds + ' need coverage →' : 'Coverage →',
+      onclick: function () { setTab('coverage'); }
+    }));
+    host.appendChild(inner);
   }
 
-  function renderAssignTab() {
-    renderAssignFilters();
-    renderAssignCases();
-    renderAssignSide();
+  function setBadge(id, text, cls) {
+    var n = $(id);
+    if (!n) return;
+    n.textContent = text || '';
+    n.className = 'tab-badge' + (text ? ' on ' + (cls || '') : '');
+  }
+
+  function renderBadges() {
+    var st = App.state;
+    var b = App.board;
+    if (!st) return;
+    var named = (st.absences || []).filter(function (a) { return trim(a.name); }).length;
+    var absNeeds = b ? b.needs.filter(function (n) { return n.type === 'absence' && !n.auto; }).length : 0;
+    if (named) setBadge('badge-out', String(named), absNeeds ? 'warn' : '');
+    else setBadge('badge-out', st.outConfirmed ? '✓' : '', 'ok');
+    var needRes = (st.cases || []).filter(needsResident).length;
+    setBadge('badge-surgery', needRes ? String(needRes) : '', 'warn');
+    var clinicGaps = b ? b.needs.filter(function (n) { return n.type === 'clinic'; }).length : 0;
+    setBadge('badge-clinics', clinicGaps ? String(clinicGaps) : '', 'warn');
+    var all = b ? b.needs.length : 0;
+    setBadge('badge-coverage', all ? String(all) : '', 'warn');
+  }
+
+  function stepFoot(next) {
+    var wrap = el('div', { class: 'step-foot-inner' });
+    if (next && TAB_TITLES[next]) {
+      wrap.appendChild(el('button', {
+        type: 'button', class: 'btn btn-primary', text: 'Next: ' + TAB_TITLES[next] + ' →',
+        onclick: function () { setTab(next); window.scrollTo(0, 0); }
+      }));
+    }
+    return wrap;
+  }
+
+  function renderStepFoots() {
+    var nodes = document.querySelectorAll('.step-foot[data-next]');
+    for (var i = 0; i < nodes.length; i++) {
+      clearNode(nodes[i]);
+      nodes[i].appendChild(stepFoot(nodes[i].getAttribute('data-next')));
+    }
+  }
+
+  // After a change that can affect several tabs at once.
+  function refreshEverything() {
+    computeBoard();
+    computeSuggestions();
+    if (App.activeTab === 'out') renderOutTab();
+    if (App.activeTab === 'roster') renderRosterTab();
+    if (App.activeTab === 'surgery') renderSurgeryTab();
+    if (App.activeTab === 'clinics') renderClinicsTab();
+    if (App.activeTab === 'coverage') renderCoverageTab();
     if (App.activeTab === 'preview') renderPreview();
+    renderAvailStrip();
+    renderBadges();
   }
 
   /* ------------------------------------------------------------------ */
@@ -1882,13 +2757,15 @@
     if (!host) return;
     clearNode(host);
 
-    // 1. The flow — four numbered rows mirroring the tabs
+    // 1. The flow — the six numbered tabs, in the how-to's order
     var flow = refCard('The flow');
     [
-      { tab: 'roster', num: '1', title: 'Day Roster', text: 'Pick the date — everyone’s block assignment, Surg 1–5, WER, consults and clinics fill in automatically. You type night float, add-ons and vacation.' },
-      { tab: 'cases', num: '2', title: 'Cases & Clinics', text: 'Copy the case list out of Cerner/NextGen by hand — count, start time, service vs private. Enter clinic patient counts.' },
-      { tab: 'assign', num: '3', title: 'Assign', text: 'Press Suggest all — the how-to hierarchy proposes a resident per case, with warnings. Accept or override, and use the clinic-backup suggestions.' },
-      { tab: 'preview', num: '4', title: 'Preview & Copy', text: 'The document, exactly in the usual format — Copy formatted and paste.' }
+      { tab: 'out', num: '1', title: 'Out today', text: 'Check the Google Calendar first. Press “No one out”, or add who is out (all day / AM / PM) and pick who covers each session — or NC. Anyone out disappears from every dropdown.' },
+      { tab: 'roster', num: '2', title: 'Roster', text: 'Everyone’s block assignment, Surg 1–5 (Surg 3 and 4 are all day), WER, consults and clinics fill in automatically. Night Float comes from the call schedule; Day Float covers only the Night Float resident.' },
+      { tab: 'surgery', num: '3', title: 'Surgery', text: 'Add the CPEC-sheet cataracts, then copy the rest of the case list out of Cerner/NextGen. Each case shows the suggested resident — one click to accept — and the dropdowns show who is free at that time.' },
+      { tab: 'clinics', num: '4', title: 'Clinics', text: 'Patient counts from the EMRs. Each clinic shows who is out or pulled into a case and who covers; anything left short is listed at the top.' },
+      { tab: 'coverage', num: '5', title: 'Coverage', text: 'Who is free right now (or at any time you pick), what happens if a globe comes in, every resident’s day on one screen, and the add-on call names.' },
+      { tab: 'preview', num: '6', title: 'Preview & Copy', text: 'The document, exactly in the usual format — Copy formatted and paste.' }
     ].forEach(function (s) {
       flow.appendChild(el('div', { class: 'howto-step' }, [
         el('span', { class: 'howto-num', text: s.num }),
@@ -2208,9 +3085,13 @@
     renderHowto();
     renderCpecReference();
     renderRosterTab();
-    renderCasesTab();
-    renderAssignTab();
+    renderOutTab();
+    renderSurgeryTab();
+    renderClinicsTab();
+    renderCoverageTab();
     renderPreview();
+    renderAvailStrip();
+    renderBadges();
     renderHome();
     renderSetup();
   }
@@ -2420,26 +3301,11 @@
     saveNow(); // flush pending edits for the old date
     App.state = loadState(dateISO);
     stateDirty = false;   // freshly loaded — nothing user-edited yet
-    assignExpanded = {};  // case ids restart at 'c1' per date — expansion must not leak
     refreshAddOnsForDate(); // untouched add-on rows follow the schedule date
+    coverageTime = null;
+    coverageFollowNow = true;
     computeRoster();
     renderAll();
-  }
-
-  function createSchedule() {
-    computeRoster();
-    renderAll();
-    var r = App.roster;
-    toast('Roster built for ' + r.weekdayLabel + ' ' + fmtMDYY(parseISO(App.state.date)) + ' — manual entries kept');
-  }
-
-  // One-click sync: flush edits, recompute the roster, re-render every tab so
-  // the Preview & Copy output reflects everything entered anywhere in the app.
-  function updateSync() {
-    saveNow();
-    computeRoster();
-    renderAll();
-    toast('Updated — clinics, cases & Preview/Copy are in sync');
   }
 
   function startFromYesterday() {
@@ -2483,6 +3349,12 @@
       App.state.nfCleared = !!prev.nfCleared;
     }
     App.state.vacation = String(prev.vacation || '');
+    // Vacations usually run several days — carry who is out, but not who
+    // covers: the covering picks depend on that weekday's assignments.
+    var carried = Array.isArray(prev.absences) ? prev.absences.map(normAbsence).filter(function (a) { return !!a; }) : [];
+    carried.forEach(function (a) { a.coverAM = ''; a.coverPM = ''; });
+    App.state.absences = carried;
+    App.state.outConfirmed = !carried.length && !!prev.outConfirmed;
     App.state.lectures = String(prev.lectures || '');
     // Carry over who is on call, but re-anchor the dates to THIS schedule day.
     var fresh = defaultAddOns(App.state.date);
@@ -2501,7 +3373,7 @@
     stateDirty = true; // explicit user action — this day now really has content
     saveNow();
     renderAll();
-    toast('Copied night float, vacation, lectures & add-ons from ' + src);
+    toast('Copied night float, who’s out, lectures & add-ons from ' + src + (App.state.absences.length ? ' — pick today’s coverers on Out today' : ''));
   }
 
   function clearDay() {
@@ -2509,6 +3381,7 @@
     lsRemove(LS_PREFIX + App.state.date);
     App.state = defaultState(App.state.date);
     stateDirty = false; // back to untouched — don't resurrect the key on next save
+    computeRoster(); // re-prefill Night Float / buddies and rebuild the board
     renderAll();
     toast('Cleared ' + App.state.date);
   }
@@ -2580,9 +3453,10 @@
     if (dp) dp.value = dateISO;
     document.body.classList.remove('home-active');
     setDate(dateISO);
-    setTab(tab || 'roster');
-    if (!tab || tab === 'roster') {
-      toast('Roster built for ' + App.roster.weekdayLabel + ' ' + fmtMDYY(parseISO(dateISO)) + ' — manual entries kept');
+    // Step 1 of the how-to is vacation coverage — start there.
+    setTab(tab || 'out');
+    if (!tab) {
+      toast('Schedule for ' + App.roster.weekdayLabel + ' ' + fmtMDYY(parseISO(dateISO)) + ' — start with who’s out');
     }
   }
 
@@ -2601,10 +3475,13 @@
   /* button walks Home ↔ tabs instead of leaving the site               */
   /* ------------------------------------------------------------------ */
 
-  var VALID_ROUTES = ['home', 'roster', 'cases', 'assign', 'preview', 'howto', 'cpec', 'reference', 'setup'];
+  var VALID_ROUTES = ['home', 'out', 'roster', 'surgery', 'clinics', 'coverage', 'preview', 'howto', 'cpec', 'reference', 'setup'];
+  // Links saved before the Surgery/Clinics split keep working.
+  var ROUTE_ALIASES = { cases: 'surgery', assign: 'surgery' };
 
   function routeFromHash() {
     var h = String(window.location.hash || '').replace(/^#\/?/, '');
+    if (ROUTE_ALIASES[h]) h = ROUTE_ALIASES[h];
     return VALID_ROUTES.indexOf(h) !== -1 ? h : null;
   }
 
@@ -2643,31 +3520,50 @@
   /* ------------------------------------------------------------------ */
 
   function setTab(tab) {
+    if (ROUTE_ALIASES[tab]) tab = ROUTE_ALIASES[tab];
     App.activeTab = tab;
     var tabs = document.querySelectorAll('.tabbar .tab');
     for (var i = 0; i < tabs.length; i++) {
       tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === tab);
     }
+    var lib = $('libMenu');
+    if (lib) {
+      lib.classList.toggle('active', WORKFLOW_TABS.indexOf(tab) === -1);
+      lib.removeAttribute('open');
+    }
     var panels = document.querySelectorAll('.panel');
     for (var j = 0; j < panels.length; j++) {
       panels[j].classList.toggle('active', panels[j].id === 'panel-' + tab);
     }
+    // Every workflow tab renders against a fresh board, so what one tab
+    // changed (an absence, a case, a clinic edit) shows up in the next.
+    if (WORKFLOW_TABS.indexOf(tab) !== -1) { computeBoard(); computeSuggestions(); }
+    if (tab === 'out') renderOutTab();
     if (tab === 'roster') renderRosterTab();
-    if (tab === 'cases') renderCasesTab();
-    if (tab === 'assign') renderAssignTab();
+    if (tab === 'surgery') renderSurgeryTab();
+    if (tab === 'clinics') renderClinicsTab();
+    if (tab === 'coverage') renderCoverageTab();
     if (tab === 'preview') renderPreview();
     if (tab === 'cpec') renderCpecReference(); // re-render so the selected date's cell is highlighted
     if (tab === 'setup') renderSetup(); // status line + saved-day count stay fresh
     // 'howto' and 'reference' are static — rendered once at boot.
+    renderAvailStrip();
+    renderBadges();
     syncHash(tab);
   }
 
   function renderAll() {
+    computeBoard();
     renderHeader();
+    computeSuggestions();
+    if (App.activeTab === 'out') renderOutTab();
     renderRosterTab();
-    renderCasesTab();
-    if (App.activeTab === 'assign') renderAssignTab();
+    if (App.activeTab === 'surgery') renderSurgeryTab();
+    if (App.activeTab === 'clinics') renderClinicsTab();
+    if (App.activeTab === 'coverage') renderCoverageTab();
     if (App.activeTab === 'preview') renderPreview();
+    renderAvailStrip();
+    renderBadges();
   }
 
   function boot() {
@@ -2709,8 +3605,14 @@
       })(tabs[i]);
     }
 
-    $('btnCreate').addEventListener('click', createSchedule);
-    $('btnUpdate').addEventListener('click', updateSync);
+    // Library menu (How-to, CPEC sheet, block schedules, Setup)
+    var libBtns = document.querySelectorAll('#libMenu [data-lib]');
+    for (var li = 0; li < libBtns.length; li++) {
+      (function (btn) {
+        btn.addEventListener('click', function () { setTab(btn.getAttribute('data-lib')); });
+      })(libBtns[li]);
+    }
+    renderStepFoots();
     function closeMoreMenu() {
       var m = $('moreMenu');
       if (m) m.removeAttribute('open');
@@ -2722,11 +3624,21 @@
     }
     $('btnClear').addEventListener('click', function () { closeMoreMenu(); clearDay(); });
     document.addEventListener('click', function (ev) {
-      var m = $('moreMenu');
-      if (m && m.hasAttribute('open') && !m.contains(ev.target)) m.removeAttribute('open');
+      ['moreMenu', 'libMenu'].forEach(function (id) {
+        var m = $(id);
+        if (m && m.hasAttribute('open') && !m.contains(ev.target)) m.removeAttribute('open');
+      });
     });
-    $('btnSuggestAll').addEventListener('click', suggestAll);
-    $('btnAcceptAll').addEventListener('click', acceptAll);
+    // Keep "Free now" and the Coverage tab's clock honest on today's schedule.
+    setInterval(function () {
+      if (!App.state || !isToday()) return;
+      renderAvailStrip();
+      // Never yank a control out from under the user: skip the tick while
+      // something inside the coverage view has focus.
+      var body = $('coverageBody');
+      var busy = body && document.activeElement && body.contains(document.activeElement);
+      if (App.activeTab === 'coverage' && coverageFollowNow && !busy) renderCoverageBody();
+    }, 60000);
 
     $('btnCopyHTML').addEventListener('click', function () {
       renderPreview();
