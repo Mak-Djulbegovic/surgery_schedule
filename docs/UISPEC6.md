@@ -16,6 +16,14 @@ how-to's order. Status: **prototype on a branch — not deployed.**
 | 6 Preview & Copy | — | the document |
 
 How-to, CPEC sheet, block schedules and Setup moved to a **Library** menu.
+
+**Landing page**: greeting by time of day over a blue hero (inline-SVG iris,
+no external assets); date picker with Today / Tomorrow (/ next weekday)
+chips; a live preview of the chosen day straight from the block schedule —
+Surg 1–5 (all-day tags, anyone out flagged), Night Float, Day Float, the
+Cooper senior, CPEC-sheet load, special clinics + dress code — and the saved
+draft's progress; the six steps as cards that open that step for the chosen
+date; recent days with their progress.
 A **Free AM / Free PM** strip (and **Free now** on today's date) sits under
 the tabs on every workflow tab; tab badges count what is still open.
 
@@ -94,7 +102,8 @@ Unchanged without a board (old tests pass as before). With a board:
 ## Decided by the chief (9/27/2026)
 
 - **Block 4 Thursday AM** is CPEC (YAG clinic), per the updated AY PDF —
-  data.js fixed (PM stays Retina OR).
+  data.js fixed (PM stays Retina OR). The PGY-2 Block 2 Thursday AM "YAG
+  Clinic" footnote was added as a note too.
 - **Surg 3/4 print all day**: `Surg 3 - Bair`, never `AM | none PM`
   (`data.allDaySurg`, engine flag `surg[n].allDay`).
 - **"Cooper" in the chains = the PGY-4 on the Cooper block** (block 7,

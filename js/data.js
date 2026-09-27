@@ -94,6 +94,8 @@ const SCHED_DATA = {
         }
       },
       overrides: [
+        // Block 2: YAG Clinic Thursday AM (AY PDF footnote)
+        { block: 2, day: 'thu', session: 'am', note: 'YAG Clinic' },
         // Block 1: Cooper clinic 1st Wednesday and 4th Tuesday AM
         { block: 1, day: 'tue', session: 'am', nth: [4], set: 'Cooper Clinic', note: 'Cooper clinic 4th Tuesday AM' },
         { block: 1, day: 'wed', session: 'am', nth: [1], set: 'Cooper Clinic', note: 'Cooper clinic 1st Wednesday AM' },
@@ -122,6 +124,7 @@ const SCHED_DATA = {
       ],
       gridNotes: [
         'Blocks 2 & 5: Taskmaster',
+        'Block 2: YAG Clinic Thursday AM',
         'Block 1: Benson if not seeing consults; Cooper clinic 1st Wednesday and 4th Tuesday AM',
         'Block 3: Peds OR 4th Tues and 1st and 5th Fri; Abendroth 3rd Wed (otherwise Peds OR, except covering Peds clinic 1st Wed during ROP Rounds); Thu PM OR (often Cornea cases) 2nd, 4th, and 5th Thu',
         'Block 4: Oncology alternates Mon/Tue odd/even weeks (1st, 3rd, 5th Mon; 2nd, 4th Tue); Tumor Conference 4th Tues 6:45am; med student teaching weekly 8:30–9:30am',

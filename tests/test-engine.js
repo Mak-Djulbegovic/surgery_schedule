@@ -566,6 +566,14 @@ var noKey = JSON.parse(JSON.stringify(DATA));
 delete noKey.years.pgy4.cooperBlock;
 eq(Engine.cooperBlockOf(noKey), 7, 'Cooper block derived from the grid when the key is absent');
 
+/* ---------- AY PDF footnote: PGY-2 Block 2 Thursday AM = YAG Clinic ---------- */
+var yag2 = Engine.resolveDay('2026-10-01', DATA); // Thu; Illiano is pgy2 block 2 (8/31–10/11)
+var ill = byName(yag2, 'Illiano');
+eq(ill && ill.block, 2, '10/1: Illiano on block 2');
+eq(ill && ill.am.text, 'CPEC', 'Block 2 Thu AM stays CPEC');
+includes(ill && ill.am.notes, 'YAG Clinic', 'Block 2 Thu AM carries the YAG Clinic note');
+eq((ill && ill.pm.notes || []).length, 0, 'the note is AM only');
+
 /* ---------- summary ---------- */
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures > 0) {

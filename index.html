@@ -4,35 +4,56 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Surg Schedule Builder</title>
-<link rel="stylesheet" href="css/style.css?v=11">
+<link rel="stylesheet" href="css/style.css?v=12">
 </head>
 <body class="home-active">
 
 <div class="home-view" id="homeView">
-  <div class="home-card">
-    <div class="home-hero">
-      <span class="brand-mark home-mark" aria-hidden="true">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-      </span>
-      <h1 class="home-title">Surg Schedule Builder</h1>
-      <p class="home-tagline">Builds the daily surgery schedule from the block schedules — you add the cases.</p>
+  <section class="home-hero">
+    <svg class="home-iris" id="homeIris" viewBox="-130 -130 260 260" aria-hidden="true" focusable="false"></svg>
+    <div class="home-hero-inner">
+      <div class="home-brand">
+        <span class="brand-mark home-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        </span>
+        <span class="home-brand-text">
+          <span class="home-brand-title">Surg Schedule Builder</span>
+          <span class="home-brand-sub" id="homeAy"></span>
+        </span>
+      </div>
+      <h1 class="home-greeting" id="homeGreeting">Welcome back.</h1>
+      <p class="home-tagline">Six steps to tomorrow’s surgery schedule. The block schedule fills itself in — you say who’s out and add the cases.</p>
     </div>
-    <div class="home-form">
-      <label class="date-field home-date-field">
-        <span class="field-label">Schedule date</span>
-        <input type="date" id="homeDate">
-      </label>
-      <button type="button" class="btn btn-primary home-cta" id="btnHomeCreate">Create Surg Schedule →</button>
-      <p class="field-hint home-draft hidden" id="homeDraftHint"></p>
-    </div>
-    <div class="home-links">
-      <button type="button" class="btn-link" id="btnHomeHowto">How it works</button>
-      <span class="home-dot" aria-hidden="true">·</span>
-      <button type="button" class="btn-link" id="btnHomeReference">Block schedule reference</button>
-      <span class="home-dot" aria-hidden="true">·</span>
-      <button type="button" class="btn-link" id="btnHomeSetup">Set up a new year</button>
-    </div>
+  </section>
+
+  <div class="home-body">
+    <section class="home-card" aria-label="Start a schedule">
+      <div class="home-start">
+        <label class="date-field home-date-field">
+          <span class="field-label">Schedule date</span>
+          <input type="date" id="homeDate">
+        </label>
+        <div class="home-quick" id="homeQuick" role="group" aria-label="Quick dates"></div>
+        <button type="button" class="btn btn-primary home-cta" id="btnHomeCreate">Create Surg Schedule →</button>
+        <p class="home-draft hidden" id="homeDraftHint"></p>
+      </div>
+      <div class="home-preview" id="homePreview" aria-live="polite"></div>
+    </section>
+
+    <ol class="home-steps" id="homeSteps" aria-label="The six steps"></ol>
+
     <div class="home-recent hidden" id="homeRecent"></div>
+
+    <footer class="home-foot">
+      <p class="home-quote" id="homeQuote"></p>
+      <div class="home-links">
+        <button type="button" class="btn-link" id="btnHomeHowto">How it works</button>
+        <span class="home-dot" aria-hidden="true">·</span>
+        <button type="button" class="btn-link" id="btnHomeReference">Block schedules &amp; rules</button>
+        <span class="home-dot" aria-hidden="true">·</span>
+        <button type="button" class="btn-link" id="btnHomeSetup">Set up a new year</button>
+      </div>
+    </footer>
   </div>
 </div>
 
@@ -165,11 +186,11 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-<script src="js/data.js?v=11"></script>
-<script src="js/engine.js?v=11"></script>
-<script src="js/status.js?v=11"></script>
-<script src="js/assign.js?v=11"></script>
-<script src="js/export.js?v=11"></script>
-<script src="js/app.js?v=11"></script>
+<script src="js/data.js?v=12"></script>
+<script src="js/engine.js?v=12"></script>
+<script src="js/status.js?v=12"></script>
+<script src="js/assign.js?v=12"></script>
+<script src="js/export.js?v=12"></script>
+<script src="js/app.js?v=12"></script>
 </body>
 </html>

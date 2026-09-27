@@ -3398,54 +3398,277 @@
       .sort();
   }
 
-  // Big home button: 'Create Surg Schedule →', or 'Open schedule for M/D/YY'
-  // with a 'saved draft' hint when a draft already exists for the chosen date.
+  // The landing page: a greeting, the date picker with quick dates, a live
+  // preview of the chosen day (straight from the block schedule, plus the
+  // saved draft's progress), the six steps, and recent days.
+
+  function isoPlus(iso, n) {
+    var d = parseISO(iso);
+    return isoOf(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
+  }
+
+  function relDayLabel(iso) {
+    var today = isoOf(new Date());
+    if (iso === today) return 'Today';
+    if (iso === isoPlus(today, 1)) return 'Tomorrow';
+    if (iso === isoPlus(today, -1)) return 'Yesterday';
+    return iso < today ? 'Past day' : 'Coming up';
+  }
+
+  function greetingText() {
+    var h = new Date().getHours();
+    if (h < 5) return 'Working late?';
+    if (h < 12) return 'Good morning.';
+    if (h < 17) return 'Good afternoon.';
+    return 'Good evening.';
+  }
+
+  // What a saved day already holds — for the preview and the recent cards.
+  function draftSummary(iso) {
+    var raw = lsGet(LS_PREFIX + iso);
+    if (!raw) return null;
+    var st;
+    try { st = JSON.parse(raw); } catch (e) { return null; }
+    var cases = Array.isArray(st.cases) ? st.cases : [];
+    var open = cases.filter(function (c) { return c && (parseInt(c.serviceCount, 10) || 0) > 0 && !trim(c.assigned); }).length;
+    var out = (Array.isArray(st.absences) ? st.absences : []).filter(function (a) { return a && trim(a.name); }).length;
+    return { cases: cases.length, open: open, out: out, noneOut: !!st.outConfirmed };
+  }
+
+  function draftText(s) {
+    if (!s) return '';
+    var bits = [];
+    bits.push(s.cases ? s.cases + ' case' + (s.cases === 1 ? '' : 's') : 'no cases yet');
+    if (s.open) bits.push(s.open + ' need' + (s.open === 1 ? 's' : '') + ' a resident');
+    if (s.out) bits.push(s.out + ' out');
+    else if (s.noneOut) bits.push('no one out');
+    return bits.join(' · ');
+  }
+
+  var irisBuilt = false;
+  function buildIris() {
+    var svg = $('homeIris');
+    if (!svg || irisBuilt || !document.createElementNS) return;
+    irisBuilt = true;
+    var NS = 'http://www.w3.org/2000/svg';
+    function mk(tag, attrs) {
+      var n = document.createElementNS(NS, tag);
+      for (var k in attrs) n.setAttribute(k, attrs[k]);
+      svg.appendChild(n);
+      return n;
+    }
+    mk('circle', { cx: 0, cy: 0, r: 122, fill: 'none', stroke: 'rgba(255,255,255,0.10)', 'stroke-width': 1 });
+    mk('circle', { cx: 0, cy: 0, r: 102, fill: 'rgba(255,255,255,0.05)', stroke: 'rgba(255,255,255,0.32)', 'stroke-width': 2 });
+    // iris fibres — deterministic jitter so the drawing never changes
+    for (var i = 0; i < 108; i++) {
+      var a = i / 108 * Math.PI * 2;
+      var wob = Math.sin(i * 12.9898) * 0.06;
+      var r0 = 38 + (i % 3) * 2;
+      var r1 = 95 - (i % 5) * 5;
+      mk('line', {
+        x1: (Math.cos(a) * r0).toFixed(1), y1: (Math.sin(a) * r0).toFixed(1),
+        x2: (Math.cos(a + wob) * r1).toFixed(1), y2: (Math.sin(a + wob) * r1).toFixed(1),
+        stroke: 'rgba(255,255,255,' + (0.10 + (i % 4) * 0.05).toFixed(2) + ')',
+        'stroke-width': 1.2, 'stroke-linecap': 'round'
+      });
+    }
+    mk('circle', { cx: 0, cy: 0, r: 60, fill: 'none', stroke: 'rgba(255,255,255,0.24)', 'stroke-width': 1.5, 'stroke-dasharray': '3 5' });
+    mk('circle', { cx: 0, cy: 0, r: 34, fill: 'rgba(5,28,50,0.62)' });
+    mk('circle', { cx: -12, cy: -14, r: 9, fill: 'rgba(255,255,255,0.6)' });
+    mk('circle', { cx: 9, cy: 10, r: 3, fill: 'rgba(255,255,255,0.35)' });
+  }
+
+  // Today / Tomorrow / (next weekday when tomorrow is a weekend)
+  function renderHomeQuick() {
+    var host = $('homeQuick');
+    var hd = $('homeDate');
+    if (!host || !hd) return;
+    clearNode(host);
+    var today = isoOf(new Date());
+    var opts = [[today, 'Today'], [isoPlus(today, 1), 'Tomorrow']];
+    var t1 = parseISO(opts[1][0]);
+    if (t1.getDay() === 0 || t1.getDay() === 6) {
+      var next = isoOf(nextCoverageDay(parseISO(today)));
+      opts.push([next, weekdayName(parseISO(next))]);
+    }
+    opts.forEach(function (o) {
+      host.appendChild(el('button', {
+        type: 'button', class: 'quick-chip' + (hd.value === o[0] ? ' on' : ''), text: o[1],
+        'aria-pressed': hd.value === o[0] ? 'true' : 'false',
+        onclick: function () { hd.value = o[0]; updateHomeCreate(); }
+      }));
+    });
+  }
+
+  function renderHomePreview(iso) {
+    var host = $('homePreview');
+    if (!host) return;
+    clearNode(host);
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return;
+    var d = parseISO(iso);
+    var r = null;
+    try { r = window.Engine.resolveDay(iso, data()); } catch (e) { r = null; }
+    var head = el('div', { class: 'pv-head' }, [
+      el('span', { class: 'pv-when', text: relDayLabel(iso) }),
+      el('span', { class: 'pv-date', text: weekdayName(d) + ' ' + fmtMDYY(d) })
+    ]);
+    if (r && r.inYear && !r.isWeekend) head.appendChild(chipEl(ordinal(r.nth) + ' ' + r.weekdayLabel, 'chip-day'));
+    host.appendChild(head);
+
+    if (!r || r.isWeekend) {
+      host.appendChild(el('p', { class: 'pv-empty', text: 'Weekend — no block assignments. Pick a weekday to build a schedule.' }));
+      return;
+    }
+    if (!r.inYear) {
+      host.appendChild(el('p', { class: 'pv-empty', text: 'Outside ' + (data().ayLabel || 'the academic year') + ' — no block schedule for this date.' }));
+      return;
+    }
+
+    var saved = null;
+    try { saved = JSON.parse(lsGet(LS_PREFIX + iso) || 'null'); } catch (e) { saved = null; }
+    var outs = ((saved && saved.absences) || []).filter(function (a) { return a && trim(a.name); })
+      .map(function (a) { return trim(a.name); });
+
+    var grid = el('div', { class: 'pv-surg' });
+    ['1', '2', '3', '4', '5'].forEach(function (n) {
+      var s = r.surg[n];
+      var tile = el('div', { class: 'pv-tile' + (s && outs.indexOf(s.name) !== -1 ? ' pv-out' : '') }, [
+        el('div', { class: 'pv-role', text: 'Surg ' + n }),
+        el('div', { class: 'pv-name', text: s ? s.name : '—', title: s ? s.name : '' })
+      ]);
+      if (s && outs.indexOf(s.name) !== -1) tile.appendChild(el('div', { class: 'pv-tag', text: 'out' }));
+      else if (s && s.allDay && !(s.am && s.pm)) tile.appendChild(el('div', { class: 'pv-tag', text: 'all day' }));
+      grid.appendChild(tile);
+    });
+    host.appendChild(grid);
+
+    var facts = el('div', { class: 'pv-facts' });
+    function fact(k, v) { facts.appendChild(el('span', { class: 'pv-fact' }, [el('span', { class: 'k', text: k }), el('b', { text: v })])); }
+    fact('Night Float', trim(saved && saved.nightFloat) || r.nightFloat || '—');
+    if ((r.dayFloat || []).length) fact('Day Float', r.dayFloat.join(', '));
+    if (r.cooperSenior) fact('Cooper', r.cooperSenior);
+    var cpec = null;
+    try { cpec = window.Engine.cpecForDate(iso, data()); } catch (e) { cpec = null; }
+    var lists = ((cpec && cpec.entries) || []);
+    if (lists.length) {
+      var svc = lists.filter(function (e) { return !e.privateOnly && e.cover; }).length;
+      fact('CPEC sheet', svc + ' list' + (svc === 1 ? '' : 's') + ' + ' + (lists.length - svc) + ' private');
+    }
+    host.appendChild(facts);
+
+    var chips = el('div', { class: 'pv-chips' });
+    (r.specialClinicsToday || []).forEach(function (sc) {
+      chips.appendChild(chipEl(sc, /bilyk|sergott/i.test(sc) ? 'chip-dress' : 'chip-special'));
+    });
+    if ((r.specialClinicsToday || []).some(function (sc) { return /bilyk|sergott/i.test(sc); })) {
+      chips.appendChild(chipEl('business casual + white coat', 'chip-dress'));
+    }
+    if (chips.firstChild) host.appendChild(chips);
+
+    var sum = draftSummary(iso);
+    var dr = el('div', { class: 'pv-draft' });
+    if (sum) {
+      dr.appendChild(el('b', { text: 'Saved draft' }));
+      dr.appendChild(document.createTextNode(draftText(sum)));
+      if (sum.open) dr.appendChild(el('span', { class: 'pv-pill warn', text: sum.open + ' open' }));
+      else if (sum.cases) dr.appendChild(el('span', { class: 'pv-pill ok', text: 'all assigned' }));
+    } else {
+      dr.appendChild(document.createTextNode('Nothing entered yet — everything above fills in automatically.'));
+    }
+    host.appendChild(dr);
+  }
+
+  var HOME_STEPS = [
+    { tab: 'out', title: 'Out today', text: 'Who’s out, who covers',
+      icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' },
+    { tab: 'roster', title: 'Roster', text: 'Surg 1–5, consults, NF',
+      icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
+    { tab: 'surgery', title: 'Surgery', text: 'Cases + the resident on each',
+      icon: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>' },
+    { tab: 'clinics', title: 'Clinics', text: 'Counts, and who covers',
+      icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>' },
+    { tab: 'coverage', title: 'Coverage', text: 'Who’s free, globe plan',
+      icon: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' },
+    { tab: 'preview', title: 'Copy', text: 'The schedule, formatted',
+      icon: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>' }
+  ];
+
+  function renderHomeSteps() {
+    var host = $('homeSteps');
+    if (!host || host.firstChild) return; // static — built once
+    HOME_STEPS.forEach(function (s, i) {
+      var icon = el('span', { class: 'step-icon', 'aria-hidden': 'true' });
+      icon.innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + s.icon + '</svg>';
+      host.appendChild(el('li', {}, [el('button', {
+        type: 'button', class: 'step-btn', title: 'Open step ' + (i + 1) + ' for the chosen date',
+        onclick: function () { var hd = $('homeDate'); enterApp((hd && hd.value) || tomorrowISO(), s.tab); }
+      }, [
+        icon,
+        el('span', { class: 'step-num', text: 'Step ' + (i + 1) }),
+        el('span', { class: 'step-title', text: s.title }),
+        el('span', { class: 'step-text', text: s.text })
+      ])]));
+    });
+  }
+
+  function renderHomeRecent() {
+    var host = $('homeRecent');
+    if (!host) return;
+    clearNode(host);
+    var dates = savedDayISOs().reverse().slice(0, 4);
+    if (!dates.length) {
+      host.classList.add('hidden');
+      return;
+    }
+    host.classList.remove('hidden');
+    host.appendChild(el('div', { class: 'home-recent-label', text: 'Pick up where you left off' }));
+    var grid = el('div', { class: 'recent-grid' });
+    dates.forEach(function (dISO) {
+      var d = parseISO(dISO);
+      grid.appendChild(el('button', {
+        type: 'button', class: 'recent-card',
+        onclick: function () { enterApp(dISO); }
+      }, [
+        el('b', { text: WEEKDAY_NAMES[d.getDay()].slice(0, 3) + ' ' + fmtMDYY(d) }),
+        el('span', { text: draftText(draftSummary(dISO)) || 'saved' })
+      ]));
+    });
+    host.appendChild(grid);
+  }
+
+  // Big button + preview follow the chosen date: 'Start Monday 9/28/26 →',
+  // or 'Continue Monday 9/28/26 →' when a draft exists for it.
   function updateHomeCreate() {
     var hd = $('homeDate');
     var btn = $('btnHomeCreate');
     var hint = $('homeDraftHint');
     if (!hd || !btn) return;
     var v = hd.value;
-    var hasDraft = !!(v && lsGet(LS_PREFIX + v));
-    if (hasDraft) {
-      btn.textContent = 'Open schedule for ' + fmtMDYY(parseISO(v));
-      if (hint) {
-        hint.textContent = 'saved draft — picks up right where you left off';
-        hint.classList.remove('hidden');
-      }
-    } else {
-      btn.textContent = 'Create Surg Schedule →';
-      if (hint) {
-        hint.textContent = '';
-        hint.classList.add('hidden');
-      }
+    var valid = /^\d{4}-\d{2}-\d{2}$/.test(v);
+    var hasDraft = !!(valid && lsGet(LS_PREFIX + v));
+    var label = valid ? weekdayName(parseISO(v)) + ' ' + fmtMDYY(parseISO(v)) : '';
+    btn.textContent = !valid ? 'Create Surg Schedule →' : (hasDraft ? 'Continue ' : 'Start ') + label + ' →';
+    if (hint) {
+      hint.textContent = hasDraft ? 'Saved draft — picks up right where you left off.' : '';
+      hint.classList.toggle('hidden', !hasDraft);
     }
+    renderHomeQuick();
+    renderHomePreview(valid ? v : '');
   }
 
   function renderHome() {
     var hd = $('homeDate');
     if (hd && !hd.value) hd.value = tomorrowISO();
+    var ay = $('homeAy');
+    if (ay) ay.textContent = data().ayLabel || '';
+    var g = $('homeGreeting');
+    if (g) g.textContent = greetingText();
+    var q = $('homeQuote');
+    if (q) q.textContent = data().quote || '';
+    buildIris();
+    renderHomeSteps();
     updateHomeCreate();
-    var host = $('homeRecent');
-    if (!host) return;
-    clearNode(host);
-    var dates = savedDayISOs();
-    dates.reverse();
-    dates = dates.slice(0, 4);
-    if (!dates.length) {
-      host.classList.add('hidden');
-      return;
-    }
-    host.classList.remove('hidden');
-    host.appendChild(el('span', { class: 'home-recent-label', text: 'Recent days' }));
-    dates.forEach(function (dISO) {
-      var d = parseISO(dISO);
-      host.appendChild(el('button', {
-        type: 'button', class: 'chip chip-recent',
-        text: WEEKDAY_NAMES[d.getDay()].slice(0, 3) + ' ' + fmtMDYY(d),
-        onclick: function () { enterApp(dISO); }
-      }));
-    });
+    renderHomeRecent();
   }
 
   function enterApp(dateISO, tab) {
