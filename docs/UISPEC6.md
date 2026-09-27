@@ -17,8 +17,8 @@ how-to's order. Status: **prototype on a branch — not deployed.**
 
 How-to, CPEC sheet, block schedules and Setup moved to a **Library** menu.
 
-**Landing page**: greeting by time of day over a blue hero (inline-SVG iris,
-no external assets); date picker with Today / Tomorrow (/ next weekday)
+**Landing page**: a plain statement of purpose (no greeting) over a blue
+hero (inline-SVG iris, no external assets); date picker with Today / Tomorrow (/ next weekday)
 chips; a live preview of the chosen day straight from the block schedule —
 Surg 1–5 (all-day tags, anyone out flagged), Night Float, Day Float, the
 Cooper senior, CPEC-sheet load, special clinics + dress code — and the saved

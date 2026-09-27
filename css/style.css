@@ -174,8 +174,8 @@ body.home-active .home-view { display: block; min-height: 100vh; }
 .home-brand-text { display: flex; flex-direction: column; line-height: 1.25; }
 .home-brand-title { font-weight: 700; font-size: 15px; }
 .home-brand-sub { font-size: 12px; opacity: 0.78; }
-.home-greeting { font-size: 42px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; margin: 34px 0 10px; }
-.home-tagline { font-size: 16px; line-height: 1.5; max-width: 600px; opacity: 0.92; }
+.home-greeting { font-size: 36px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.15; margin: 32px 0 10px; max-width: 780px; text-wrap: balance; }
+.home-tagline { font-size: 16px; line-height: 1.5; max-width: 600px; opacity: 0.92; text-wrap: pretty; }
 
 .home-body { position: relative; max-width: 1040px; margin: -88px auto 0; padding: 0 24px 44px; }
 
@@ -300,7 +300,7 @@ body.home-active .home-view { display: block; min-height: 100vh; }
 @media (max-width: 560px) {
   .home-hero { padding: 24px 12px 98px; }
   .home-hero-inner { padding: 0 4px; }
-  .home-greeting { font-size: 31px; margin-top: 24px; }
+  .home-greeting { font-size: 27px; margin-top: 22px; }
   .home-tagline { font-size: 14.5px; }
   .home-iris { width: 280px; height: 280px; right: -96px; top: -40px; opacity: 0.6; }
   .home-body { padding: 0 12px 34px; margin-top: -74px; }

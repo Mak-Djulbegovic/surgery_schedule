@@ -3398,7 +3398,7 @@
       .sort();
   }
 
-  // The landing page: a greeting, the date picker with quick dates, a live
+  // The landing page: what it is for, the date picker with quick dates, a live
   // preview of the chosen day (straight from the block schedule, plus the
   // saved draft's progress), the six steps, and recent days.
 
@@ -3413,14 +3413,6 @@
     if (iso === isoPlus(today, 1)) return 'Tomorrow';
     if (iso === isoPlus(today, -1)) return 'Yesterday';
     return iso < today ? 'Past day' : 'Coming up';
-  }
-
-  function greetingText() {
-    var h = new Date().getHours();
-    if (h < 5) return 'Working late?';
-    if (h < 12) return 'Good morning.';
-    if (h < 17) return 'Good afternoon.';
-    return 'Good evening.';
   }
 
   // What a saved day already holds — for the preview and the recent cards.
@@ -3661,8 +3653,6 @@
     if (hd && !hd.value) hd.value = tomorrowISO();
     var ay = $('homeAy');
     if (ay) ay.textContent = data().ayLabel || '';
-    var g = $('homeGreeting');
-    if (g) g.textContent = greetingText();
     var q = $('homeQuote');
     if (q) q.textContent = data().quote || '';
     buildIris();

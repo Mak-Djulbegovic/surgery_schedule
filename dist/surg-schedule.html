@@ -181,8 +181,8 @@ body.home-active .home-view { display: block; min-height: 100vh; }
 .home-brand-text { display: flex; flex-direction: column; line-height: 1.25; }
 .home-brand-title { font-weight: 700; font-size: 15px; }
 .home-brand-sub { font-size: 12px; opacity: 0.78; }
-.home-greeting { font-size: 42px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; margin: 34px 0 10px; }
-.home-tagline { font-size: 16px; line-height: 1.5; max-width: 600px; opacity: 0.92; }
+.home-greeting { font-size: 36px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.15; margin: 32px 0 10px; max-width: 780px; text-wrap: balance; }
+.home-tagline { font-size: 16px; line-height: 1.5; max-width: 600px; opacity: 0.92; text-wrap: pretty; }
 
 .home-body { position: relative; max-width: 1040px; margin: -88px auto 0; padding: 0 24px 44px; }
 
@@ -307,7 +307,7 @@ body.home-active .home-view { display: block; min-height: 100vh; }
 @media (max-width: 560px) {
   .home-hero { padding: 24px 12px 98px; }
   .home-hero-inner { padding: 0 4px; }
-  .home-greeting { font-size: 31px; margin-top: 24px; }
+  .home-greeting { font-size: 27px; margin-top: 22px; }
   .home-tagline { font-size: 14.5px; }
   .home-iris { width: 280px; height: 280px; right: -96px; top: -40px; opacity: 0.6; }
   .home-body { padding: 0 12px 34px; margin-top: -74px; }
@@ -1268,8 +1268,8 @@ select.picker { max-width: 280px; min-width: 150px; }
           <span class="home-brand-sub" id="homeAy"></span>
         </span>
       </div>
-      <h1 class="home-greeting" id="homeGreeting">Welcome back.</h1>
-      <p class="home-tagline">Six steps to tomorrow’s surgery schedule. The block schedule fills itself in — you say who’s out and add the cases.</p>
+      <h1 class="home-greeting">The daily surgery schedule, in six steps.</h1>
+      <p class="home-tagline">The block schedules fill in who’s where. You say who’s out, add the cases, and copy the result.</p>
     </div>
   </section>
 
@@ -7926,7 +7926,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       .sort();
   }
 
-  // The landing page: a greeting, the date picker with quick dates, a live
+  // The landing page: what it is for, the date picker with quick dates, a live
   // preview of the chosen day (straight from the block schedule, plus the
   // saved draft's progress), the six steps, and recent days.
 
@@ -7941,14 +7941,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     if (iso === isoPlus(today, 1)) return 'Tomorrow';
     if (iso === isoPlus(today, -1)) return 'Yesterday';
     return iso < today ? 'Past day' : 'Coming up';
-  }
-
-  function greetingText() {
-    var h = new Date().getHours();
-    if (h < 5) return 'Working late?';
-    if (h < 12) return 'Good morning.';
-    if (h < 17) return 'Good afternoon.';
-    return 'Good evening.';
   }
 
   // What a saved day already holds — for the preview and the recent cards.
@@ -8189,8 +8181,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     if (hd && !hd.value) hd.value = tomorrowISO();
     var ay = $('homeAy');
     if (ay) ay.textContent = data().ayLabel || '';
-    var g = $('homeGreeting');
-    if (g) g.textContent = greetingText();
     var q = $('homeQuote');
     if (q) q.textContent = data().quote || '';
     buildIris();
