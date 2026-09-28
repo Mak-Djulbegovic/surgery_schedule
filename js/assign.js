@@ -11,6 +11,8 @@
  *                                   -> who covers the clinic the case pulls someone from
  * Assign.planAddOn(kind, t, roster, data, board)
  *                                   -> "a globe comes in at t": who takes it, who covers
+ * Assign.planAddOns([kinds], t, roster, data, board)
+ *                                   -> several at once, nobody taking two
  *
  * `board` (optional) is a Status board (js/status.js). Without it, suggest /
  * backupPlan behave exactly as before (chain order only). With it they are
@@ -114,14 +116,14 @@
     return n !== null && n <= 730 && ((caseObj.count | 0) >= 4);
   }
 
-  // A resolved roster cell counts as a "clinic" unless it is Surg N / CPEC /
-  // ER / PT / an OR block / a consult-or-float assignment (mirrors the
-  // engine's clinic-grouping exclusions).
+  // A resolved roster cell counts as a "clinic" unless it is Surg N / ER /
+  // PT / an OR block / a consult-or-float assignment (mirrors the engine's
+  // clinic-grouping exclusions; CPEC is a clinic).
   function isClinicText(text) {
     var t = String(text || '').trim();
     if (!t) return false;
     if (/^Surg \d/.test(t)) return false;
-    if (t === 'CPEC' || t === 'ER' || t === 'PT') return false;
+    if (t === 'ER' || t === 'PT') return false;
     if (t.indexOf('OR') !== -1) return false;
     if (t === 'Jeff Consults' || t === 'Cooper Consults' || t === 'Day Float') return false;
     return true;
@@ -733,6 +735,109 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* planAddOns — several at once: "a globe comes in while an emergent   */
+  /* glaucoma AND a cornea case also need someone" (rare)                */
+  /* ------------------------------------------------------------------ */
+  // Each kind walks its own chain exactly as planAddOn does. Then the
+  // residents are chosen together, so nobody takes two cases at once: the
+  // choice with the lowest total chain position wins (a case nobody can
+  // take costs more than any pick); on a tie the more urgent kind keeps its
+  // earlier pick (globe → cornea → glaucoma → plastics → cataract → other —
+  // so Surg 2 keeps the globe). Everyone pulled out of a clinic gets a
+  // coverer from the clinic-coverage chain: free, not already covering
+  // another, and never one of the residents taking a case.
+  var URGENCY = ['globe', 'cornea', 'glaucoma', 'plastics', 'cataract', 'other'];
+
+  function planAddOns(kinds, t, roster, data, board) {
+    data = getData(data);
+    var plans = (kinds || []).map(function (k) { return planAddOn(k, t, roster, data, board); });
+    var urgency = function (p) { var u = URGENCY.indexOf(p.kind); return u === -1 ? URGENCY.length : u; };
+    var order = plans.map(function (p, i) { return i; }).sort(function (a, b) {
+      return urgency(plans[a]) - urgency(plans[b]) || a - b;
+    });
+    var MAXC = 8;
+    var MISS = 100; // nobody for a case: worse than any pick
+    var cands = plans.map(function (p) {
+      return p.steps.filter(function (st) { return st.verdict !== 'skip'; }).slice(0, MAXC);
+    });
+    var best = null;
+    var pick = plans.map(function () { return -1; });
+    var used = {};
+    function better(cost, vec) {
+      if (!best || cost < best.cost) return true;
+      if (cost > best.cost) return false;
+      for (var i = 0; i < vec.length; i++) {
+        if (vec[i] !== best.vec[i]) return vec[i] < best.vec[i];
+      }
+      return false;
+    }
+    function dfs(k, cost) {
+      if (best && cost > best.cost) return;
+      if (k === order.length) {
+        var vec = order.map(function (i) { return pick[i] < 0 ? MISS : pick[i]; });
+        if (better(cost, vec)) best = { cost: cost, vec: vec, pick: pick.slice() };
+        return;
+      }
+      var i = order[k];
+      for (var r = 0; r < cands[i].length; r++) {
+        var n = cands[i][r].name;
+        if (used[n]) continue;
+        used[n] = true;
+        pick[i] = r;
+        dfs(k + 1, cost + r);
+        used[n] = false;
+      }
+      pick[i] = -1;
+      dfs(k + 1, cost + MISS);
+    }
+    dfs(0, 0);
+
+    var takenBy = {};
+    var items = plans.map(function (p, i) {
+      var r = best ? best.pick[i] : -1;
+      var c = r >= 0 ? cands[i][r] : null;
+      if (c) takenBy[c.name] = p.label;
+      return {
+        kind: p.kind, label: p.label, key: p.key, hierLabel: p.hierLabel, draft: p.draft, spans: p.spans,
+        pick: c ? { name: c.name, via: c.via } : null, status: c ? c.status : null, rank: r,
+        firstChoice: cands[i][0] ? cands[i][0].name : null, steps: p.steps, handoff: null
+      };
+    });
+    items.forEach(function (it) {
+      if (it.pick && it.firstChoice && it.firstChoice !== it.pick.name) it.displacedBy = takenBy[it.firstChoice] || null;
+    });
+    var busy = Object.keys(takenBy);
+    order.forEach(function (i) {
+      var it = items[i];
+      if (!it.pick || !it.status || it.status.kind !== 'clinic') return;
+      var pulled = pulledClinic(board, it.pick.name, it.spans, null);
+      if (!pulled) return;
+      var cover = findClinicCover(pulled, roster, data, board, busy, null);
+      it.handoff = { clinic: pulled.clinic, owner: pulled.owner, window: pulled, primary: cover.primary, second: cover.second };
+      if (cover.primary) busy.push(cover.primary.name);
+    });
+    return {
+      time: t,
+      items: items,
+      unfilled: items.filter(function (it) { return !it.pick; }).length
+    };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* lateCover — "the morning OR runs past 12:30: who covers their PM    */
+  /* clinic until they are out?"                                         */
+  /* ------------------------------------------------------------------ */
+  // The clinic-coverage chain (Surg 2 first — the AY legend: "Surg 2 …
+  // Cover Cornea/Glaucoma if Surg 3/4 has PM cases") over [start, end);
+  // the coverer must be free the whole time. `exclude`: names to skip
+  // (the late resident is always skipped).
+  function lateCover(name, clinic, start, end, roster, data, board, exclude, excludeId) {
+    data = getData(data);
+    var pulled = { clinic: clinic, owner: name, start: start, end: end, session: 'pm' };
+    return findClinicCover(pulled, roster, data, board, [name].concat(exclude || []), excludeId || null);
+  }
+
+  /* ------------------------------------------------------------------ */
 
   var Assign = {
     classify: classify,
@@ -740,6 +845,8 @@
     clinicCoverage: clinicCoverage,
     backupPlan: backupPlan,
     planAddOn: planAddOn,
+    planAddOns: planAddOns,
+    lateCover: lateCover,
     ADDON_KINDS: ADDON_KINDS,
     FREE_JUNIOR_LABEL: FREE_JUNIOR_LABEL
   };

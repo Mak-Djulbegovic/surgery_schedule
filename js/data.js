@@ -390,18 +390,26 @@ const SCHED_DATA = {
 
   // Availability rules (chief, 9/2026). A resident whose block text is in
   // freeTexts — or a Surg role / OR block with nothing booked — counts as
-  // available to take a case or cover a clinic. dutyTexts are fixed duties
+  // available to take a case or cover a clinic. CPEC is a clinic, not free
+  // (chief, 9/28/2026: "if people are assigned CPEC, assume that they are in
+  // clinic — this goes for the whole app"). dutyTexts are fixed duties
   // that are not pulled. Day Float only ever covers the Night Float resident.
   // noCoverTexts need no coverage when the resident is out.
   // offsiteTexts: at another hospital — never pulled into a Wills case or
   // clinic by a chain (ASSUMPTION, 9/2026: Cooper Clinic / Cooper OR are at
   // Cooper; remove them here if those residents can be pulled).
   availability: {
-    freeTexts: ['CPEC', 'PT'],
+    freeTexts: ['PT'],
     dutyTexts: ['ER', 'Jeff Consults', 'Cooper Consults'],
     offsiteTexts: ['Cooper Clinic', 'Cooper OR'],
     noCoverTexts: ['PT', 'Day Float']
   },
+
+  // When PM clinics actually start (chief, 9/28/2026: "if the morning
+  // plastics OR goes past 12:30, who will cover the person until they get to
+  // glaucoma?"). Used for "running late" coverage on the Coverage tab; the
+  // AM/PM session split everywhere else stays at noon.
+  pmClinicStart: '12:30',
 
   // Minutes per case, turnover included — ESTIMATES the app uses to guess
   // when a resident is free again when no 'until' time is typed. Calibrate.

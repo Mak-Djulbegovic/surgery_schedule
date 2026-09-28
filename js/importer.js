@@ -73,8 +73,9 @@
   // Lines that belong to the schedule but hold nothing the app stores
   // (computed from the block schedule, or informational).
   var INFO_RE = /^(?:wer|jeff\s*consults?|cooper\s*consults?|day\s*float|taskmaster|cooper\s*buddies?|er|pt)\s*:/i;
-  // Assignments that are not clinics (CPEC and PT are "free"; ER/consults are duty).
-  var NOT_CLINICS = { cpec: true, pt: true, er: true, wer: true, 'jeff consults': true, 'cooper consults': true, 'day float': true };
+  // Assignments that are not clinics (PT is free; ER/consults are duty).
+  // CPEC is a clinic (chief, 9/28/2026).
+  var NOT_CLINICS = { pt: true, er: true, wer: true, 'jeff consults': true, 'cooper consults': true, 'day float': true };
 
   function headOf(line) {
     for (var i = 0; i < HEADS.length; i++) if (HEADS[i][0].test(line)) return HEADS[i][1];
@@ -340,18 +341,24 @@
       if (!count && /^\d+(?:\s*x\s*\d+)?(?:\s|$)/i.test(p)) count = p;
       else extra.push(p);
     });
+    // staff; a name may carry its own session — 'Patel (AM, covering
+    // Ransone)', 'Hamou (PM)' — as the one-line CPEC list does
     var staff = [];
     if (staffTxt && !/^none\.?$/i.test(staffTxt)) {
-      staffTxt.split(/\s*,\s*/).forEach(function (item) {
-        item = trim(item);
-        if (!item) return;
-        var st = /^(.*?)\s*\(for\s+(.+)\)$/i.exec(item); // app format 'Hamou (for Ransone)'
-        var n = nameAt(st ? st[1] : item, names);
-        if (!n) { extra.push(item); return; }
-        staff.push(st ? n + ' (for ' + trim(st[2]) + ')' : n);
-        var left = trim((st ? '' : item.slice(n.length)));
-        if (left) extra.push(left.replace(/^\+\s*/, '+'));
-      });
+      staffTxt.replace(/\(([^()]*)\)/g, function (all) { return all.replace(/,/g, '\u0001'); })
+        .split(/\s*,\s*/).forEach(function (item) {
+          item = trim(item.replace(/\u0001/g, ','));
+          if (!item) return;
+          var st = /^(.*?)\s*\(for\s+(.+)\)$/i.exec(item); // app format 'Hamou (for Ransone)'
+          var n = nameAt(st ? st[1] : item, names);
+          if (!n) { extra.push(item); return; }
+          var only = null;
+          var left = trim(st ? '' : item.slice(n.length));
+          var tag = /^\(\s*(AM|PM)\b[^()]*\)\s*(.*)$/i.exec(left);
+          if (tag) { only = tag[1].toLowerCase(); left = trim(tag[2]); }
+          staff.push({ name: st ? n + ' (for ' + trim(st[2]) + ')' : n, only: only });
+          if (left) extra.push(left.replace(/^\+\s*/, '+'));
+        });
     }
     return { label: label, sessions: sessions, count: count, extra: extra.join('; '), staff: staff };
   }
@@ -418,7 +425,10 @@
         if (cl.info) return;
         if (cl.notClinic) { out.notClinics.push(raw); return; }
         cl.sessions.forEach(function (s) {
-          out.clinics.push({ label: cl.label, session: s, count: cl.count, extra: cl.extra, staff: cl.staff.slice() });
+          out.clinics.push({
+            label: cl.label, session: s, count: cl.count, extra: cl.extra,
+            staff: cl.staff.filter(function (p) { return !p.only || p.only === s || s === 'day'; }).map(function (p) { return p.name; })
+          });
         });
         return;
       }

@@ -91,13 +91,15 @@ eq(res[0].name, 'Wibbelsman', 'Surg 1 out → Surg 5');
 // scheduled plastics with nobody on Plastics OR → an actual free junior
 x = board({});
 res = Assign.suggest([{ id: 'p1', section: 'wills', surgeon: 'Bilyk', count: 1, serviceCount: 1, start: '0900', category: 'plastics', addOn: false, assigned: '' }], roster, DATA, x.b);
-eq(res[0].name, 'Ransone', 'free junior resolves to a real free PGY-2 (Ransone, in CPEC)');
+eq(res[0].name, 'Nahar', 'free junior resolves to a really free junior (Nahar: Glaucoma/Plastics OR block, nothing booked — CPEC is clinic, 9/28)');
 ok(res[0].warnings.some(function (w) { return /confirm with Surg 2/.test(w); }), 'free junior suggestion asks to confirm with Surg 2');
 
 // plastics add-on (TAB): Plastics OR junior → free junior before Surg 2
 res = Assign.suggest([{ id: 'p2', section: 'wills', surgeon: 'Bilyk', count: 1, serviceCount: 1, start: '1400', category: 'plastics', addOn: true, assigned: '' }], roster, DATA, x.b);
 eq(Assign.classify({ category: 'plastics', addOn: true }, DATA), 'plasticsAddOn', 'plastics add-on uses the juniors-first chain');
-ok(res[0].name && res[0].name !== 'Djulbegovic', 'plastics add-on goes to a free junior before Surg 2 — got ' + res[0].name);
+eq(res[0].name, 'Djulbegovic', 'plastics add-on at 2 PM: no free junior (Nahar in Glaucoma PM, CPEC is clinic) → Surg 2');
+res = Assign.suggest([{ id: 'p3', section: 'wills', surgeon: 'Bilyk', count: 1, serviceCount: 1, start: '0900', category: 'plastics', addOn: true, assigned: '' }], roster, DATA, x.b);
+eq(res[0].name, 'Nahar', 'plastics add-on at 9 AM goes to the free junior before Surg 2');
 // chief 9/2026: the plastics junior in Plastics clinic stays in clinic
 ok(res[0].name !== 'Ransone', 'Ransone (in Plastics clinic PM) is not pulled for the add-on');
 // …and with every junior busy it falls to the seniors (Surg 2 first)
@@ -154,6 +156,52 @@ var sam = plan.steps.filter(function (s) { return s.name === 'Samuel'; })[0];
 eq(sam && sam.verdict, 'skip', 'Thu: the Cooper senior is skipped for a Wills globe');
 ok(sam && /off-site/.test(sam.why || ''), 'skip reason says off-site — got ' + (sam && sam.why));
 ok(plan.pick && plan.pick.name !== 'Samuel', 'the globe goes past Cooper to the next in chain');
+
+/* ---------- several at once: a globe while an emergent glaucoma AND cornea come in ---------- */
+function names(res) { return res.items.map(function (it) { return it.label.split(' ')[0] + ':' + (it.pick ? it.pick.name : '-'); }).join(' '); }
+var jx = board({});
+var j = Assign.planAddOns(['globe', 'glaucoma', 'cornea'], 600, roster, DATA, jx.b);
+eq(names(j), 'Globe:Djulbegovic Glaucoma:Calotti Cornea:Bair', '10 AM: each to its own Surg role (2 globe, 4 glaucoma, 3 cornea)');
+eq(j.unfilled, 0, 'nobody left without a resident');
+j = Assign.planAddOns(['globe', 'glaucoma', 'cornea'], 810, roster, DATA, jx.b);
+var corn = j.items[2];
+eq(corn.pick && corn.pick.name, 'Bair', '1:30 PM: Bair (Surg 3) takes the cornea case from Cornea clinic');
+eq(corn.handoff && corn.handoff.primary && corn.handoff.primary.name, 'Samuel',
+  '…and Cornea clinic goes to the Cooper senior — Surg 2 (globe) and Surg 4 (glaucoma) are taken');
+jx = board({ cases: [hark('')] });
+j = Assign.planAddOns(['cornea', 'glaucoma', 'globe'], 810, roster, DATA, jx.b);
+eq(names(j), 'Cornea:Samuel Glaucoma:Calotti Globe:Djulbegovic', 'Surg 3 in Hark: cornea falls past Surg 2 (the globe keeps Surg 2 — most urgent) to the Cooper senior');
+eq(j.items[0].displacedBy, 'Globe / trauma', '…and says why: Surg 2 is taking the globe');
+var picked = j.items.map(function (it) { return it.pick && it.pick.name; });
+ok(picked.filter(function (n, i) { return n && picked.indexOf(n) === i; }).length === picked.length, 'nobody takes two cases at once');
+var coverers = j.items.map(function (it) { return it.handoff && it.handoff.primary && it.handoff.primary.name; }).filter(Boolean);
+ok(coverers.every(function (n) { return picked.indexOf(n) === -1; }), 'clinic cover never uses someone taking a case');
+var single = Assign.planAddOn('globe', 810, roster, DATA, jx.b);
+eq(Assign.planAddOns(['globe'], 810, roster, DATA, jx.b).items[0].pick.name, single.pick.name, 'one kind = the single-case plan');
+
+/* ---------- a morning OR running late into a PM clinic ---------- */
+// Mon 9/28: Nahar (2nd year, block 5) — Glaucoma OR / Plastics OR AM, Glaucoma PM.
+eq(roster.residents.filter(function (r) { return r.name === 'Nahar'; })[0].pm.text, 'Glaucoma', 'fixture: Nahar has Glaucoma PM');
+var lx = board({ overruns: [{ id: 'o1', name: 'Nahar', until: '13:30', label: 'Glaucoma OR / Plastics OR', cover: '' }] });
+eq(lx.b.pmClinicStart, 750, 'PM clinics start 12:30 (data.pmClinicStart)');
+eq(lx.b.statusAt('Nahar', 765).kind, 'case', 'running late: Nahar is still in the OR at 12:45');
+eq(lx.b.statusAt('Nahar', 825).kind, 'clinic', '…and in Glaucoma clinic again at 1:45');
+var ln = lx.b.needs.filter(function (n) { return n.type === 'clinic'; });
+eq(ln.length === 1 && ln[0].clinic + ' ' + Status.fmtClock(ln[0].start) + '–' + Status.fmtClock(ln[0].end), 'Glaucoma 12:30 PM–1:30 PM', 'the gap is Glaucoma from 12:30 until Nahar is out');
+var lc = Assign.lateCover('Nahar', 'Glaucoma', 750, 810, roster, DATA, lx.b, [], 'late:o1');
+eq(lc.primary && lc.primary.name + ' (' + lc.primary.source + ')', 'Djulbegovic (Surg 2)', 'suggested: Surg 2 covers Glaucoma until Nahar is done');
+lx = board({ overruns: [{ id: 'o1', name: 'Nahar', until: '13:30', cover: 'Djulbegovic' }] });
+eq(lx.b.needs.length, 0, 'with Surg 2 covering, no gap');
+eq(lx.b.statusAt('Djulbegovic', 765).label, 'covering Glaucoma for Nahar', 'Surg 2 is in Glaucoma 12:30–1:30…');
+eq(lx.b.statusAt('Djulbegovic', 825).kind, 'free', '…and free again after');
+lx = board({ overruns: [{ id: 'o1', name: 'Nahar', until: '13:30', cover: 'NC' }] });
+eq(lx.b.needs.length, 0, 'NC acknowledges the gap');
+lx = board({ overruns: [{ id: 'o1', name: 'Nahar', until: '12:15', cover: '' }] });
+eq(lx.b.needs.length + (lx.b.lateCases.length), 0, 'done before 12:30 = not late (ignored)');
+var ExportFmt = require(path.join(__dirname, '..', 'js', 'export.js'));
+var ltxt = ExportFmt.buildText({ date: '2026-09-28', nightFloat: 'Perez', absences: [], cases: [], clinicCounts: {}, clinicStaffOverrides: {}, addOns: [],
+  overruns: [{ id: 'o1', name: 'Nahar', until: '13:30', cover: 'Djulbegovic' }], roster: roster });
+ok(!/running late|Djulbegovic.*Glaucoma/.test(ltxt), 'running late never appears in the copied schedule');
 
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures) process.exitCode = 1; else console.log('OK');
