@@ -97,7 +97,7 @@ function surgRoleOf(n) {
 }
 var OPTS = { addOnLabel: addOnLabel, cpecSurgeons: cpecSurgeons, surgRoleOf: surgRoleOf };
 function roundTrip(pasted) {
-  var parsed = ImportFmt.parse(pasted, { names: names });
+  var parsed = ImportFmt.parse(pasted, { names: names, clinics: roster.clinics });
   var d2 = ImportFmt.toDay(parsed, base(), roster, DATA, ExportFmt, OPTS);
   return { parsed: parsed, day: d2, text: ExportFmt.buildText(withRoster(d2)) };
 }
@@ -111,7 +111,7 @@ function roundTrip(pasted) {
   'Marshall (Neuro) — conference — coverage TBD', 'Djulbegovic at AAO Fri',
   'Monday night (9/28/26): **Calotti**'
 ].forEach(function (needle) { ok(text.indexOf(needle) !== -1, 'fixture prints ' + JSON.stringify(needle) + '\n' + text); });
-ok(text.indexOf('Path AM') === -1, 'fixture: Path AM emptied by an override is not printed');
+ok(text.indexOf('Path AM: none') !== -1, 'fixture: Path AM emptied by an override prints none');
 
 /* ---------- 1. Copy plain text (with **) ---------- */
 var r1 = roundTrip(text);
@@ -171,19 +171,81 @@ var hand = [
   '-Hark x2 (7:30 start) – Bair; Calotti to cover cornea clinic',
   '- Smith x1 (1:00) - Wibbelsman', 'Vacation', 'Ransone c/b Patel', '24 strong'
 ].join('\n');
-var r4 = ImportFmt.parse(hand, { names: names });
+var r4 = ImportFmt.parse(hand, { names: names, clinics: roster.clinics });
 eq(r4.cases.length, 2, 'hand-typed case lines read');
 eq(r4.cases[0].assigned + '|' + r4.cases[0].backup, 'Bair|Calotti', 'hand-typed en dash before the resident');
 eq(r4.cases[1].start + '|' + r4.cases[1].assigned, '1:00|Wibbelsman', '"(1:00)" without "start" is the start time');
 eq(r4.absences.length === 1 && r4.absences[0].coverAM === 'Patel' && r4.absences[0].coverPM === 'Patel', true, '"Ransone c/b Patel" = all day, one coverer');
 
 /* ---------- unknown resident names are flagged ---------- */
-var r5 = ImportFmt.parse('Wills/ASC\n-Hark x1 - Zorro', { names: names });
+var r5 = ImportFmt.parse('Wills/ASC\n-Hark x1 - Zorro', { names: names, clinics: roster.clinics });
 eq(r5.unknownNames.join(), 'Zorro', 'a resident not on the roster is flagged');
 
 /* ---------- empty paste ---------- */
-var r6 = ImportFmt.parse('', { names: names });
+var r6 = ImportFmt.parse('', { names: names, clinics: roster.clinics });
 eq(r6.read + r6.unknown.length, 0, 'empty paste reads nothing');
+
+/* ---------- 5. a real hand-typed schedule (Mon 9/21/2026, as sent) ---------- */
+var REAL = [
+  'Lectures/Events',
+  '- Lecture 7:00 AM (EARLY START, all years): Retinal Detachment and Predisposing Lesions',
+  '', 'Assignments', 'Surg 1 - Cheng', 'Surg 2 - Djulbegovic', 'Surg 3 - Bair AM | none PM', 'Surg 4 - Calotti', 'Surg 5 - Wibbelsman',
+  '', 'WER: Teng AM/PM, Williamson AM/PM, Momenaei PM', 'Night Float: Perez', 'Day Float: None', 'Jeff Consults: Desimone', 'Cooper Consults: Alvarez',
+  '', 'Wills/ASC',
+  '- Abendroth x 7 (7:30AM start, service x 4 start @ 9:15AM): Cheng',
+  '- Didomenico x 4 (7:30AM start, service x 3 start @ 8AM): Wibbelsman',
+  '- Pendse x 4 (12PM start, service x 3 start @ 12:30PM): Wibbelsman',
+  '- Reza x 7 (7:30AM start, service x 2 start @ 10:45AM): Calotti',
+  '- Schuman x 6 (7:30AM start, service x 1 start @ 11AM): Calotti + 1 add-on, timing TBD',
+  '- Bedrossian x 3 (all service, 7:30AM start): Nahar',
+  '', 'Privates', '- Syed x 9', "- Marous x 2 (CC'd)", '- Connors x 1', '- Lally x 2',
+  '', 'JHN/TJUH/JSC', '- None',
+  '', 'Clinics',
+  '-CPEC PO: Djulbegovic, Shields, Calotti',
+  '-CPEC: Illiano, Patel (AM, covering Ransone), Hamou (PM), Camacho, Parekh (AM), Aguwa, Shields',
+  '-Cornea PM (Meghpara, 28 x 2): Parekh, Bair + 1 procedure @ 12:30 (Bair)',
+  '-Glaucoma PM (Amarasekera, 20 x 2): Patel, Nahar',
+  '-Neuro AM/PM (Sergott): Marshall',
+  '-Peds AM (Lloyd, 4 x 1 + privates): Hamou',
+  '-Plastics PM: None',
+  '', 'Vacation',
+  '- Samuel (Wills OR AM) c/b n/c',
+  '- Ransone (CPEC/Plastics) c/b Patel AM (Uveitis)/NC d/s PM',
+  '', 'Add-ons', 'Monday daytime (9/21/26): Djulbegovic', 'Monday night (9/21/26): Aguwa', 'Tuesday daytime (9/22/26): Djulbegovic'
+].join('\n');
+var R921 = Engine.resolveDay('2026-09-21', DATA);
+var names921 = R921.residents.map(function (r) { return r.name; });
+var p921 = ImportFmt.parse(REAL, { names: names921, clinics: R921.clinics });
+eq(p921.unknown.length, 0, 'real paste: every line read ' + JSON.stringify(p921.unknown));
+eq(p921.unknownNames.length + p921.notClinics.length + p921.notedNotOut.length, 0, 'real paste: no unknown names, non-clinics or stray notes');
+eq(p921.cases.length, 10, 'real paste: 6 Wills + 4 private cases (JHN "None")');
+function caseStr(c) { return [c.surgeon, c.count, c.start, c.serviceCount, c.serviceTimes, c.assigned, c.notes].join('|'); }
+eq(caseStr(p921.cases[0]), 'Abendroth|7|7:30AM|4|9:15AM|Cheng|', 'start, service x4 @ 9:15AM, resident after the colon');
+eq(caseStr(p921.cases[2]), 'Pendse|4|12PM|3|12:30PM|Wibbelsman|', '12PM start, service from 12:30PM');
+eq(caseStr(p921.cases[4]), 'Schuman|6|7:30AM|1|11AM|Calotti|+ 1 add-on, timing TBD', 'a note after the resident');
+eq(caseStr(p921.cases[5]), 'Bedrossian|3|7:30AM|3||Nahar|', '"all service"');
+eq(caseStr(p921.cases[7]), "Marous|2||0|||CC'd", "CC'd = cross-checked, no service cases");
+eq(JSON.stringify(p921.absences.map(function (a) { return [a.name, a.am && a.pm, a.coverAM, a.coverPM]; })),
+  JSON.stringify([['Samuel', true, 'NC', 'NC'], ['Ransone', true, 'Patel', 'NC']]), 'c/b n/c, and "Patel AM (Uveitis)/NC d/s PM"');
+var cl921 = {};
+p921.clinics.forEach(function (c) { cl921[c.label + '|' + c.session] = c; });
+eq(Object.keys(cl921).sort().join(), 'CPEC PO|day,Cornea|pm,Glaucoma|pm,Neuro|am,Neuro|pm,Peds|am,Plastics|pm', 'clinic lines (CPEC is assignments, not a clinic; Neuro AM/PM = both)');
+eq(cl921['Cornea|pm'].count + ' / ' + cl921['Cornea|pm'].extra + ' / ' + cl921['Cornea|pm'].staff.join(), '28 x 2 / Meghpara; +1 procedure @ 12:30 (Bair) / Parekh,Bair', 'attending + count, and a note after a name');
+eq(cl921['Plastics|pm'].staff.length, 0, 'Plastics PM: None');
+eq(p921.nightFloat + '|' + p921.surg['3'] + '|' + p921.addOnDates[0], 'Perez|Bair|2026-09-21', 'Night Float, Surg 3, and the day from the add-ons');
+function surgRole921(n) { var s = R921.surg || {}; for (var k in s) if (s[k] && s[k].name === n) return k; return ''; }
+var base921 = base(); base921.date = '2026-09-21';
+var d921 = ImportFmt.toDay(p921, base921, R921, DATA, ExportFmt, { surgRoleOf: surgRole921, cpecSurgeons: [] });
+eq(d921.cases.slice(0, 6).map(function (c) { return c.category; }).join(),
+  'cataract,cataract,cataract,glaucoma,glaucoma,other',
+  'types pre-filled only from firm signals: Surg 1/5 cataract, Surg 4 glaucoma (Reza, Schuman), else other — the schedulers set the rest');
+var d921b = ImportFmt.toDay(p921, base921, R921, DATA, ExportFmt, { surgRoleOf: surgRole921, knownTypes: { bedrossian: 'retina' } });
+eq(d921b.cases[5].category, 'retina', 'a type set before for an attending is remembered');
+ok(!d921.clinicStaffOverrides['Uveitis|am'] && !d921.clinicStaffOverrides['Oncology|am'] && !d921.clinicStaffOverrides['Retina Private|pm'],
+  'clinics the paste does not list keep the block schedule’s staff');
+var Status = require(path.join(__dirname, '..', 'js', 'status.js'));
+var ab = Status.caseSpans(d921.cases[0], DATA);
+eq(Status.fmtClock(ab.start) + '–' + Status.fmtClock(ab.end), '9:15 AM–11:15 AM', 'Cheng is busy for the 4 service cases from 9:15 (4 × 30 min), not from 7:30');
 
 if (failures) {
   console.error(failures + ' failure(s) of ' + checks);

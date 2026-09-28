@@ -60,9 +60,9 @@ has(text, 'Ransone (CPEC/Plastics) NC\nDjulbegovic at AAO Fri', 'free-text note 
 /* ---------- clinic lines follow who is out ---------- */
 text = ExportFmt.buildText(day({ absences: [{ name: 'Ransone', am: true, pm: true, coverAM: 'Patel', coverPM: 'Hamou' }] }));
 has(text, 'Plastics PM: **Hamou (for Ransone)**', 'coverer stands in on the absent resident’s clinic');
-lacks(text, 'Uveitis AM', 'Patel (covering Ransone) is not listed in their own Uveitis AM');
+has(text, 'Uveitis AM: none', 'Patel (covering Ransone) is not listed in their own Uveitis AM — it prints none (the gap)');
 text = ExportFmt.buildText(day({ absences: [{ name: 'Ransone', am: true, pm: true, coverAM: 'NC', coverPM: 'NC' }] }));
-lacks(text, 'Plastics PM', 'NC: the absent resident simply drops off the clinic line');
+has(text, 'Plastics PM: none', 'NC: the absent resident drops off and the uncovered clinic prints none (as sent schedules do)');
 has(text, 'Uveitis AM: **Patel**', 'Patel stays in Uveitis when not covering');
 
 // Night Float week: the NF resident's clinic goes to Day Float.

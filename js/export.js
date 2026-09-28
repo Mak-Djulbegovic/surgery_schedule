@@ -263,7 +263,8 @@
     return final;
   }
 
-  // 'Cornea PM (29x3): **Momenaei, Williamson, Aguwa**'
+  // 'Cornea PM (29x3): **Momenaei, Williamson, Aguwa**' — 'Plastics PM: none'
+  // when the usual resident is out uncovered or removed.
   // Session 'day' (the CPEC PO standing clinic, UISPEC5 §C) renders with NO
   // session suffix: 'CPEC PO (…): **names**'. Labels are collected from the
   // roster clinics plus any count OR staff-override key, so a clinic that is
@@ -285,7 +286,12 @@
         var cc = counts[label + '|' + session] || {};
         var count = trim(cc.count);
         var extra = trim(cc.extra);
-        if (!staff.length && !count && !extra) return;
+        // A clinic that normally has a resident but has nobody today (out and
+        // not covered, or removed) prints 'none' — as the sent schedules do
+        // ('Plastics PM: None') — so readers see the gap.
+        var grp = clinics[label];
+        var usual = !!(grp && (grp[session] || []).length);
+        if (!staff.length && !count && !extra && !usual) return;
         var head = session === 'day' ? label : label + ' ' + session.toUpperCase();
         var paren = [];
         if (count) paren.push(count);

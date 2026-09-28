@@ -77,31 +77,48 @@ get the day into theirs.
 - **Where**: the landing ("Built by someone else? Paste the schedule they
   sent"), Library → Paste a sent schedule, and callouts on Out today (blank
   day) and Coverage (no cases). Route `#/import/<date>`.
-- **What it reads** (js/importer.js, pure): the app's own copied format, with
-  or without `**` (Copy plain text / Copy formatted pasted from an email),
-  tolerant of bullets, en/em dashes, blank lines, non-breaking spaces and the
-  emoji ⚠. Cases (surgeon, count, start, service count + times, resident,
-  backup, backup note, notes; UNASSIGNED stays open), Vacation lines →
-  absences with per-session coverers / NC / TBD / reason, "N strong",
-  free-text notes, Night Float, lectures, clinic counts/notes, add-on names.
-  Manual clinic edits are rebuilt by diffing the listed staff against what
-  the block schedule + absences would print ("X (for Y)" is about Y).
+- **What it reads** (js/importer.js, pure): the hand-typed format in use and
+  the app's own copied format, with or without `**`, tolerant of bullets,
+  en/em dashes, blank lines, non-breaking spaces and the emoji ⚠. Tested on
+  a real sent schedule (Mon 9/21/2026, `tests/test-import.js`):
+  `- Abendroth x 7 (7:30AM start, service x 4 start @ 9:15AM): Cheng`
+  (start; service count + start → the resident is busy from 9:15 for 4
+  cases); `(all service, 7:30AM start)`; `- Marous x 2 (CC'd)` (cross-checked:
+  no service cases); `Calotti + 1 add-on, timing TBD` (note);
+  `-Cornea PM (Meghpara, 28 x 2): Parekh, Bair + 1 procedure @ 12:30 (Bair)`
+  (attending + count; text after a name is a note); `-Neuro AM/PM (…)` (both
+  sessions); `-CPEC: …` (assignments, not a clinic — skipped);
+  `- Samuel (Wills OR AM) c/b n/c`; `c/b Patel AM (Uveitis)/NC d/s PM`
+  (`/` or `|` between sessions; `d/s` ignored; `n/c` = NC).
+- **Clinics**: only the clinics the paste lists change — hand-typed schedules
+  list some clinics, and the rest keep the block schedule's staff (reading an
+  unlisted clinic as empty would have shown its residents as free).
+- **Case type is the schedulers' call** (chief, 9/28): the paste screen shows
+  a type dropdown per case, pre-filled only from firm signals — the type last
+  set for that attending in this browser (`surgsched:v2:surgeonTypes`, also
+  learned from the Surgery tab), globe/trauma, privates and today's
+  CPEC-sheet surgeons = cataract, the clinic a backup covers, the assigned
+  resident's Surg role (3 cornea, 4 glaucoma, 1/5 cataract), JHN = plastics;
+  otherwise `other`, highlighted. List size is not a signal (glaucoma
+  attendings run long lists: Reza ×7, Schuman ×6).
 - **Which day**: the add-on labels name it; otherwise the day (today or
   tomorrow) whose Surg 1–5 match the paste, preferring today. Shown and
   changeable; a Surg mismatch with the block schedule is flagged.
-- **Honesty check**: the read day is rebuilt and compared line by line with
-  the paste (skipped non-schedule lines excluded); differences are listed.
-  Unknown resident names and Vacation notes that start with a name are
-  flagged; skipped lines are listed.
-- **Not in the text, so guessed**: case type (for case lengths) — globe/trauma
-  by name → privates and today's CPEC-sheet surgeons = cataract → the clinic
-  the backup covers → the resident's Surg role (3 cornea, 4 glaucoma, 1/5
-  cataract) → JHN = plastics → other. Listed before loading. Also not
-  carried: "done by" times and add-on flags.
-- **Load**: saves the day in this browser (replacing a draft only after a
-  confirm), then opens Coverage if it is today, else Surgery. Tests:
-  `tests/test-import.js` (round trip with/without `**`, mail-mangled,
-  hand-typed lines) + a two-browser hand-off in Playwright.
+- **What the user sees**: "What the app read" — every case (times, service,
+  resident, note, type), who is out and who covers, the clinic lines, Night
+  Float and add-on call. Flags: lines that could not be read (not loaded),
+  names not on the roster, Vacation notes that start with a name, clinic
+  labels the app does not have. A line-by-line rebuild check is shown only
+  when it matches exactly (the app's own format); for hand-typed pastes the
+  wording differs by design, so no diff is shown.
+- **Copied schedule change**: a clinic that normally has a resident but has
+  nobody today (out and not covered, pulled to cover someone, or removed)
+  prints `none` — as sent schedules do (`Plastics PM: None`) — so readers
+  see the gap and a paste carries it.
+- **Not carried**: "done by" times and add-on flags.
+- **Load**: saves the day in this browser (confirm before replacing a draft),
+  remembers the types per attending, opens Coverage if it is today, else
+  Surgery.
 
 ## The status model (js/status.js — pure, Node-tested)
 

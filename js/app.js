@@ -1576,7 +1576,7 @@
     var cat = el('select', { class: 's-cat', 'aria-label': 'Category' });
     CATEGORIES.forEach(function (k) { cat.appendChild(el('option', { value: k, text: k })); });
     cat.value = c.category;
-    cat.addEventListener('change', function () { c.category = cat.value; touch(); refreshAssignAreas(); });
+    cat.addEventListener('change', function () { c.category = cat.value; rememberSurgeonType(c.surgeon, c.section, c.category); touch(); refreshAssignAreas(); });
     var svc = numInput(c.serviceCount, function (v) { c.serviceCount = v; touch(); });
     svc.className = 's-svc';
     svc.setAttribute('aria-label', 'Service cases');
@@ -3022,6 +3022,24 @@
   var importText = '';   // what is in the paste box (not saved)
   var importDate = '';   // the day it will be loaded into ('' = guess)
   var importTimer = null;
+  var importTypes = {};  // case signature -> type chosen on the paste screen
+
+  // The case type is the schedulers' call. The app remembers, per browser,
+  // the type last set for each attending (paste screen or Surgery tab) and
+  // pre-fills it next time.
+  var SURGEON_TYPES_KEY = 'surgsched:v2:surgeonTypes';
+  function knownSurgeonTypes() {
+    try { return JSON.parse(lsGet(SURGEON_TYPES_KEY) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function rememberSurgeonType(surgeon, section, type) {
+    var key = window.ImportFmt ? window.ImportFmt.surgeonKey(surgeon) : '';
+    if (!key || section === 'private' || !type || type === 'other' || /globe|trauma/.test(key)) return;
+    var all = knownSurgeonTypes();
+    if (all[key] === type) return;
+    all[key] = type;
+    lsSet(SURGEON_TYPES_KEY, JSON.stringify(all));
+  }
+  function caseSig(c) { return [c.section, c.surgeon, c.count, c.start].join('|').toLowerCase(); }
 
   function todayISO() { return isoOf(new Date()); }
 
@@ -3054,7 +3072,7 @@
   function readImport(text, iso) {
     var info = importNames(iso);
     var roster = info.roster || emptyRoster(iso);
-    var parsed = window.ImportFmt.parse(text, { names: info.names });
+    var parsed = window.ImportFmt.parse(text, { names: info.names, clinics: roster.clinics || {} });
     var base = defaultState(iso);
     base.addOns.forEach(function (r) { r.label = addOnLabel(r); });
     var cb = roster.cooperBuddies; // as computeRoster would pre-fill them
@@ -3065,6 +3083,7 @@
     var surg = roster.surg || {};
     var day = window.ImportFmt.toDay(parsed, base, roster, data(), window.ExportFmt, {
       addOnLabel: addOnLabel,
+      knownTypes: knownSurgeonTypes(),
       cpecSurgeons: cpec,
       surgRoleOf: function (n) { for (var k in surg) if (surg[k] && surg[k].name === n) return k; return ''; }
     });
@@ -3122,7 +3141,8 @@
     if (!host) return;
     clearNode(host);
     if (!trim(importText) || !window.ImportFmt) return;
-    var first = window.ImportFmt.parse(importText, { names: importNames(todayISO()).names });
+    var t0 = importNames(todayISO());
+    var first = window.ImportFmt.parse(importText, { names: t0.names, clinics: (t0.roster && t0.roster.clinics) || {} });
     if (!first.read) {
       host.appendChild(el('div', { class: 'card needs-card' }, [el('p', { class: 'ref-para', text: 'This does not look like a surgery schedule — no Assignments, case or Vacation lines were found.' })]));
       return;
@@ -3152,6 +3172,80 @@
     }
     card.appendChild(when);
 
+    // what will be loaded — cases first, each with its type (the schedulers' call)
+    var SEC = { wills: 'Wills/ASC', other: 'Stadium / Cherry Hill', jhn: 'JHN / TJUH / JSC', private: 'Privates' };
+    if (day.cases.length) {
+      var list = el('div', { class: 'imp-block' });
+      list.appendChild(el('div', { class: 'imp-block-head' }, [
+        el('b', { text: 'Cases' }),
+        el('span', { class: 'field-hint', text: 'Set each case’s type — it is not in the text, and the app uses it for case length and backup chains. Types you set are remembered for each attending.' })
+      ]));
+      day.cases.forEach(function (c) {
+        var sig = caseSig(c);
+        if (importTypes[sig]) c.category = importTypes[sig];
+        var bits = [];
+        if (c.start) bits.push(c.start);
+        if (c.serviceCount > 0 && c.serviceCount < c.count) bits.push(c.serviceCount + ' service' + (c.serviceTimes ? ' from ' + c.serviceTimes : ''));
+        else if (c.serviceCount > 0 && c.serviceCount === c.count && c.section !== 'private') bits.push('all service');
+        else if (c.section !== 'private' && !c.serviceCount) bits.push('no service cases');
+        var who = c.assigned ? '→ ' + c.assigned + (c.backup ? ' (backup ' + c.backup + ')' : '') : (c.serviceCount > 0 ? '→ no resident yet' : '');
+        var sel = el('select', { class: 'imp-type', 'aria-label': 'Type for ' + c.surgeon });
+        CATEGORIES.forEach(function (k) { sel.appendChild(el('option', { value: k, text: k })); });
+        sel.value = c.category;
+        var unset = c.category === 'other' && !importTypes[sig];
+        if (unset) sel.classList.add('unset');
+        sel.addEventListener('change', function () { importTypes[sig] = sel.value; c.category = sel.value; sel.classList.remove('unset'); });
+        list.appendChild(el('div', { class: 'imp-case' }, [
+          el('span', { class: 'imp-sec', text: SEC[c.section] || c.section }),
+          el('span', { class: 'imp-main' }, [
+            el('b', { text: c.surgeon + ' ×' + c.count }),
+            bits.length ? el('span', { class: 'imp-meta', text: ' · ' + bits.join(' · ') }) : null,
+            who ? el('span', { class: 'imp-who' + (c.assigned ? '' : ' open'), text: ' ' + who }) : null,
+            c.notes ? el('span', { class: 'imp-note', text: ' — ' + c.notes + (/cc'?d/i.test(c.notes) ? ' (cross-checked: no service cases)' : '') }) : null
+          ]),
+          sel
+        ]));
+      });
+      card.appendChild(list);
+    }
+    function sessWho(a, s) {
+      var w = s === 'am' ? a.coverAM : a.coverPM;
+      return w === 'NC' ? 'not covered ' + s.toUpperCase() : (w ? w + ' ' + s.toUpperCase() : s.toUpperCase() + ' coverage not set');
+    }
+    if (day.absences.length || day.outConfirmed || day.vacation) {
+      var outB = el('div', { class: 'imp-block' }, [el('div', { class: 'imp-block-head' }, [el('b', { text: 'Out' })])]);
+      if (!day.absences.length && day.outConfirmed) outB.appendChild(el('div', { class: 'imp-line', text: 'No one out' }));
+      day.absences.forEach(function (a) {
+        var span = a.am && a.pm ? 'all day' : (a.am ? 'AM' : 'PM');
+        var cov;
+        if (a.am && a.pm && a.coverAM === a.coverPM) cov = a.coverAM === 'NC' ? 'not covered' : (a.coverAM ? 'covered by ' + a.coverAM : 'coverage not set');
+        else cov = [a.am ? sessWho(a, 'am') : '', a.pm ? sessWho(a, 'pm') : ''].filter(Boolean).join(' · ');
+        outB.appendChild(el('div', { class: 'imp-line' }, [el('b', { text: a.name }), ' — ' + span + (a.reason && a.reason !== 'vacation' ? ' (' + (a.reason === 'other' ? 'out' : a.reason) + ')' : '') + ' · ' + cov]));
+      });
+      if (day.vacation) day.vacation.split('\n').forEach(function (l) { outB.appendChild(el('div', { class: 'imp-line muted', text: 'Note: ' + l })); });
+      card.appendChild(outB);
+    }
+    if (parsed.clinics.length) {
+      var clB = el('div', { class: 'imp-block' }, [el('div', { class: 'imp-block-head' }, [
+        el('b', { text: 'Clinics' }),
+        el('span', { class: 'field-hint', text: 'Clinics not listed keep the block schedule’s staff.' })
+      ])]);
+      parsed.clinics.forEach(function (cl) {
+        var head = cl.label + (cl.session === 'day' ? '' : ' ' + cl.session.toUpperCase());
+        var paren = [cl.count, cl.extra].filter(Boolean).join(' · ');
+        clB.appendChild(el('div', { class: 'imp-line' }, [
+          el('b', { text: head }), paren ? el('span', { class: 'imp-meta', text: ' (' + paren + ')' }) : null,
+          ': ' + (cl.staff.length ? cl.staff.join(', ') : 'none')
+        ]));
+      });
+      card.appendChild(clB);
+    }
+    var also = [];
+    if (day.nightFloat) also.push('Night Float ' + day.nightFloat);
+    if (day.lectures) also.push(day.lectures.split('\n').length + ' lecture line' + (day.lectures.split('\n').length === 1 ? '' : 's'));
+    if (parsed.addOns.length) also.push('Add-on call: ' + parsed.addOns.map(function (a) { return (a.label ? a.label.replace(/\s*\(.*\)$/, '') + ' ' : '') + a.name; }).join(', '));
+    if (also.length) card.appendChild(el('div', { class: 'imp-block' }, [el('div', { class: 'imp-line' }, [el('b', { text: 'Also: ' }), also.join(' · ')])]));
+
     // things to check
     var notes = [];
     var surg = res.roster.surg || {};
@@ -3163,21 +3257,10 @@
     });
     if (parsed.unknownNames.length) notes.push({ bad: true, text: 'Not on this year’s roster, kept as typed: ' + parsed.unknownNames.join(', ') + '.' });
     parsed.notedNotOut.forEach(function (l) { notes.push({ text: 'Read as a Vacation note, not as someone out: “' + l + '”.' }); });
-    var guessed = day.cases.filter(function (c) { return c.section !== 'private'; });
-    if (guessed.length) notes.push({ text: 'Case types are not in the text, so they are guessed (for case lengths): ' + guessed.map(function (c) { return (c.surgeon || '?') + ' ' + c.category; }).join(', ') + '. Fix any on Surgery.' });
-    if (parsed.unknown.length) notes.push({ text: 'Skipped ' + parsed.unknown.length + ' line' + (parsed.unknown.length === 1 ? '' : 's') + ' that are not part of the schedule: ' + parsed.unknown.slice(0, 4).map(function (l) { return '“' + l + '”'; }).join(', ') + (parsed.unknown.length > 4 ? '…' : '') + '.' });
+    if (parsed.notClinics.length) notes.push({ text: 'Not a clinic in the app, so not loaded: ' + parsed.notClinics.map(function (l) { return '“' + l + '”'; }).join(', ') + '.' });
+    if (parsed.unknown.length) notes.push({ bad: true, text: 'Could not read ' + parsed.unknown.length + ' line' + (parsed.unknown.length === 1 ? '' : 's') + ' — they are not loaded; add them by hand: ' + parsed.unknown.map(function (l) { return '“' + l + '”'; }).join(', ') });
     notes.forEach(function (n) { card.appendChild(el('div', { class: 'warn-line' + (n.bad ? ' bad' : '') + ' import-note', text: n.text })); });
-
-    // round-trip check
-    var check = el('div', { class: 'import-check' + (res.diff.same ? ' ok' : '') });
-    if (res.diff.same) {
-      check.appendChild(document.createTextNode('✓ Rebuilt from what was read, the schedule matches your paste line for line.'));
-    } else {
-      check.appendChild(el('div', { class: 'import-check-head', text: 'Rebuilt from what was read, ' + (res.diff.missing.length + res.diff.extra.length) + ' line' + ((res.diff.missing.length + res.diff.extra.length) === 1 ? '' : 's') + ' come out differently — check them after loading:' }));
-      res.diff.missing.slice(0, 8).forEach(function (l) { check.appendChild(el('div', { class: 'import-diff minus', text: '− ' + l })); });
-      res.diff.extra.slice(0, 8).forEach(function (l) { check.appendChild(el('div', { class: 'import-diff plus', text: '+ ' + l })); });
-    }
-    card.appendChild(check);
+    if (res.diff.same) card.appendChild(el('div', { class: 'import-check ok', text: '✓ Rebuilt from what was read, it matches your paste line for line.' }));
 
     // load
     var existing = lsGet(LS_PREFIX + iso);
@@ -3199,6 +3282,12 @@
   function loadImported(res, iso) {
     saveNow(); // flush whatever day is open
     var day = res.day;
+    day.cases.forEach(function (c) {
+      var t = importTypes[caseSig(c)];
+      if (t) c.category = t;
+      rememberSurgeonType(c.surgeon, c.section, c.category);
+    });
+    importTypes = {};
     day.date = iso;
     day.savedAt = Date.now();
     if (!lsSet(LS_PREFIX + iso, JSON.stringify(day))) {
