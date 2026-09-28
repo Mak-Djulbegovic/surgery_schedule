@@ -4,15 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Surg Schedule Builder</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 38 38' width='38' height='38'%3E%3Ccircle cx='19' cy='19' r='13' fill='#1a73b8'/%3E%3Cpath d='M19.00 12.70L19.00 7.30M20.95 13.01L22.24 9.01M22.70 13.90L25.88 9.53M24.10 15.30L27.49 12.83M24.99 17.05L30.13 15.38M25.30 19.00L29.50 19.00M24.99 20.95L30.13 22.62M24.10 22.70L27.49 25.17M22.70 24.10L25.88 28.47M20.95 24.99L22.24 28.99M19.00 25.30L19.00 30.70M17.05 24.99L15.76 28.99M15.30 24.10L12.12 28.47M13.90 22.70L10.51 25.17M13.01 20.95L7.87 22.62M12.70 19.00L8.50 19.00M13.01 17.05L7.87 15.38M13.90 15.30L10.51 12.83M15.30 13.90L12.12 9.53M17.05 13.01L15.76 9.01' stroke='#c3e5f8' stroke-width='1.1' stroke-linecap='round' opacity='0.9'/%3E%3Ccircle cx='19' cy='19' r='5.2' fill='#0a2d4f'/%3E%3Ccircle cx='21.4' cy='16.6' r='1.6' fill='#fff'/%3E%3Ccircle cx='16.9' cy='21.2' r='0.7' fill='#fff' opacity='0.65'/%3E%3Ccircle cx='19' cy='19' r='13' fill='none' stroke='#0b3a63' stroke-width='1.6'/%3E%3C/svg%3E">
 <style>
 /* Surg Schedule Builder — clean clinical styling.
-   System fonts, 14px base, muted PGY accents, amber warnings, red unassigned. */
+   System fonts, 14px base, muted PGY accents, amber warnings, red unassigned.
+   The workspace carries the landing page's blue gradient in its app bar. */
 
 :root {
-  --bg: #f4f6f8;
+  --bg: #f2f5f9;
   --card: #ffffff;
-  --border: #dfe4ea;
-  --border-soft: #ebeef2;
+  --border: #dde3ea;
+  --border-soft: #e9edf2;
   --text: #1d2733;
   --muted: #64707e;
   --faint: #8b96a3;
@@ -37,8 +39,12 @@
   --pgy4: #6b4aa0;
   --pgy4-bg: #efe9f8;
   --pgy4-border: #cabde5;
-  --radius: 8px;
-  --shadow: 0 1px 2px rgba(24, 39, 58, 0.06), 0 1px 1px rgba(24, 39, 58, 0.04);
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(16, 35, 60, 0.05), 0 6px 18px -10px rgba(16, 35, 60, 0.12);
+  --brand-grad: linear-gradient(90deg, #0b3a63 0%, #15609b 58%, #17808e 100%);
+  --tabbar-h: 46px;
+  --field-bg: #f4f7fa;
+  --field-hover: #ebf0f6;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -55,33 +61,36 @@ body {
 
 button { font: inherit; color: inherit; }
 
-/* ---------------- header ---------------- */
+/* ---------------- header: the app bar ----------------
+   Same gradient as the landing hero, run horizontally so the tab bar below
+   (same gradient, same width) continues it without a seam. */
 
 .app-header {
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
-  padding: 14px 20px 12px;
+  background: var(--brand-grad);
+  color: #fff;
+  padding: 12px 20px 8px;
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 28px;
-  align-items: flex-start;
+  gap: 10px 22px;
+  align-items: center;
 }
 
 /* The brand block is a button — clicking it returns to the Home view. */
 .brand {
   display: flex; align-items: center; gap: 10px;
-  border: none; background: none; padding: 2px 6px 2px 2px; margin: -2px 0 -2px -2px;
-  border-radius: 9px;
+  border: none; background: none; padding: 3px 8px 3px 3px; margin: -3px 0 -3px -3px;
+  border-radius: 12px;
   text-align: left;
   cursor: pointer;
   font: inherit;
+  color: #fff;
 }
-.brand:hover { background: var(--accent-soft); }
-.brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.brand:hover { background: rgba(255, 255, 255, 0.10); }
+.brand:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 .brand-mark {
   width: 38px; height: 38px;
-  border-radius: 9px;
+  border-radius: 11px;
   background: var(--accent);
   color: #fff;
   display: inline-flex;
@@ -89,21 +98,33 @@ button { font: inherit; color: inherit; }
   justify-content: center;
   flex: none;
 }
+.brand-mark svg { width: 100%; height: 100%; display: block; }
+/* the mark: a white tile holding the iris from the landing page */
+.app-header .brand-mark,
+.home-mark {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(6, 30, 52, 0.25), 0 6px 14px -6px rgba(6, 30, 52, 0.45);
+}
 
-.brand-text { display: flex; flex-direction: column; }
-.brand-title { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); }
-.brand-sub { font-size: 12px; color: var(--muted); }
+.brand-text { display: flex; flex-direction: column; line-height: 1.25; }
+.brand-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; color: #fff; }
+.brand-sub { font-size: 12px; color: rgba(255, 255, 255, 0.72); }
 
 .header-controls {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 10px 16px;
+  align-items: center;
+  gap: 8px 12px;
   flex: 1;
   min-width: 0;
 }
 
 .date-field { display: inline-flex; flex-direction: column; gap: 2px; }
+/* the app bar's date needs no visible label — the picker says what it is */
+.app-header .field-label {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
 .field-label {
   font-size: 11px;
   font-weight: 600;
@@ -121,7 +142,19 @@ input[type="date"] {
   background: #fff;
 }
 
-.day-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-bottom: 3px; }
+.app-header input[type="date"] {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.30);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 7px 10px;
+  color-scheme: dark; /* light calendar icon on the blue bar */
+}
+.app-header input[type="date"]:hover { background: rgba(255, 255, 255, 0.18); }
+.app-header input[type="date"]:focus { border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22); }
+
+.day-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
 .chip {
   display: inline-flex;
@@ -141,7 +174,9 @@ input[type="date"] {
 /* dress-code reminder chip — may carry a long text, so it wraps */
 .chip-dress { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-text); white-space: normal; text-align: left; }
 
-.header-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; padding-bottom: 1px; }
+.app-header .chip-day { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.28); color: #fff; }
+
+.header-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 
 /* ---------------- Home landing view ---------------- */
 
@@ -172,11 +207,7 @@ body.home-active .home-view { display: block; min-height: 100vh; }
 }
 .home-hero-inner { position: relative; max-width: 1040px; margin: 0 auto; padding: 0 24px; }
 .home-brand { display: flex; align-items: center; gap: 10px; }
-.home-mark {
-  width: 40px; height: 40px; border-radius: 11px;
-  background: rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
-}
+.home-mark { width: 40px; height: 40px; border-radius: 11px; }
 .home-brand-text { display: flex; flex-direction: column; line-height: 1.25; }
 .home-brand-title { font-weight: 700; font-size: 15px; }
 .home-brand-sub { font-size: 12px; opacity: 0.78; }
@@ -320,7 +351,7 @@ body.home-active .home-view { display: block; min-height: 100vh; }
   border: 1px solid var(--border);
   background: #fff;
   color: var(--text);
-  border-radius: 7px;
+  border-radius: 8px;
   padding: 7px 13px;
   font-size: 13px;
   font-weight: 600;
@@ -331,7 +362,10 @@ body.home-active .home-view { display: block; min-height: 100vh; }
 .btn:hover { background: #f3f6f9; border-color: #c9d2dc; }
 .btn:active { background: #e9eef3; }
 
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  box-shadow: 0 1px 2px rgba(11, 58, 99, 0.22), 0 4px 12px -6px rgba(21, 96, 155, 0.55);
+}
 .btn-primary:hover { background: #135587; border-color: #135587; }
 .btn-primary:active { background: #104a75; }
 
@@ -354,37 +388,68 @@ body.home-active .home-view { display: block; min-height: 100vh; }
 
 /* ---------------- tabs ---------------- */
 
+/* Folder tabs on the app bar: the active tab takes the page colour and
+   runs into the free strip / page below it. */
 .tabbar {
   position: sticky;
   top: 0;
   z-index: 30;
   display: flex;
+  align-items: flex-end;
   gap: 2px;
-  padding: 0 16px;
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
+  height: var(--tabbar-h);
+  padding: 0 14px;
+  background: var(--brand-grad);
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
 }
 .tabbar::-webkit-scrollbar { display: none; }
 
 .tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
   border: none;
   background: none;
-  padding: 11px 14px 9px;
+  padding: 0 14px;
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--muted);
-  border-bottom: 2px solid transparent;
+  color: rgba(255, 255, 255, 0.80);
+  border-radius: 10px 10px 0 0;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
 }
-.tab:hover { color: var(--text); }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab:hover { color: #fff; background: rgba(255, 255, 255, 0.10); }
+.tab:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+.tab.active { color: var(--accent); background: var(--bg); }
+.tab.active:focus-visible { outline-color: var(--accent); }
 
 /* ---------------- layout ---------------- */
 
-.app-main { padding: 18px 20px 60px; max-width: 1380px; margin: 0 auto; }
+.app-main { padding: 20px 20px 64px; max-width: 1380px; margin: 0 auto; }
+
+/* ---------------- page head (every tab) ---------------- */
+
+.page-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 2px 0 18px; }
+.ph-icon {
+  width: 42px; height: 42px; flex: none;
+  border-radius: 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff;
+  background: linear-gradient(135deg, #15609b 0%, #17808e 100%);
+  box-shadow: 0 6px 14px -6px rgba(21, 96, 155, 0.6);
+}
+.ph-text { display: flex; flex-direction: column; min-width: 0; margin-right: auto; }
+.ph-eyebrow { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.ph-title {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px;
+  font-size: 23px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2;
+}
+.ph-date { font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
+.ph-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 
 .panel { display: none; }
 .panel.active { display: block; }
@@ -392,27 +457,33 @@ body.home-active .home-view { display: block; min-height: 100vh; }
 
 .card {
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 16px 18px;
+  padding: 18px 20px;
   margin-bottom: 16px;
 }
 
 .card-lite {
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  padding: 10px 14px;
+  box-shadow: var(--shadow);
+  padding: 12px 16px;
 }
 
 .card h2 {
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 700;
-  margin-bottom: 12px;
-  letter-spacing: -0.005em;
+  margin-bottom: 14px;
+  letter-spacing: -0.01em;
 }
 .h-note { font-size: 12px; font-weight: 500; color: var(--faint); margin-left: 6px; }
+/* a card title's note is its subtitle, on its own line */
+.card h2 .h-note {
+  display: block; margin: 3px 0 0;
+  font-size: 12.5px; font-weight: 400; letter-spacing: 0; color: var(--muted);
+}
 
 
 .toolbar {
@@ -440,8 +511,9 @@ body.home-active .home-view { display: block; min-height: 100vh; }
 /* ---------------- forms ---------------- */
 
 input[type="text"], input[type="number"], textarea, select {
+  font-variant-numeric: tabular-nums;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 7px;
   padding: 6px 8px;
   font: inherit;
   font-size: 13.5px;
@@ -657,7 +729,8 @@ table.tbl { border-collapse: collapse; width: 100%; }
 .more-menu > summary:hover { background: var(--bg); }
 .menu-pop {
   position: absolute; right: 0; top: calc(100% + 6px);
-  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text);
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   box-shadow: 0 10px 28px rgba(29, 39, 51, 0.16);
   padding: 6px; display: flex; flex-direction: column; gap: 4px;
   min-width: 195px; z-index: 40;
@@ -666,11 +739,11 @@ table.tbl { border-collapse: collapse; width: 100%; }
 
 .tab-num {
   display: inline-block;
-  min-width: 17px; height: 17px; line-height: 17px;
+  min-width: 18px; height: 18px; line-height: 18px;
   margin-right: 7px;
   border-radius: 50%;
-  background: var(--border-soft);
-  color: var(--faint);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
   font-size: 11px; font-weight: 700; text-align: center;
 }
 .tab.active .tab-num { background: var(--accent); color: #fff; }
@@ -764,6 +837,11 @@ table.tbl { border-collapse: collapse; width: 100%; }
 .clinic-standing { border-left: 3px solid var(--accent-border); padding-left: 8px; }
 .clinic-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
 .clinic-add { width: 108px; font-size: 12px; padding: 3px 5px; }
+select.clinic-add { background: transparent; border-style: dashed; color: var(--muted); }
+select.clinic-add:hover { border-color: var(--accent-border); color: var(--accent); }
+.clinic-count, .clinic-extra { background: var(--field-bg); border-color: transparent; }
+.clinic-count:hover, .clinic-extra:hover { background: var(--field-hover); }
+.clinic-count:focus, .clinic-extra:focus { background: #fff; border-color: var(--accent); }
 .clinic-count { width: 100%; }
 .clinic-extra { width: 100%; }
 
@@ -815,9 +893,22 @@ select.picker { max-width: 280px; min-width: 150px; }
 }
 .tab-badge.on.warn { background: var(--amber-bg); color: var(--amber-text); box-shadow: inset 0 0 0 1px var(--amber-border); }
 .tab-badge.on.ok { background: var(--green-bg); color: var(--green-text); box-shadow: inset 0 0 0 1px var(--green-border); }
+/* on the blue bar (inactive tabs) */
+.tab:not(.active) .tab-badge.on { background: rgba(255, 255, 255, 0.20); color: #fff; box-shadow: none; }
+.tab:not(.active) .tab-badge.on.warn { background: #fde7a8; color: #6f4604; }
+.tab:not(.active) .tab-badge.on.ok { background: #c9ecd7; color: #145c37; }
 
-.lib-menu > summary { font-size: 13px; font-weight: 600; color: var(--muted); }
-.lib-menu.active > summary { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+.lib-menu > summary { font-size: 13px; font-weight: 600; }
+.app-header .more-menu > summary {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+  border-radius: 9px;
+}
+.app-header .more-menu > summary:hover,
+.app-header .more-menu[open] > summary { background: rgba(255, 255, 255, 0.20); }
+.app-header .more-menu > summary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.app-header .lib-menu.active > summary { background: #fff; border-color: #fff; color: var(--accent); }
 
 .step-foot-inner { display: flex; justify-content: flex-end; margin-top: 4px; }
 
@@ -825,19 +916,31 @@ select.picker { max-width: 280px; min-width: 150px; }
 
 .avail-strip {
   position: sticky;
-  top: 43px;
+  top: var(--tabbar-h);
   z-index: 25;
-  background: #f9fbfc;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   font-size: 12.5px;
 }
 .strip-inner {
   max-width: 1380px; margin: 0 auto;
-  padding: 6px 20px;
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 22px;
+  padding: 8px 20px;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 24px;
 }
 .strip-part { display: inline-flex; flex-wrap: wrap; gap: 3px 5px; align-items: baseline; min-width: 0; }
-.strip-key { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 2px; }
+.strip-key {
+  color: var(--muted); font-size: 10.5px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.07em; margin-right: 4px;
+}
+.strip-when { font-weight: 500; font-size: 11.5px; color: var(--faint); margin-left: 4px; }
+/* phones: one line — "Free AM 13 · PM 9 ▾" — that opens the lists */
+.strip-toggle {
+  display: none;
+  align-items: baseline; gap: 4px;
+  border: none; background: none; padding: 0; cursor: pointer;
+  font-size: 12.5px; color: var(--text);
+}
+.strip-caret { color: var(--faint); margin-left: 2px; }
 .strip-name { font-weight: 600; }
 .strip-name.pgy2 { color: var(--pgy2); }
 .strip-name.pgy3 { color: var(--pgy3); }
@@ -862,9 +965,9 @@ select.picker { max-width: 280px; min-width: 150px; }
 }
 .ok-banner > span { margin-right: auto; }
 .abs-card {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fbfcfd;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: #f8fafc;
   padding: 10px 12px;
   margin-bottom: 10px;
 }
@@ -896,10 +999,6 @@ select.picker { max-width: 280px; min-width: 150px; }
 
 /* ---------------- Surgery (one line per attending) ---------------- */
 
-.surg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 12px; }
-.surg-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-right: auto; }
-.surg-title h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
-.surg-title .h-note { margin-left: 0; }
 .stat-warn { color: var(--amber-text); font-weight: 700; font-size: 13.5px; }
 .stat-ok { color: var(--green-text); font-weight: 700; font-size: 13.5px; }
 .count-badge-warn { background: var(--amber-bg); color: var(--amber-text); }
@@ -907,7 +1006,7 @@ select.picker { max-width: 280px; min-width: 150px; }
 .cpec-banner {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
   background: var(--accent-soft); border: 1px solid var(--accent-border);
-  border-radius: 10px; padding: 10px 14px; margin-bottom: 14px;
+  border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px;
 }
 .cpec-banner.done { background: transparent; border-color: var(--border-soft); color: var(--muted); font-size: 12.5px; padding: 6px 12px; }
 .cpec-banner-text { flex: 1 1 360px; min-width: 0; font-size: 13px; line-height: 1.5; }
@@ -924,10 +1023,10 @@ select.picker { max-width: 280px; min-width: 150px; }
 }
 
 .ssec {
-  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-  box-shadow: var(--shadow); padding: 12px 14px 8px; margin-bottom: 12px;
+  background: var(--card); border: 1px solid var(--border-soft); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 14px 16px 8px; margin-bottom: 14px;
 }
-.ssec.empty { background: transparent; box-shadow: none; border-style: dashed; padding: 7px 14px; }
+.ssec.empty { background: transparent; box-shadow: none; border: 1px dashed var(--border); padding: 8px 16px; }
 .ssec-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .ssec-title { font-size: 14.5px; font-weight: 700; }
 .ssec.empty .ssec-title { color: var(--muted); font-weight: 600; font-size: 13.5px; }
@@ -948,7 +1047,13 @@ select.picker { max-width: 280px; min-width: 150px; }
 }
 .invisible { visibility: hidden; }
 .srow { border-top: 1px solid var(--border-soft); padding: 6px 0; }
-.srow-main input, .srow-main select { width: 100%; min-width: 0; padding: 5px 7px; font-size: 13.5px; }
+.srow-main input, .srow-main select {
+  width: 100%; min-width: 0; padding: 6px 8px; font-size: 13.5px;
+  background: var(--field-bg); border-color: transparent;
+}
+.srow-main input:hover, .srow-main select:hover { background: var(--field-hover); }
+.srow-main input:focus, .srow-main select:focus { background: #fff; border-color: var(--accent); }
+.srow-main .s-surgeon { font-weight: 600; }
 .s-sur-wrap { grid-area: sur; position: relative; min-width: 0; }
 .s-sur-wrap .badge-addon { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); pointer-events: none; }
 .s-x { grid-area: x; }
@@ -1002,8 +1107,8 @@ select.s-pick { width: 100%; max-width: 100%; min-width: 0; }
 
 .s-details {
   display: none;
-  margin-top: 8px; padding: 10px 12px;
-  background: #fbfcfd; border: 1px solid var(--border-soft); border-radius: 8px;
+  margin-top: 8px; padding: 12px 14px;
+  background: #f8fafc; border: 1px solid var(--border-soft); border-radius: 10px;
 }
 .srow.open .s-details { display: block; }
 .s-details-grid {
@@ -1092,7 +1197,15 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 }
 .tl-name { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 13px; }
 .tl-role { font-size: 11px; color: var(--faint); font-weight: 700; }
-.tl-track { position: relative; height: 16px; background: var(--border-soft); border-radius: 4px; overflow: hidden; }
+.tl-track { position: relative; height: 16px; background: var(--border-soft); border-radius: 5px; overflow: hidden; }
+.tl-axis { border-bottom: none; padding: 0; }
+.tl-axis-track { height: 14px; background: none; overflow: visible; }
+.tl-tick {
+  position: absolute; top: 0; transform: translateX(-50%);
+  font-size: 10.5px; font-weight: 700; color: var(--faint); white-space: nowrap;
+}
+.tl-tick.first { transform: none; }
+.tl-tick.last { transform: translateX(-100%); }
 .tl-seg { position: absolute; top: 0; bottom: 0; }
 .tl-now { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--text); }
 .tl-noon { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(29, 39, 51, 0.25); }
@@ -1112,11 +1225,18 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 
 /* ---------------- preview ---------------- */
 
+.send-col { max-width: 820px; }
+.send-col .toolbar { margin-bottom: 14px; }
+.send-check { flex-basis: 100%; font-size: 13px; font-weight: 600; }
+.send-check:empty { display: none; }
+.send-check.ok { color: var(--green-text); }
+.send-check.warn { color: var(--amber-text); }
+.send-check .btn-link { font-size: 13px; padding: 0 2px; color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .document {
-  max-width: 780px;
-  padding: 26px 32px;
+  padding: 32px 40px;
   font-size: 14px;
   line-height: 1.5;
+  box-shadow: 0 1px 2px rgba(16, 35, 60, 0.05), 0 16px 36px -18px rgba(16, 35, 60, 0.22);
 }
 .document b { font-weight: 700; }
 
@@ -1233,17 +1353,65 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 /* ---------------- responsive ---------------- */
 
 @media (max-width: 800px) {
-  .app-header { padding: 12px 14px 10px; }
-  .header-controls { align-items: stretch; flex-direction: column; flex-basis: 100%; }
-  .header-actions { margin-left: 0; }
-  .cov-grid { grid-template-columns: 1fr; }
-  .tl-row { grid-template-columns: 96px minmax(0, 1fr); }
-  .tl-status { grid-column: 1 / -1; padding-left: 2px; }
-  .strip-inner { padding: 6px 12px; }
+  /* app bar in two short rows: brand + menus, then the date */
+  .app-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "brand brand actions" "date chips chips";
+    align-items: center;
+    gap: 8px 10px;
+    padding: 10px 12px 8px;
+  }
+  .brand { grid-area: brand; min-width: 0; }
+  .header-controls { display: contents; }
+  .date-field { grid-area: date; }
+  .day-chips { grid-area: chips; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .day-chips::-webkit-scrollbar { display: none; }
+  .header-actions { grid-area: actions; margin-left: 0; flex-wrap: nowrap; }
+  .app-header .brand-mark { width: 34px; height: 34px; border-radius: 10px; }
+  .brand-title { font-size: 15px; }
+  .brand-sub { font-size: 11px; }
+  .tabbar { padding: 0 8px; }
+  .tab { padding: 0 11px; font-size: 13px; }
+
   .avail-strip { position: static; }
-  .app-main { padding: 14px 12px 60px; }
-  .clinic-row { grid-template-columns: 1fr; gap: 6px; }
-  .document { padding: 18px 16px; }
+  .strip-inner { padding: 7px 12px; }
+  .strip-toggle { display: inline-flex; }
+  .avail-strip:not(.open) .strip-part { display: none; }
+
+  .app-main { padding: 16px 12px 60px; }
+  .page-head { margin-bottom: 14px; }
+  .ph-icon { width: 36px; height: 36px; border-radius: 10px; }
+  .ph-title { font-size: 20px; }
+  .ph-actions { flex-basis: 100%; }
+  .card { padding: 16px; }
+
+  .cov-grid { grid-template-columns: 1fr; }
+  /* name and status on one line, the day's bar full width under it */
+  .tl-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "name status" "track track";
+    gap: 3px 10px;
+    padding: 6px 0;
+  }
+  .tl-name { grid-area: name; }
+  .tl-track { grid-area: track; }
+  .tl-status { grid-area: status; text-align: right; max-width: 62vw; }
+  .tl-axis { padding: 0; }
+  .tl-axis .tl-name, .tl-axis .tl-status { display: none; }
+
+  /* clinic: name, then staff, then count + note side by side */
+  .clinic-row {
+    grid-template-columns: 96px minmax(0, 1fr);
+    grid-template-areas: "label label" "chips chips" "count extra";
+    gap: 6px 8px;
+  }
+  .clinic-label { grid-area: label; }
+  .clinic-chips { grid-area: chips; }
+  .clinic-count { grid-area: count; }
+  .clinic-extra { grid-area: extra; }
+
+  .document { padding: 20px 16px; }
   .howto-cols { grid-template-columns: 1fr; }
 }
 
@@ -1252,7 +1420,7 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 @media (max-width: 860px) {
   .scols { display: none; }
   .srow-main {
-    grid-template-columns: 14px 50px 70px minmax(0, 1fr) 58px 32px;
+    grid-template-columns: 12px 42px 62px minmax(0, 1fr) 50px 32px;
     grid-template-areas:
       "sur sur sur sur sur more"
       "x cnt st cat svc svc"
@@ -1261,8 +1429,6 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
   .s-svc-label { display: inline; }
   .s-details-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .s-d-pill { grid-column: 1 / -1; }
-}
-
 }
 
 .btn:disabled, .btn[disabled] { opacity: 0.5; cursor: default; }
@@ -1279,7 +1445,7 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
     <div class="home-hero-inner">
       <div class="home-brand">
         <span class="brand-mark home-mark" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <svg viewBox="0 0 38 38" width="38" height="38" aria-hidden="true" focusable="false"><defs><radialGradient id="bmIrisHome" cx="0.5" cy="0.5" r="0.5"><stop offset="0.3" stop-color="#2b93d6"/><stop offset="1" stop-color="#0e5a8c"/></radialGradient></defs><circle cx="19" cy="19" r="13" fill="url(#bmIrisHome)"/><path d="M19.00 12.70L19.00 7.30M20.95 13.01L22.24 9.01M22.70 13.90L25.88 9.53M24.10 15.30L27.49 12.83M24.99 17.05L30.13 15.38M25.30 19.00L29.50 19.00M24.99 20.95L30.13 22.62M24.10 22.70L27.49 25.17M22.70 24.10L25.88 28.47M20.95 24.99L22.24 28.99M19.00 25.30L19.00 30.70M17.05 24.99L15.76 28.99M15.30 24.10L12.12 28.47M13.90 22.70L10.51 25.17M13.01 20.95L7.87 22.62M12.70 19.00L8.50 19.00M13.01 17.05L7.87 15.38M13.90 15.30L10.51 12.83M15.30 13.90L12.12 9.53M17.05 13.01L15.76 9.01" stroke="#c3e5f8" stroke-width="1.1" stroke-linecap="round" opacity="0.9"/><circle cx="19" cy="19" r="5.2" fill="#0a2d4f"/><circle cx="21.4" cy="16.6" r="1.6" fill="#fff"/><circle cx="16.9" cy="21.2" r="0.7" fill="#fff" opacity="0.65"/><circle cx="19" cy="19" r="13" fill="none" stroke="#0b3a63" stroke-width="1.6"/></svg>
         </span>
         <span class="home-brand-text">
           <span class="home-brand-title">Surg Schedule Builder</span>
@@ -1324,7 +1490,7 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 <header class="app-header">
   <button type="button" class="brand" id="btnBrandHome" title="Home">
     <span class="brand-mark" aria-hidden="true">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+      <svg viewBox="0 0 38 38" width="38" height="38" aria-hidden="true" focusable="false"><defs><radialGradient id="bmIrisHead" cx="0.5" cy="0.5" r="0.5"><stop offset="0.3" stop-color="#2b93d6"/><stop offset="1" stop-color="#0e5a8c"/></radialGradient></defs><circle cx="19" cy="19" r="13" fill="url(#bmIrisHead)"/><path d="M19.00 12.70L19.00 7.30M20.95 13.01L22.24 9.01M22.70 13.90L25.88 9.53M24.10 15.30L27.49 12.83M24.99 17.05L30.13 15.38M25.30 19.00L29.50 19.00M24.99 20.95L30.13 22.62M24.10 22.70L27.49 25.17M22.70 24.10L25.88 28.47M20.95 24.99L22.24 28.99M19.00 25.30L19.00 30.70M17.05 24.99L15.76 28.99M15.30 24.10L12.12 28.47M13.90 22.70L10.51 25.17M13.01 20.95L7.87 22.62M12.70 19.00L8.50 19.00M13.01 17.05L7.87 15.38M13.90 15.30L10.51 12.83M15.30 13.90L12.12 9.53M17.05 13.01L15.76 9.01" stroke="#c3e5f8" stroke-width="1.1" stroke-linecap="round" opacity="0.9"/><circle cx="19" cy="19" r="5.2" fill="#0a2d4f"/><circle cx="21.4" cy="16.6" r="1.6" fill="#fff"/><circle cx="16.9" cy="21.2" r="0.7" fill="#fff" opacity="0.65"/><circle cx="19" cy="19" r="13" fill="none" stroke="#0b3a63" stroke-width="1.6"/></svg>
     </span>
     <span class="brand-text">
       <span class="brand-title">Surg Schedule Builder</span>
@@ -1373,23 +1539,25 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
   <div id="dayBanner" class="banner hidden"></div>
 
   <section class="panel active" id="panel-out">
+    <div data-head="out"></div>
     <div id="outBody"></div>
   </section>
 
   <section class="panel" id="panel-roster">
+    <div data-head="roster"></div>
     <div class="card glance-card">
       <div class="glance-head">
-        <h2>Today at a glance <span class="h-note">auto-generated from the block schedule</span></h2>
+        <h2>Today at a glance <span class="h-note">Filled in from the block schedule</span></h2>
         <div class="glance-chips" id="glanceChips"></div>
       </div>
       <div id="rosterSummary"></div>
     </div>
     <div class="card">
-      <h2>Day details <span class="h-note">lectures, night float, Cooper buddies — saved automatically</span></h2>
+      <h2>Day details <span class="h-note">Lectures, Night Float, Cooper buddies — saved automatically</span></h2>
       <div id="manualInputs" class="manual-grid"></div>
     </div>
     <details class="card collapse-card">
-      <summary>Full resident roster <span class="h-note">every resident's AM/PM block assignment for this date</span></summary>
+      <summary>Full resident roster <span class="h-note">Every resident’s AM/PM block assignment for this date</span></summary>
       <div id="rosterGrid"></div>
     </details>
     <div class="step-foot" data-next="surgery"></div>
@@ -1403,9 +1571,10 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
   </section>
 
   <section class="panel" id="panel-clinics">
+    <div data-head="clinics"></div>
     <div id="clinicNeeds"></div>
     <div class="card">
-      <h2>Clinics <span class="h-note">patient counts come from the EMRs — enter manually</span></h2>
+      <h2>Clinics <span class="h-note">Patient counts come from the EMRs — type them in</span></h2>
       <div id="clinicDressBanner" class="dress-banner hidden"></div>
       <div id="clinicRows"></div>
     </div>
@@ -1413,37 +1582,46 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
   </section>
 
   <section class="panel" id="panel-coverage">
+    <div data-head="coverage"></div>
     <div id="coverageBody"></div>
     <div class="card">
-      <h2>Add-ons <span class="h-note">call coverage — printed at the end of the copied schedule</span></h2>
+      <h2>Add-ons <span class="h-note">Call coverage — printed at the end of the copied schedule</span></h2>
       <div id="addOnsCoverage"></div>
     </div>
     <div class="step-foot" data-next="preview"></div>
   </section>
 
   <section class="panel" id="panel-preview">
-    <div class="toolbar card-lite">
-      <button type="button" class="btn btn-primary" id="btnCopyHTML">Copy formatted</button>
-      <button type="button" class="btn" id="btnCopyText">Copy plain text</button>
-      <button type="button" class="btn" id="btnCopyAddons">Copy add-ons only</button>
-      <span class="toolbar-note">Paste straight into email or chat — formatting is preserved.</span>
+    <div data-head="preview"></div>
+    <div class="send-col">
+      <div class="toolbar card-lite">
+        <button type="button" class="btn btn-primary" id="btnCopyHTML">Copy formatted</button>
+        <button type="button" class="btn" id="btnCopyText">Copy plain text</button>
+        <button type="button" class="btn" id="btnCopyAddons">Copy add-ons only</button>
+        <span class="toolbar-note">Paste straight into email or chat — formatting is kept.</span>
+        <div class="send-check" id="sendCheck" aria-live="polite"></div>
+      </div>
+      <div class="document card" id="previewDoc"></div>
     </div>
-    <div class="document card" id="previewDoc"></div>
   </section>
 
   <section class="panel" id="panel-howto">
+    <div data-head="howto"></div>
     <div id="howtoBody"></div>
   </section>
 
   <section class="panel" id="panel-cpec">
+    <div data-head="cpec"></div>
     <div id="cpecBody"></div>
   </section>
 
   <section class="panel" id="panel-reference">
+    <div data-head="reference"></div>
     <div id="referenceBody"></div>
   </section>
 
   <section class="panel" id="panel-setup">
+    <div data-head="setup"></div>
     <div id="setupBody"></div>
   </section>
 </main>
@@ -5212,6 +5390,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
 
   function renderHeader() {
     $('ayLabel').textContent = (data().ayLabel || '') + ' · ' + APP_VERSION;
+    renderPageHeads();
     var chips = $('dayChips');
     clearNode(chips);
     var r = App.roster;
@@ -5227,6 +5406,44 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       banner.classList.remove('hidden');
     } else {
       banner.classList.add('hidden');
+    }
+  }
+
+  // Page head on every tab: the step's icon (same as the landing cards),
+  // "Step n of 6", the title and the weekday + date. Library pages get a
+  // book icon and "Library".
+  var LIB_TITLES = { howto: 'How-to', cpec: 'CPEC block schedule', reference: 'Block schedules & rules', setup: 'Setup / new year' };
+  var LIB_ICON = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>';
+
+  function iconSvg(inner, size) {
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+  }
+
+  function pageHead(tab, actions) {
+    var i = WORKFLOW_TABS.indexOf(tab);
+    var step = i !== -1 ? HOME_STEPS[i] : null;
+    var icon = el('span', { class: 'ph-icon', 'aria-hidden': 'true' });
+    icon.innerHTML = iconSvg(step ? step.icon : LIB_ICON, 20);
+    var d = App.state ? parseISO(App.state.date) : null;
+    var head = el('div', { class: 'page-head' }, [
+      icon,
+      el('div', { class: 'ph-text' }, [
+        el('span', { class: 'ph-eyebrow', text: step ? 'Step ' + (i + 1) + ' of ' + WORKFLOW_TABS.length : 'Library' }),
+        el('h1', { class: 'ph-title' }, [
+          TAB_TITLES[tab] || LIB_TITLES[tab] || '',
+          step && d ? el('span', { class: 'ph-date', text: weekdayName(d) + ' ' + fmtMDYY(d) }) : null
+        ])
+      ])
+    ]);
+    if (actions && actions.length) head.appendChild(el('div', { class: 'ph-actions' }, actions));
+    return head;
+  }
+
+  function renderPageHeads() {
+    var hosts = document.querySelectorAll('[data-head]');
+    for (var k = 0; k < hosts.length; k++) {
+      clearNode(hosts[k]);
+      hosts[k].appendChild(pageHead(hosts[k].getAttribute('data-head')));
     }
   }
 
@@ -6167,26 +6384,19 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var cases = App.state.cases || [];
     var needs = cases.filter(needsResident);
     var acceptable = needs.filter(function (c) { return suggMap[c.id] && suggMap[c.id].name; }).length;
-    var r = App.roster || {};
-    var d = parseISO(App.state.date);
-    var bar = el('div', { class: 'surg-head' });
-    bar.appendChild(el('div', { class: 'surg-title' }, [
-      el('h2', { text: 'Surgery' }),
-      el('span', { class: 'h-note', text: weekdayName(d) + ' ' + fmtMDYY(d) + (r.nth && r.inYear && !r.isWeekend ? ' · ' + ordinal(r.nth) + ' ' + r.weekdayLabel : '') })
-    ]));
     var stat = el('div', { class: 'surg-stat' });
     if (!cases.length) stat.appendChild(el('span', { class: 'field-hint', text: 'No cases yet' }));
     else if (!needs.length) stat.appendChild(el('span', { class: 'stat-ok', text: '✓ every service case has a resident' }));
     else stat.appendChild(el('span', { class: 'stat-warn', text: needs.length + ' need' + (needs.length === 1 ? 's' : '') + ' a resident' }));
-    bar.appendChild(stat);
+    var actions = [stat];
     if (acceptable) {
-      bar.appendChild(el('button', {
+      actions.push(el('button', {
         type: 'button', class: 'btn btn-primary', text: 'Assign all suggestions (' + acceptable + ')',
         title: 'Suggestions follow the how-to chains and skip anyone out or already in a case then',
         onclick: acceptAllSuggestions
       }));
     }
-    host.appendChild(bar);
+    host.appendChild(pageHead('surgery', actions));
   }
 
   function renderSectionCounts() {
@@ -6819,7 +7029,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var card = el('div', { class: 'card needs-card' + (needs.length ? '' : ' heads-up') });
     card.appendChild(el('h2', {}, needs.length
       ? [title + ' ', el('span', { class: 'h-note', text: note })]
-      : ['Heads-up ', el('span', { class: 'h-note', text: 'nothing uncovered — just worth knowing' })]));
+      : ['Heads-up ', el('span', { class: 'h-note', text: 'Nothing uncovered — just worth knowing' })]));
     needs.forEach(function (n) { card.appendChild(needItem(n)); });
     warns.forEach(function (w) { card.appendChild(el('div', { class: 'warn-line', text: '⚠ ' + w })); });
     host.appendChild(card);
@@ -6830,7 +7040,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     if (!host) return;
     clearNode(host);
     if (!App.board || !App.board.order.length) return;
-    renderNeedsCard(host, 'Needs coverage', 'clinics left short by vacations or by residents pulled into cases');
+    renderNeedsCard(host, 'Needs coverage', 'Clinics left short by vacations or by residents pulled into cases');
   }
 
   /* ------------------------------------------------------------------ */
@@ -6983,13 +7193,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     clearNode(host);
     var st = App.state;
     var r = App.roster || {};
-    var d = parseISO(st.date);
     var n = strengthCount();
 
     var card = el('div', { class: 'card' });
     card.appendChild(el('h2', {}, [
-      'Who’s out — ' + weekdayName(d) + ' ' + fmtMDYY(d) + ' ',
-      el('span', { class: 'h-note', text: 'step 1 of the how-to: vacation, sick, conferences — check the Google Calendar' })
+      'Who’s out ',
+      el('span', { class: 'h-note', text: 'Vacation, sick, conferences — check the Google Calendar first' })
     ]));
     if (!(r.residents || []).length) {
       card.appendChild(el('p', { class: 'empty-note', text: 'No block schedule for this date — pick a weekday inside the academic year.' }));
@@ -7031,7 +7240,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var nf = b && b.nightFloat;
     if (nf) {
       var nfCard = el('div', { class: 'card' });
-      nfCard.appendChild(el('h2', {}, ['Night Float ', el('span', { class: 'h-note', text: 'from the call schedule — change it on the Roster tab' })]));
+      nfCard.appendChild(el('h2', {}, ['Night Float ', el('span', { class: 'h-note', text: 'From the call schedule — change it on the Roster tab' })]));
       var nfAbs = b.absences.filter(function (x) { return x.auto; })[0];
       var duty = [dutyOf(nf, 'am'), dutyOf(nf, 'pm')];
       var dutyStr = duty[0] === duty[1] ? duty[0] : duty.filter(Boolean).join(' / ');
@@ -7045,7 +7254,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     }
 
     var notes = el('div', { class: 'card' });
-    notes.appendChild(el('h2', {}, ['Other notes for the Vacation section ', el('span', { class: 'h-note', text: 'optional — printed after the lines above' })]));
+    notes.appendChild(el('h2', {}, ['Other notes for the Vacation section ', el('span', { class: 'h-note', text: 'Optional — printed after the lines above' })]));
     var ta = el('textarea', { rows: '2', placeholder: 'e.g. Djulbegovic at AAO Fri' });
     ta.value = st.vacation;
     ta.addEventListener('input', function () { st.vacation = ta.value; touch(); });
@@ -7111,7 +7320,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var S = window.Status;
     var b = App.board;
     var card = el('div', { class: 'card' });
-    card.appendChild(el('h2', {}, ['Free at ' + S.fmtClock(t) + ' ', el('span', { class: 'h-note', text: 'no clinic, no case, not out — CPEC, PT, or a Surg/OR block with nothing booked' })]));
+    card.appendChild(el('h2', {}, ['Free at ' + S.fmtClock(t) + ' ', el('span', { class: 'h-note', text: 'No clinic, no case, not out — CPEC, PT, or a Surg/OR block with nothing booked' })]));
     var free = b.freeAt(t);
     var seniors = free.filter(function (n) { return b.byName[n].year === 'pgy4'; });
     var juniors = free.filter(function (n) { return b.byName[n].year !== 'pgy4'; });
@@ -7152,7 +7361,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var S = window.Status;
     var b = App.board;
     var card = el('div', { class: 'card plan-card' });
-    card.appendChild(el('h2', {}, ['If something comes in at ' + S.fmtClock(t) + ' ', el('span', { class: 'h-note', text: 'walks the how-to chain against who is busy right then' })]));
+    card.appendChild(el('h2', {}, ['If something comes in at ' + S.fmtClock(t) + ' ', el('span', { class: 'h-note', text: 'Walks the how-to chain against who is busy right then' })]));
     var kinds = el('div', { class: 'plan-kinds' });
     (window.Assign.ADDON_KINDS || []).forEach(function (k) {
       kinds.appendChild(el('button', {
@@ -7229,7 +7438,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var S = window.Status;
     var b = App.board;
     var card = el('div', { class: 'card' });
-    card.appendChild(el('h2', {}, ['Everyone’s day ', el('span', { class: 'h-note', text: '7 AM – 5 PM · the line is ' + S.fmtClock(t) })]));
+    card.appendChild(el('h2', {}, ['Everyone’s day ', el('span', { class: 'h-note', text: 'The dark line is ' + S.fmtClock(t) })]));
     var legend = el('div', { class: 'tl-legend' });
     [['free', 'free'], ['case', 'in a case'], ['clinic', 'clinic'], ['duty', 'ER / consults / Day Float / off-site'], ['out', 'out']].forEach(function (k) {
       legend.appendChild(el('span', { class: 'tl-key' }, [el('span', { class: 'tl-swatch ' + KIND_CLASS[k[0]] }), k[1]]));
@@ -7237,6 +7446,17 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     card.appendChild(legend);
     var span = b.dayEnd - b.dayStart;
     var pct = function (m) { return ((Math.min(Math.max(m, b.dayStart), b.dayEnd) - b.dayStart) / span * 100).toFixed(2) + '%'; };
+    // hour axis over the bars: 7 AM, 9, 11, 1 PM, 3, 5 PM
+    var axis = el('div', { class: 'tl-track tl-axis-track', 'aria-hidden': 'true' });
+    for (var h = Math.ceil(b.dayStart / 60); h * 60 <= b.dayEnd; h += 2) {
+      var m = h * 60;
+      var lbl = (h > 12 ? h - 12 : h) + (h === 7 || h === 13 || h * 60 === b.dayEnd ? (h < 12 ? ' AM' : ' PM') : '');
+      axis.appendChild(el('span', {
+        class: 'tl-tick' + (m === b.dayStart ? ' first' : '') + (m === b.dayEnd ? ' last' : ''),
+        style: 'left:' + pct(m), text: lbl
+      }));
+    }
+    card.appendChild(el('div', { class: 'tl-row tl-axis' }, [el('div', { class: 'tl-name' }), axis, el('div', { class: 'tl-status' })]));
     // Surg roles first (in order), then the rest by year
     var order = [];
     Object.keys(b.surgRole).forEach(function (n) { order.push(n); });
@@ -7293,7 +7513,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var t = coverageNow();
     host.appendChild(timeBar(t));
     var needsHost = el('div');
-    renderNeedsCard(needsHost, 'Needs coverage', 'fix here or on Clinics / Out today');
+    renderNeedsCard(needsHost, 'Needs coverage', 'Fix here, or on Clinics / Out today');
     host.appendChild(needsHost);
     var grid = el('div', { class: 'cov-grid' }, [freeCard(t), planCard(t)]);
     host.appendChild(grid);
@@ -7303,6 +7523,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   /* ------------------------------------------------------------------ */
   /* availability strip + tab badges (visible on every workflow tab)     */
   /* ------------------------------------------------------------------ */
+
+  var stripOpen = false; // phones: the free lists fold into one line until opened
 
   function renderAvailStrip() {
     var host = $('availStrip');
@@ -7316,8 +7538,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     function list(items) {
       if (!items.length) return [el('span', { class: 'strip-none', text: 'nobody' })];
       return items.map(function (x, i) {
-        return el('span', { class: 'strip-name ' + yearOf(x.name) + (x.partial ? ' partial' : ''), title: x.title || '' },
-          [x.name + (x.partial ? ' ' + x.partial : '') + (i < items.length - 1 ? ',' : '')]);
+        return el('span', { class: 'strip-name ' + yearOf(x.name) + (x.partial ? ' partial' : ''), title: x.title || '' }, [
+          x.name,
+          x.partial ? el('span', { class: 'strip-when', text: x.partial }) : null,
+          i < items.length - 1 ? ',' : null
+        ]);
       });
     }
     function sessionItems(s) {
@@ -7333,19 +7558,30 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       }).sort(function (p, q) { return (p.partial ? 1 : 0) - (q.partial ? 1 : 0); });
     }
     var inner = el('div', { class: 'strip-inner' });
+    var amItems = sessionItems('am');
+    var pmItems = sessionItems('pm');
+    host.classList.toggle('open', stripOpen);
+    inner.appendChild(el('button', {
+      type: 'button', class: 'strip-toggle', 'aria-expanded': stripOpen ? 'true' : 'false',
+      onclick: function () { stripOpen = !stripOpen; renderAvailStrip(); }
+    }, [
+      el('span', { class: 'strip-key', text: 'Free' }),
+      el('b', { text: 'AM ' + amItems.length }), ' · ', el('b', { text: 'PM ' + pmItems.length }),
+      el('span', { class: 'strip-caret', text: stripOpen ? '▴' : '▾' })
+    ]));
     if (isToday()) {
       var now = nowMinutes();
       if (now >= S.DAY_START && now < S.DAY_END) {
-        inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free now (' + S.fmtClock(now) + '):' })].concat(
+        inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free now · ' + S.fmtClock(now) })].concat(
           list(b.freeAt(now).map(function (n) { return { name: n, title: b.statusAt(n, now).label }; })))));
       }
     }
-    inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free AM:' })].concat(list(sessionItems('am')))));
-    inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free PM:' })].concat(list(sessionItems('pm')))));
+    inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free AM' })].concat(list(amItems))));
+    inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free PM' })].concat(list(pmItems))));
     var nNeeds = b.needs.length;
     inner.appendChild(el('button', {
       type: 'button', class: 'strip-link' + (nNeeds ? ' warn' : ''),
-      text: nNeeds ? '⚠ ' + nNeeds + ' need coverage →' : 'Coverage →',
+      text: nNeeds ? '⚠ ' + nNeeds + (nNeeds === 1 ? ' needs' : ' need') + ' coverage →' : 'Coverage →',
       onclick: function () { setTab('coverage'); }
     }));
     host.appendChild(inner);
@@ -7411,7 +7647,38 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   /* tab 4 — Preview & Copy                                              */
   /* ------------------------------------------------------------------ */
 
+  function renderSendCheck() {
+    var host = $('sendCheck');
+    if (!host) return;
+    clearNode(host);
+    var st = App.state;
+    var b = App.board;
+    var noRes = (st.cases || []).filter(needsResident).length;
+    var gaps = b ? b.needs.length : 0;
+    if (!noRes && !gaps) {
+      host.className = 'send-check ok';
+      host.appendChild(document.createTextNode('✓ Nothing open — every service case has a resident and every gap has a decision'));
+      return;
+    }
+    host.className = 'send-check warn';
+    host.appendChild(document.createTextNode('⚠ Still open: '));
+    if (noRes) {
+      host.appendChild(el('button', {
+        type: 'button', class: 'btn-link', text: noRes + (noRes === 1 ? ' case' : ' cases') + ' without a resident',
+        onclick: function () { setTab('surgery'); window.scrollTo(0, 0); }
+      }));
+    }
+    if (noRes && gaps) host.appendChild(document.createTextNode(' · '));
+    if (gaps) {
+      host.appendChild(el('button', {
+        type: 'button', class: 'btn-link', text: gaps + (gaps === 1 ? ' gap needs' : ' gaps need') + ' coverage',
+        onclick: function () { setTab('coverage'); window.scrollTo(0, 0); }
+      }));
+    }
+  }
+
   function renderPreview() {
+    renderSendCheck();
     var host = $('previewDoc');
     if (window.ExportFmt && window.ExportFmt.buildHTML) {
       host.innerHTML = window.ExportFmt.buildHTML(exportDay());
@@ -7488,7 +7755,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var card = el('div', { class: 'card' });
     card.appendChild(el('h2', {}, [
       (sheet.label || 'CPEC Surgical Block Schedule') + ' ',
-      el('span', { class: 'h-note', text: 'effective ' + fmtMDYY(parseISO(sheet.effective)) + ' — rows are the 1st–5th weekday of each calendar month' })
+      el('span', { class: 'h-note', text: 'Effective ' + fmtMDYY(parseISO(sheet.effective)) + ' — rows are the 1st–5th weekday of each calendar month' })
     ]));
 
     var legend = el('div', { class: 'cpec-legend' });
@@ -8070,6 +8337,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   /* ------------------------------------------------------------------ */
 
   function setDate(dateISO) {
+    var dp = $('datePicker');
+    if (dp && dp.value !== dateISO) dp.value = dateISO; // header shows the day being edited
     saveNow(); // flush pending edits for the old date
     App.state = loadState(dateISO);
     stateDirty = false;   // freshly loaded — nothing user-edited yet
@@ -8510,7 +8779,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     App.activeTab = tab;
     var tabs = document.querySelectorAll('.tabbar .tab');
     for (var i = 0; i < tabs.length; i++) {
-      tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === tab);
+      var on = tabs[i].getAttribute('data-tab') === tab;
+      tabs[i].classList.toggle('active', on);
+      if (on) {
+        // phones: the tab bar scrolls sideways — bring the active tab into view
+        var bar = tabs[i].parentNode;
+        if (bar && bar.scrollWidth > bar.clientWidth) {
+          bar.scrollLeft = Math.max(0, tabs[i].offsetLeft - (bar.clientWidth - tabs[i].offsetWidth) / 2);
+        }
+      }
     }
     var lib = $('libMenu');
     if (lib) {

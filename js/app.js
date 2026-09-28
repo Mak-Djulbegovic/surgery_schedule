@@ -667,6 +667,7 @@
 
   function renderHeader() {
     $('ayLabel').textContent = (data().ayLabel || '') + ' · ' + APP_VERSION;
+    renderPageHeads();
     var chips = $('dayChips');
     clearNode(chips);
     var r = App.roster;
@@ -682,6 +683,44 @@
       banner.classList.remove('hidden');
     } else {
       banner.classList.add('hidden');
+    }
+  }
+
+  // Page head on every tab: the step's icon (same as the landing cards),
+  // "Step n of 6", the title and the weekday + date. Library pages get a
+  // book icon and "Library".
+  var LIB_TITLES = { howto: 'How-to', cpec: 'CPEC block schedule', reference: 'Block schedules & rules', setup: 'Setup / new year' };
+  var LIB_ICON = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>';
+
+  function iconSvg(inner, size) {
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+  }
+
+  function pageHead(tab, actions) {
+    var i = WORKFLOW_TABS.indexOf(tab);
+    var step = i !== -1 ? HOME_STEPS[i] : null;
+    var icon = el('span', { class: 'ph-icon', 'aria-hidden': 'true' });
+    icon.innerHTML = iconSvg(step ? step.icon : LIB_ICON, 20);
+    var d = App.state ? parseISO(App.state.date) : null;
+    var head = el('div', { class: 'page-head' }, [
+      icon,
+      el('div', { class: 'ph-text' }, [
+        el('span', { class: 'ph-eyebrow', text: step ? 'Step ' + (i + 1) + ' of ' + WORKFLOW_TABS.length : 'Library' }),
+        el('h1', { class: 'ph-title' }, [
+          TAB_TITLES[tab] || LIB_TITLES[tab] || '',
+          step && d ? el('span', { class: 'ph-date', text: weekdayName(d) + ' ' + fmtMDYY(d) }) : null
+        ])
+      ])
+    ]);
+    if (actions && actions.length) head.appendChild(el('div', { class: 'ph-actions' }, actions));
+    return head;
+  }
+
+  function renderPageHeads() {
+    var hosts = document.querySelectorAll('[data-head]');
+    for (var k = 0; k < hosts.length; k++) {
+      clearNode(hosts[k]);
+      hosts[k].appendChild(pageHead(hosts[k].getAttribute('data-head')));
     }
   }
 
@@ -1622,26 +1661,19 @@
     var cases = App.state.cases || [];
     var needs = cases.filter(needsResident);
     var acceptable = needs.filter(function (c) { return suggMap[c.id] && suggMap[c.id].name; }).length;
-    var r = App.roster || {};
-    var d = parseISO(App.state.date);
-    var bar = el('div', { class: 'surg-head' });
-    bar.appendChild(el('div', { class: 'surg-title' }, [
-      el('h2', { text: 'Surgery' }),
-      el('span', { class: 'h-note', text: weekdayName(d) + ' ' + fmtMDYY(d) + (r.nth && r.inYear && !r.isWeekend ? ' · ' + ordinal(r.nth) + ' ' + r.weekdayLabel : '') })
-    ]));
     var stat = el('div', { class: 'surg-stat' });
     if (!cases.length) stat.appendChild(el('span', { class: 'field-hint', text: 'No cases yet' }));
     else if (!needs.length) stat.appendChild(el('span', { class: 'stat-ok', text: '✓ every service case has a resident' }));
     else stat.appendChild(el('span', { class: 'stat-warn', text: needs.length + ' need' + (needs.length === 1 ? 's' : '') + ' a resident' }));
-    bar.appendChild(stat);
+    var actions = [stat];
     if (acceptable) {
-      bar.appendChild(el('button', {
+      actions.push(el('button', {
         type: 'button', class: 'btn btn-primary', text: 'Assign all suggestions (' + acceptable + ')',
         title: 'Suggestions follow the how-to chains and skip anyone out or already in a case then',
         onclick: acceptAllSuggestions
       }));
     }
-    host.appendChild(bar);
+    host.appendChild(pageHead('surgery', actions));
   }
 
   function renderSectionCounts() {
@@ -2274,7 +2306,7 @@
     var card = el('div', { class: 'card needs-card' + (needs.length ? '' : ' heads-up') });
     card.appendChild(el('h2', {}, needs.length
       ? [title + ' ', el('span', { class: 'h-note', text: note })]
-      : ['Heads-up ', el('span', { class: 'h-note', text: 'nothing uncovered — just worth knowing' })]));
+      : ['Heads-up ', el('span', { class: 'h-note', text: 'Nothing uncovered — just worth knowing' })]));
     needs.forEach(function (n) { card.appendChild(needItem(n)); });
     warns.forEach(function (w) { card.appendChild(el('div', { class: 'warn-line', text: '⚠ ' + w })); });
     host.appendChild(card);
@@ -2285,7 +2317,7 @@
     if (!host) return;
     clearNode(host);
     if (!App.board || !App.board.order.length) return;
-    renderNeedsCard(host, 'Needs coverage', 'clinics left short by vacations or by residents pulled into cases');
+    renderNeedsCard(host, 'Needs coverage', 'Clinics left short by vacations or by residents pulled into cases');
   }
 
   /* ------------------------------------------------------------------ */
@@ -2438,13 +2470,12 @@
     clearNode(host);
     var st = App.state;
     var r = App.roster || {};
-    var d = parseISO(st.date);
     var n = strengthCount();
 
     var card = el('div', { class: 'card' });
     card.appendChild(el('h2', {}, [
-      'Who’s out — ' + weekdayName(d) + ' ' + fmtMDYY(d) + ' ',
-      el('span', { class: 'h-note', text: 'step 1 of the how-to: vacation, sick, conferences — check the Google Calendar' })
+      'Who’s out ',
+      el('span', { class: 'h-note', text: 'Vacation, sick, conferences — check the Google Calendar first' })
     ]));
     if (!(r.residents || []).length) {
       card.appendChild(el('p', { class: 'empty-note', text: 'No block schedule for this date — pick a weekday inside the academic year.' }));
@@ -2486,7 +2517,7 @@
     var nf = b && b.nightFloat;
     if (nf) {
       var nfCard = el('div', { class: 'card' });
-      nfCard.appendChild(el('h2', {}, ['Night Float ', el('span', { class: 'h-note', text: 'from the call schedule — change it on the Roster tab' })]));
+      nfCard.appendChild(el('h2', {}, ['Night Float ', el('span', { class: 'h-note', text: 'From the call schedule — change it on the Roster tab' })]));
       var nfAbs = b.absences.filter(function (x) { return x.auto; })[0];
       var duty = [dutyOf(nf, 'am'), dutyOf(nf, 'pm')];
       var dutyStr = duty[0] === duty[1] ? duty[0] : duty.filter(Boolean).join(' / ');
@@ -2500,7 +2531,7 @@
     }
 
     var notes = el('div', { class: 'card' });
-    notes.appendChild(el('h2', {}, ['Other notes for the Vacation section ', el('span', { class: 'h-note', text: 'optional — printed after the lines above' })]));
+    notes.appendChild(el('h2', {}, ['Other notes for the Vacation section ', el('span', { class: 'h-note', text: 'Optional — printed after the lines above' })]));
     var ta = el('textarea', { rows: '2', placeholder: 'e.g. Djulbegovic at AAO Fri' });
     ta.value = st.vacation;
     ta.addEventListener('input', function () { st.vacation = ta.value; touch(); });
@@ -2566,7 +2597,7 @@
     var S = window.Status;
     var b = App.board;
     var card = el('div', { class: 'card' });
-    card.appendChild(el('h2', {}, ['Free at ' + S.fmtClock(t) + ' ', el('span', { class: 'h-note', text: 'no clinic, no case, not out — CPEC, PT, or a Surg/OR block with nothing booked' })]));
+    card.appendChild(el('h2', {}, ['Free at ' + S.fmtClock(t) + ' ', el('span', { class: 'h-note', text: 'No clinic, no case, not out — CPEC, PT, or a Surg/OR block with nothing booked' })]));
     var free = b.freeAt(t);
     var seniors = free.filter(function (n) { return b.byName[n].year === 'pgy4'; });
     var juniors = free.filter(function (n) { return b.byName[n].year !== 'pgy4'; });
@@ -2607,7 +2638,7 @@
     var S = window.Status;
     var b = App.board;
     var card = el('div', { class: 'card plan-card' });
-    card.appendChild(el('h2', {}, ['If something comes in at ' + S.fmtClock(t) + ' ', el('span', { class: 'h-note', text: 'walks the how-to chain against who is busy right then' })]));
+    card.appendChild(el('h2', {}, ['If something comes in at ' + S.fmtClock(t) + ' ', el('span', { class: 'h-note', text: 'Walks the how-to chain against who is busy right then' })]));
     var kinds = el('div', { class: 'plan-kinds' });
     (window.Assign.ADDON_KINDS || []).forEach(function (k) {
       kinds.appendChild(el('button', {
@@ -2684,7 +2715,7 @@
     var S = window.Status;
     var b = App.board;
     var card = el('div', { class: 'card' });
-    card.appendChild(el('h2', {}, ['Everyone’s day ', el('span', { class: 'h-note', text: '7 AM – 5 PM · the line is ' + S.fmtClock(t) })]));
+    card.appendChild(el('h2', {}, ['Everyone’s day ', el('span', { class: 'h-note', text: 'The dark line is ' + S.fmtClock(t) })]));
     var legend = el('div', { class: 'tl-legend' });
     [['free', 'free'], ['case', 'in a case'], ['clinic', 'clinic'], ['duty', 'ER / consults / Day Float / off-site'], ['out', 'out']].forEach(function (k) {
       legend.appendChild(el('span', { class: 'tl-key' }, [el('span', { class: 'tl-swatch ' + KIND_CLASS[k[0]] }), k[1]]));
@@ -2692,6 +2723,17 @@
     card.appendChild(legend);
     var span = b.dayEnd - b.dayStart;
     var pct = function (m) { return ((Math.min(Math.max(m, b.dayStart), b.dayEnd) - b.dayStart) / span * 100).toFixed(2) + '%'; };
+    // hour axis over the bars: 7 AM, 9, 11, 1 PM, 3, 5 PM
+    var axis = el('div', { class: 'tl-track tl-axis-track', 'aria-hidden': 'true' });
+    for (var h = Math.ceil(b.dayStart / 60); h * 60 <= b.dayEnd; h += 2) {
+      var m = h * 60;
+      var lbl = (h > 12 ? h - 12 : h) + (h === 7 || h === 13 || h * 60 === b.dayEnd ? (h < 12 ? ' AM' : ' PM') : '');
+      axis.appendChild(el('span', {
+        class: 'tl-tick' + (m === b.dayStart ? ' first' : '') + (m === b.dayEnd ? ' last' : ''),
+        style: 'left:' + pct(m), text: lbl
+      }));
+    }
+    card.appendChild(el('div', { class: 'tl-row tl-axis' }, [el('div', { class: 'tl-name' }), axis, el('div', { class: 'tl-status' })]));
     // Surg roles first (in order), then the rest by year
     var order = [];
     Object.keys(b.surgRole).forEach(function (n) { order.push(n); });
@@ -2748,7 +2790,7 @@
     var t = coverageNow();
     host.appendChild(timeBar(t));
     var needsHost = el('div');
-    renderNeedsCard(needsHost, 'Needs coverage', 'fix here or on Clinics / Out today');
+    renderNeedsCard(needsHost, 'Needs coverage', 'Fix here, or on Clinics / Out today');
     host.appendChild(needsHost);
     var grid = el('div', { class: 'cov-grid' }, [freeCard(t), planCard(t)]);
     host.appendChild(grid);
@@ -2758,6 +2800,8 @@
   /* ------------------------------------------------------------------ */
   /* availability strip + tab badges (visible on every workflow tab)     */
   /* ------------------------------------------------------------------ */
+
+  var stripOpen = false; // phones: the free lists fold into one line until opened
 
   function renderAvailStrip() {
     var host = $('availStrip');
@@ -2771,8 +2815,11 @@
     function list(items) {
       if (!items.length) return [el('span', { class: 'strip-none', text: 'nobody' })];
       return items.map(function (x, i) {
-        return el('span', { class: 'strip-name ' + yearOf(x.name) + (x.partial ? ' partial' : ''), title: x.title || '' },
-          [x.name + (x.partial ? ' ' + x.partial : '') + (i < items.length - 1 ? ',' : '')]);
+        return el('span', { class: 'strip-name ' + yearOf(x.name) + (x.partial ? ' partial' : ''), title: x.title || '' }, [
+          x.name,
+          x.partial ? el('span', { class: 'strip-when', text: x.partial }) : null,
+          i < items.length - 1 ? ',' : null
+        ]);
       });
     }
     function sessionItems(s) {
@@ -2788,19 +2835,30 @@
       }).sort(function (p, q) { return (p.partial ? 1 : 0) - (q.partial ? 1 : 0); });
     }
     var inner = el('div', { class: 'strip-inner' });
+    var amItems = sessionItems('am');
+    var pmItems = sessionItems('pm');
+    host.classList.toggle('open', stripOpen);
+    inner.appendChild(el('button', {
+      type: 'button', class: 'strip-toggle', 'aria-expanded': stripOpen ? 'true' : 'false',
+      onclick: function () { stripOpen = !stripOpen; renderAvailStrip(); }
+    }, [
+      el('span', { class: 'strip-key', text: 'Free' }),
+      el('b', { text: 'AM ' + amItems.length }), ' · ', el('b', { text: 'PM ' + pmItems.length }),
+      el('span', { class: 'strip-caret', text: stripOpen ? '▴' : '▾' })
+    ]));
     if (isToday()) {
       var now = nowMinutes();
       if (now >= S.DAY_START && now < S.DAY_END) {
-        inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free now (' + S.fmtClock(now) + '):' })].concat(
+        inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free now · ' + S.fmtClock(now) })].concat(
           list(b.freeAt(now).map(function (n) { return { name: n, title: b.statusAt(n, now).label }; })))));
       }
     }
-    inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free AM:' })].concat(list(sessionItems('am')))));
-    inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free PM:' })].concat(list(sessionItems('pm')))));
+    inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free AM' })].concat(list(amItems))));
+    inner.appendChild(el('span', { class: 'strip-part' }, [el('b', { class: 'strip-key', text: 'Free PM' })].concat(list(pmItems))));
     var nNeeds = b.needs.length;
     inner.appendChild(el('button', {
       type: 'button', class: 'strip-link' + (nNeeds ? ' warn' : ''),
-      text: nNeeds ? '⚠ ' + nNeeds + ' need coverage →' : 'Coverage →',
+      text: nNeeds ? '⚠ ' + nNeeds + (nNeeds === 1 ? ' needs' : ' need') + ' coverage →' : 'Coverage →',
       onclick: function () { setTab('coverage'); }
     }));
     host.appendChild(inner);
@@ -2866,7 +2924,38 @@
   /* tab 4 — Preview & Copy                                              */
   /* ------------------------------------------------------------------ */
 
+  function renderSendCheck() {
+    var host = $('sendCheck');
+    if (!host) return;
+    clearNode(host);
+    var st = App.state;
+    var b = App.board;
+    var noRes = (st.cases || []).filter(needsResident).length;
+    var gaps = b ? b.needs.length : 0;
+    if (!noRes && !gaps) {
+      host.className = 'send-check ok';
+      host.appendChild(document.createTextNode('✓ Nothing open — every service case has a resident and every gap has a decision'));
+      return;
+    }
+    host.className = 'send-check warn';
+    host.appendChild(document.createTextNode('⚠ Still open: '));
+    if (noRes) {
+      host.appendChild(el('button', {
+        type: 'button', class: 'btn-link', text: noRes + (noRes === 1 ? ' case' : ' cases') + ' without a resident',
+        onclick: function () { setTab('surgery'); window.scrollTo(0, 0); }
+      }));
+    }
+    if (noRes && gaps) host.appendChild(document.createTextNode(' · '));
+    if (gaps) {
+      host.appendChild(el('button', {
+        type: 'button', class: 'btn-link', text: gaps + (gaps === 1 ? ' gap needs' : ' gaps need') + ' coverage',
+        onclick: function () { setTab('coverage'); window.scrollTo(0, 0); }
+      }));
+    }
+  }
+
   function renderPreview() {
+    renderSendCheck();
     var host = $('previewDoc');
     if (window.ExportFmt && window.ExportFmt.buildHTML) {
       host.innerHTML = window.ExportFmt.buildHTML(exportDay());
@@ -2943,7 +3032,7 @@
     var card = el('div', { class: 'card' });
     card.appendChild(el('h2', {}, [
       (sheet.label || 'CPEC Surgical Block Schedule') + ' ',
-      el('span', { class: 'h-note', text: 'effective ' + fmtMDYY(parseISO(sheet.effective)) + ' — rows are the 1st–5th weekday of each calendar month' })
+      el('span', { class: 'h-note', text: 'Effective ' + fmtMDYY(parseISO(sheet.effective)) + ' — rows are the 1st–5th weekday of each calendar month' })
     ]));
 
     var legend = el('div', { class: 'cpec-legend' });
@@ -3525,6 +3614,8 @@
   /* ------------------------------------------------------------------ */
 
   function setDate(dateISO) {
+    var dp = $('datePicker');
+    if (dp && dp.value !== dateISO) dp.value = dateISO; // header shows the day being edited
     saveNow(); // flush pending edits for the old date
     App.state = loadState(dateISO);
     stateDirty = false;   // freshly loaded — nothing user-edited yet
@@ -3965,7 +4056,15 @@
     App.activeTab = tab;
     var tabs = document.querySelectorAll('.tabbar .tab');
     for (var i = 0; i < tabs.length; i++) {
-      tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === tab);
+      var on = tabs[i].getAttribute('data-tab') === tab;
+      tabs[i].classList.toggle('active', on);
+      if (on) {
+        // phones: the tab bar scrolls sideways — bring the active tab into view
+        var bar = tabs[i].parentNode;
+        if (bar && bar.scrollWidth > bar.clientWidth) {
+          bar.scrollLeft = Math.max(0, tabs[i].offsetLeft - (bar.clientWidth - tabs[i].offsetWidth) / 2);
+        }
+      }
     }
     var lib = $('libMenu');
     if (lib) {
