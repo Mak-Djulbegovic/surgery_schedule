@@ -249,7 +249,7 @@ ok(!d921.clinicStaffOverrides['CPEC|am'] && !d921.clinicStaffOverrides['CPEC|pm'
   'the sent CPEC line matches the block schedule + who is out exactly (Patel for Ransone AM) — no edits needed');
 var Status = require(path.join(__dirname, '..', 'js', 'status.js'));
 var ab = Status.caseSpans(d921.cases[0], DATA);
-eq(Status.fmtClock(ab.start) + '–' + Status.fmtClock(ab.end), '9:15 AM–11:15 AM', 'Cheng is busy for the 4 service cases from 9:15 (4 × 30 min), not from 7:30');
+eq(Status.fmtClock(ab.start) + '–' + Status.fmtClock(ab.end), '7:30 AM–11:00 AM', 'Abendroth x7 cataracts: Cheng is part of that OR from 7:30 until all 7 are done (chief 9/28)');
 
 // Hand-typed ways of giving the one service case's time (chief, 9/28: the
 // resident is only responsible for the service case — "it was 1015").

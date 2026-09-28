@@ -139,13 +139,17 @@
   }
 
   // When the assigned resident is scrubbed for this case.
-  //   - A list with private and service cases: the resident is needed only
-  //     for the service cases (chief, 9/28/2026: "he is only responsible for
-  //     his case when it is listed as a service case … available to leave
-  //     for an emergent add-on after that case or to go to clinic"). One
-  //     case-length block at each service time; extra service cases stack
-  //     on the last. No service time: the service cases are assumed to open
-  //     the list (flagged svcAssumed, so the row asks for the time).
+  //   - Cataracts: the whole list, service and private — the resident is
+  //     part of that OR until it is done (chief, 9/28/2026: "when anyone is
+  //     in cataract cases, they are part of that OR until they are done
+  //     (both service and private cases)").
+  //   - Any other list with private and service cases: the resident is
+  //     needed only for the service cases (chief, 9/28/2026: "he is only
+  //     responsible for his case when it is listed as a service case …
+  //     available to leave for an emergent add-on after that case or to go
+  //     to clinic"). One case-length block at each service time; extra
+  //     service cases stack on the last. No service time: the service cases
+  //     are assumed to open the list (flagged svcAssumed, so the row asks).
   //   - All service (or a private list someone was put on anyway): the
   //     whole list, start + count × minutes-per-case, flagged as an estimate.
   //   - 'until' (typed end time, or 'Done' day-of) replaces the last end.
@@ -161,12 +165,13 @@
     var svcTimes = clockTokens(c.serviceTimes).sort(function (a, b) { return a - b; });
     var spans = [];
     var svcAssumed = false;
-    if (svc > 0 && svc < count && svcTimes.length) {
+    var partial = svc > 0 && svc < count && c.category !== 'cataract';
+    if (partial && svcTimes.length) {
       svcTimes.forEach(function (t, i) {
         var n = i === svcTimes.length - 1 ? Math.max(1, svc - (svcTimes.length - 1)) : 1;
         spans.push({ start: t, end: t + n * per });
       });
-    } else if (svc > 0 && svc < count) {
+    } else if (partial) {
       spans.push({ start: start, end: start + svc * per });
       svcAssumed = true;
     } else {
@@ -611,7 +616,9 @@
     // (Henry x10)".
     function availableInSession(s, opts) {
       var min = (opts && opts.minMinutes) || 30;
-      var from = s === 'am' ? DAY_START : NOON;
+      // the AM counts from 7:30, when the OR day starts — the half hour
+      // before a 7:30 list is not time anyone can be given (ASSUMPTION)
+      var from = s === 'am' ? DAY_START + 30 : NOON;
       var to = s === 'am' ? NOON : DAY_END;
       var out = [];
       function add(list, t0, extra) {
@@ -638,7 +645,7 @@
         if (!ranges.length) return;
         var st0 = base[n][s];
         out.push({
-          name: n, group: free.length ? 'free' : 'pull', ranges: ranges,
+          name: n, group: free.length ? 'free' : 'pull', ranges: ranges, from: from, to: to,
           full: ranges.length === 1 && ranges[0].start === from && ranges[0].end === to,
           label: st0.label, text: st0.text, gaps: other
         });

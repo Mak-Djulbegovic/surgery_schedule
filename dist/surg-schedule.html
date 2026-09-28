@@ -1178,10 +1178,19 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 /* ---------------- Coverage ---------------- */
 
 .time-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
-.plan-time { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 10px; }
-.plan-time input[type="time"] {
-  border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13.5px;
+/* add-ons to place, each at its own time */
+.plan-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.plan-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.plan-n {
+  flex: none; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 700; color: var(--accent); background: var(--accent-soft);
 }
+.plan-kind { width: auto; min-width: 0; max-width: 260px; }
+.plan-at { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.plan-when { border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13.5px; }
+.plan-add { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.plan-joint-time { font-weight: 600; color: var(--muted); font-size: 12px; }
+.plan-changed { margin-bottom: 8px; }
 /* available AM | PM */
 .avail-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 24px; }
 .avail-h { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--text); }
@@ -1199,7 +1208,6 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .free-chip.pgy3 b { color: var(--pgy3); }
 .free-chip.pgy4 b { color: var(--pgy4); }
 .free-sub { font-size: 11px; color: var(--muted); }
-.plan-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .plan-chain { margin-bottom: 6px; }
 .plan-steps { list-style: none; margin: 0 0 8px; padding: 0; }
 .plan-step { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; padding: 4px 0; font-size: 13px; border-bottom: 1px solid var(--border-soft); }
@@ -2958,13 +2966,17 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   }
 
   // When the assigned resident is scrubbed for this case.
-  //   - A list with private and service cases: the resident is needed only
-  //     for the service cases (chief, 9/28/2026: "he is only responsible for
-  //     his case when it is listed as a service case … available to leave
-  //     for an emergent add-on after that case or to go to clinic"). One
-  //     case-length block at each service time; extra service cases stack
-  //     on the last. No service time: the service cases are assumed to open
-  //     the list (flagged svcAssumed, so the row asks for the time).
+  //   - Cataracts: the whole list, service and private — the resident is
+  //     part of that OR until it is done (chief, 9/28/2026: "when anyone is
+  //     in cataract cases, they are part of that OR until they are done
+  //     (both service and private cases)").
+  //   - Any other list with private and service cases: the resident is
+  //     needed only for the service cases (chief, 9/28/2026: "he is only
+  //     responsible for his case when it is listed as a service case …
+  //     available to leave for an emergent add-on after that case or to go
+  //     to clinic"). One case-length block at each service time; extra
+  //     service cases stack on the last. No service time: the service cases
+  //     are assumed to open the list (flagged svcAssumed, so the row asks).
   //   - All service (or a private list someone was put on anyway): the
   //     whole list, start + count × minutes-per-case, flagged as an estimate.
   //   - 'until' (typed end time, or 'Done' day-of) replaces the last end.
@@ -2980,12 +2992,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var svcTimes = clockTokens(c.serviceTimes).sort(function (a, b) { return a - b; });
     var spans = [];
     var svcAssumed = false;
-    if (svc > 0 && svc < count && svcTimes.length) {
+    var partial = svc > 0 && svc < count && c.category !== 'cataract';
+    if (partial && svcTimes.length) {
       svcTimes.forEach(function (t, i) {
         var n = i === svcTimes.length - 1 ? Math.max(1, svc - (svcTimes.length - 1)) : 1;
         spans.push({ start: t, end: t + n * per });
       });
-    } else if (svc > 0 && svc < count) {
+    } else if (partial) {
       spans.push({ start: start, end: start + svc * per });
       svcAssumed = true;
     } else {
@@ -3430,7 +3443,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     // (Henry x10)".
     function availableInSession(s, opts) {
       var min = (opts && opts.minMinutes) || 30;
-      var from = s === 'am' ? DAY_START : NOON;
+      // the AM counts from 7:30, when the OR day starts — the half hour
+      // before a 7:30 list is not time anyone can be given (ASSUMPTION)
+      var from = s === 'am' ? DAY_START + 30 : NOON;
       var to = s === 'am' ? NOON : DAY_END;
       var out = [];
       function add(list, t0, extra) {
@@ -3457,7 +3472,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         if (!ranges.length) return;
         var st0 = base[n][s];
         out.push({
-          name: n, group: free.length ? 'free' : 'pull', ranges: ranges,
+          name: n, group: free.length ? 'free' : 'pull', ranges: ranges, from: from, to: to,
           full: ranges.length === 1 && ranges[0].start === from && ranges[0].end === to,
           label: st0.label, text: st0.text, gaps: other
         });
@@ -3628,8 +3643,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
  *                                   -> who covers the clinic the case pulls someone from
  * Assign.planAddOn(kind, t, roster, data, board)
  *                                   -> "a globe comes in at t": who takes it, who covers
- * Assign.planAddOns([kinds], t, roster, data, board)
- *                                   -> several at once, nobody taking two
+ * Assign.planAddOns([kinds | {kind, t}], t, roster, data, board)
+ *                                   -> several add-ons, each at its own time
  *
  * `board` (optional) is a Status board (js/status.js). Without it, suggest /
  * backupPlan go by chain order only (suggest still in the how-to's step
@@ -4024,6 +4039,17 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   // clinic (Retina / Uveitis), which counts as available and needs no cover.
   // `tried`: names already walked for this case at an earlier step — not
   // repeated (nothing frees up between).
+  // Why the board alone rules `cand` out for a case (null = they could).
+  function boardWhy(cand, st) {
+    if (st.kind === 'out') return st.label;
+    if (st.kind === 'case') return busyText(st);
+    if (st.neverPull) return (st.text || st.label) + ' — never pulled';
+    if (st.cls === 'offsite') return st.label; // at Cooper — not pulled to Wills
+    if (cand.requireFree && st.kind !== 'free' && !isPullFirst(st)) return st.label;
+    if (cand.orBlock && st.kind === 'clinic' && !isPullFirst(st)) return st.label + ' — stays in clinic';
+    return null;
+  }
+
   function walkStep(c, chain, step, roster, board, claims, spans, tried) {
     var cands = chainCandidates(chain, roster, board, spans, c.id, step);
     var steps = [];
@@ -4034,14 +4060,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       if (tried && tried[cand.name]) return;
       var st = board.statusDuringSpans(cand.name, spans, { exclude: c.id });
       var cl = null;
-      var why = null;
-      if (st.kind === 'out') why = st.label;
-      else if (st.kind === 'case') why = busyText(st);
-      else if (st.neverPull) why = (st.text || st.label) + ' — never pulled';
-      else if (st.cls === 'offsite') why = st.label; // at Cooper — not pulled to Wills
-      else if ((cl = claimAt(claims[cand.name], spans))) why = cl.what;
-      else if (cand.requireFree && st.kind !== 'free' && !isPullFirst(st)) why = st.label;
-      else if (cand.orBlock && st.kind === 'clinic' && !isPullFirst(st)) why = st.label + ' — stays in clinic';
+      var why = boardWhy(cand, st);
+      if (!why && (cl = claimAt(claims[cand.name], spans))) why = cl.what;
       var verdict = why ? 'skip' : (primary ? 'alt' : 'take');
       if (verdict === 'take') { primary = cand; primaryStatus = st; }
       else if (verdict === 'alt') alternates.push(cand.name);
@@ -4372,12 +4392,18 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   // Path — or in a pull-first clinic (Retina / Uveitis: leaving needs no
   // cover). When nobody on the chain can, `outside` / `pullable` list who
   // else could (Surg 2's call, never picked).
-  function findClinicCover(pulled, roster, data, board, excludeNames, excludeId) {
+  // `lead` (optional): [{ name, source }] tried before the chain.
+  function findClinicCover(pulled, roster, data, board, excludeNames, excludeId, lead) {
     var hierarchy = (data && data.hierarchy) || {};
     var chain = (hierarchy.clinicCoverage && hierarchy.clinicCoverage.chain) || [];
     var seen = {};
     (excludeNames || []).forEach(function (n) { seen[n] = true; });
     var cands = [];
+    (lead || []).forEach(function (c) {
+      if (!c.name || seen[c.name]) return;
+      seen[c.name] = true;
+      cands.push({ name: c.name, source: c.source, token: '' });
+    });
     chain.forEach(function (token) {
       if (token === 'FREE_JUNIOR') return;
       var r = resolveToken(token, roster, [pulled.session || 'pm']);
@@ -4497,78 +4523,247 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return def;
   }
 
-  // Add-ons coming in at time t, assigned exactly as the how-to orders it:
-  // Step 6 (add-on glaucoma → Surg 4, add-on cornea → Surg 3 — skip for now
-  // if they are in a case), Step 9 (trauma, then plastics, down their
-  // chain), then Step 10 for anything skipped or left (Surg 2 → Surg 3 →
-  // Surg 4 → Cooper → Surg 1 → Surg 5). Nobody takes two at once. Then
-  // Step 12: everyone pulled out of a clinic hands it down the clinic-
-  // coverage chain — never to someone taking one of these cases, and never
-  // one coverer for two clinics. Nobody in the chains free → no pick, and
-  // `outside` lists who else is free (Surg 2's call).
-  function planAddOns(kinds, t, roster, data, board) {
+  // One stage of one add-on's walk against the board alone — who is out, in
+  // a case, on Path, off-site, not free when only a free resident
+  // qualifies, or in clinic when drawn from an OR block. Picks for the other
+  // add-ons are applied by the solver.
+  function stageOptions(c, chain, step, roster, board, spans, tried) {
+    return chainCandidates(chain, roster, board, spans, c.id, step).filter(function (cand) {
+      return !(tried && tried[cand.name]);
+    }).map(function (cand) {
+      var st = board.statusDuringSpans(cand.name, spans, { exclude: c.id });
+      return { cand: cand, status: st, why: boardWhy(cand, st) };
+    });
+  }
+
+  // The how-to's order, searched exactly (entries: the add-ons, each with
+  // stage1 = its own chain for Steps 6–9, stage2 = Step 10's chain).
+  // Phase 1 walks the Step 6–9 add-ons in step order; each takes a free
+  // person from its chain or is skipped for now. Phase 2 walks everything
+  // skipped plus the Step 10 add-ons in time order. Nobody takes two add-ons
+  // whose times overlap. Choices are tried in the doc's preference order, so
+  // the first complete answer is exactly the doc's own; the search goes on
+  // only while some add-on is left without anyone, and keeps the first
+  // answer (in that same order) that leaves the fewest uncovered —
+  // lexicographic: coverage first, then the doc's order. A depth-first
+  // branch and bound; the node cap is a safety net, far above what a day of
+  // add-ons needs.
+  function solvePlan(entries) {
+    var LIMIT = 50000;
+    var nodes = 0;
+    var claims = {};
+    var pick = {};
+    var best = null;
+    var greedy = null; // the first complete answer = the doc's own order
+    function chrono(a, b) { return a.time - b.time || a.step - b.step || a.sub - b.sub || a.i - b.i; }
+    var p1 = entries.filter(function (e) { return e.step < 10; }).sort(function (a, b) {
+      return a.step - b.step || a.sub - b.sub || a.time - b.time || a.i - b.i;
+    });
+    var native10 = entries.filter(function (e) { return e.step >= 10; });
+    function free(name, e) { return !claimAt(claims[name], e.spans); }
+    function claim(name, e) {
+      claims[name] = (claims[name] || []).concat(e.spans.map(function (sp) { return { start: sp.start, end: sp.end, entry: e }; }));
+    }
+    function unclaim(name, e) {
+      claims[name] = (claims[name] || []).filter(function (x) { return x.entry !== e; });
+    }
+    function copyPick() {
+      var o = {};
+      for (var k in pick) o[k] = pick[k];
+      return o;
+    }
+    function done() { return best && best.uncovered === 0; }
+    function phase2(list, k, uncovered) {
+      if (done() || nodes > LIMIT) return;
+      if (best && uncovered >= best.uncovered) return; // cannot beat the best so far
+      nodes++;
+      if (k === list.length) {
+        best = { uncovered: uncovered, pick: copyPick() };
+        if (!greedy) greedy = best;
+        return;
+      }
+      var e = list[k];
+      for (var r = 0; r < e.stage2.length; r++) {
+        var o = e.stage2[r];
+        if (o.why || !free(o.cand.name, e)) continue;
+        claim(o.cand.name, e);
+        pick[e.i] = { opt: o, stage: 2 };
+        phase2(list, k + 1, uncovered);
+        unclaim(o.cand.name, e);
+        delete pick[e.i];
+        if (done()) return;
+      }
+      pick[e.i] = null; // nobody on the chain can take it
+      phase2(list, k + 1, uncovered + 1);
+      delete pick[e.i];
+    }
+    function phase1(k, deferred) {
+      if (done() || nodes > LIMIT) return;
+      nodes++;
+      if (k === p1.length) {
+        phase2(deferred.concat(native10).sort(chrono), 0, 0);
+        return;
+      }
+      var e = p1[k];
+      for (var r = 0; r < e.stage1.length; r++) {
+        var o = e.stage1[r];
+        if (o.why || !free(o.cand.name, e)) continue;
+        claim(o.cand.name, e);
+        pick[e.i] = { opt: o, stage: 1 };
+        phase1(k + 1, deferred);
+        unclaim(o.cand.name, e);
+        delete pick[e.i];
+        if (done()) return;
+      }
+      phase1(k + 1, deferred.concat([e])); // skip for now
+    }
+    phase1(0, []);
+    return {
+      pick: best ? best.pick : {}, uncovered: best ? best.uncovered : entries.length,
+      greedy: greedy ? greedy.pick : {}, greedyUncovered: greedy ? greedy.uncovered : entries.length,
+      nodes: nodes, capped: nodes > LIMIT
+    };
+  }
+
+  // Add-ons coming in during the day, each at its own time (chief,
+  // 9/28/2026: "we need to be able to put in multiple surgeries that all may
+  // have different times"). `items`: kind strings (all at `t`) or
+  // { kind, t } objects. Assigned as the how-to orders it — Step 6 (add-on
+  // glaucoma → Surg 4, add-on cornea → Surg 3, skip for now if they are in a
+  // case), Step 9 (trauma, then plastics, down their chain), Step 10 for
+  // anything skipped or left (Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 →
+  // Surg 5), in time order — with one change the doc cannot make by hand:
+  // if following it leaves an add-on with nobody while another choice would
+  // cover it, the plan takes the first such choice (solvePlan). Then Step
+  // 12: everyone pulled out of a clinic hands it down the clinic-coverage
+  // chain, never to someone taking an add-on at that time. Nobody in the
+  // chains free → no pick, and `outside` / `pullable` list who else could
+  // (Surg 2's call).
+  function planAddOns(items, t, roster, data, board) {
     data = getData(data);
     var S = getStatus();
     var hierarchy = (data && data.hierarchy) || {};
-    var entries = (kinds || []).map(function (kind, i) {
+    var remChain = (hierarchy.remaining && hierarchy.remaining.chain) || [];
+    var entries = (items || []).map(function (item, i) {
+      var kind = typeof item === 'string' ? item : item && item.kind;
+      var at = (item && typeof item === 'object' && item.t != null) ? item.t : t;
       var def = kindDef(kind);
       var draft = {
         id: '__plan' + i + '__', section: 'wills', surgeon: '', category: def.category, addOn: true,
-        count: 1, serviceCount: 1, start: S ? S.fmtHHMM(t) : '', assigned: '', backup: ''
+        count: 1, serviceCount: 1, start: S ? S.fmtHHMM(at) : '', assigned: '', backup: ''
       };
       var key = classify(draft, data);
       var hier = hierarchy[key] || { label: key, chain: [] };
-      return {
+      var e = {
         c: draft, i: i, def: def, key: key, hier: hier, chain: chainFor(key, draft, hier),
-        step: stepOf(key, hier), sub: subRank(draft), private: false,
+        step: stepOf(key, hier), sub: subRank(draft), time: at,
         spans: board.caseSpansFor(draft).spans
       };
+      var tried = {};
+      if (e.step < 10) {
+        e.stage1 = stageOptions(draft, e.chain, e.step, roster, board, e.spans, null);
+        e.stage1.forEach(function (o) { tried[o.cand.name] = true; });
+      } else {
+        e.stage1 = [];
+      }
+      e.stage2 = stageOptions(draft, e.step < 10 ? remChain : e.chain, 10, roster, board, e.spans, tried);
+      return e;
     });
-    var run = runSteps(entries, roster, data, board, function (e) {
-      return { what: 'taking the ' + e.def.label.toLowerCase(), by: e.def.label };
+    var sol = solvePlan(entries);
+    entries.forEach(function (e) {
+      var p = sol.pick[e.i];
+      var g = sol.greedy[e.i];
+      e.pick = p ? p.opt.cand : null;
+      e.pickStatus = p ? p.opt.status : null;
+      e.pickStage = p ? p.stage : 0;
+      e.deferred = e.step < 10 && e.pickStage !== 1;
+      e.byOrder = g ? g.opt.cand.name : null; // who the doc's order alone gives it to
+      e.changed = (e.byOrder || '') !== (e.pick ? e.pick.name : '');
     });
+    function overlapsE(a, b) { return spansOverlap(a.spans, b.spans); }
+    function takerOf(name, e) {
+      return entries.filter(function (f) { return f !== e && f.pick && f.pick.name === name && overlapsE(e, f); })[0] || null;
+    }
 
-    var busy = entries.filter(function (e) { return e.pick; }).map(function (e) { return e.pick.name; });
-    run.settled.forEach(function (e) {
+    // Step 12, earliest first: cover for everyone pulled out of a clinic —
+    // never someone taking an add-on then, never one coverer for two
+    // clinics at once.
+    var covers = [];
+    entries.slice().sort(function (a, b) { return a.time - b.time || a.i - b.i; }).forEach(function (e) {
       if (!e.pick || !e.pickStatus || e.pickStatus.kind !== 'clinic') return;
       var pulled = pulledClinic(board, e.pick.name, e.spans, null);
       if (!pulled) return;
+      var win = [{ start: pulled.start, end: pulled.end }];
+      var busy = [e.pick.name];
+      entries.forEach(function (f) { if (f.pick && spansOverlap(f.spans, win)) busy.push(f.pick.name); });
+      covers.forEach(function (cv) { if (spansOverlap(cv.win, win)) busy.push(cv.name); });
       var cover = findClinicCover(pulled, roster, data, board, busy, null);
       e.handoff = {
         clinic: pulled.clinic, owner: pulled.owner, window: pulled,
         primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside, pullable: cover.pullable
       };
-      if (cover.primary) busy.push(cover.primary.name);
+      if (cover.primary) covers.push({ name: cover.primary.name, win: win });
     });
 
-    var items = entries.map(function (e) {
-      var steps = stepsOf(e);
+    var claimsFinal = {};
+    entries.forEach(function (e) {
+      if (!e.pick) return;
+      claimsFinal[e.pick.name] = (claimsFinal[e.pick.name] || []).concat(e.spans.map(function (sp) { return { start: sp.start, end: sp.end }; }));
+    });
+
+    var out = entries.map(function (e) {
+      // the walk as it played out: who was passed over, and why
+      var steps = [];
+      var adjusted = false;
+      var stages = e.step < 10 ? [[e.stage1, e.step]] : [];
+      if (e.step >= 10 || e.pickStage !== 1) stages.push([e.stage2, 10]);
+      var seenPick = false;
+      stages.forEach(function (sg) {
+        sg[0].forEach(function (o) {
+          var isPick = e.pick && o.cand === e.pick;
+          var taker = !o.why ? takerOf(o.cand.name, e) : null;
+          var why = o.why || (taker ? 'taking the ' + taker.def.label.toLowerCase() + (taker.time !== e.time && S ? ' at ' + S.fmtClock(taker.time) : '') : null);
+          var verdict;
+          if (isPick) { verdict = 'take'; seenPick = true; }
+          else if (why) verdict = 'skip';
+          else if (!seenPick) { verdict = 'skip'; why = 'kept for another add-on, so none is left without a resident'; adjusted = true; }
+          else verdict = 'alt';
+          steps.push({
+            name: o.cand.name, via: o.cand.via, step: sg[1], token: o.cand.token, status: o.status,
+            verdict: verdict, why: why, takenBy: taker ? taker.def.label : null
+          });
+        });
+      });
       var takeIdx = -1;
       steps.forEach(function (s, i) { if (takeIdx === -1 && s.verdict === 'take') takeIdx = i; });
       var skipped = steps.filter(function (s, i) { return s.verdict === 'skip' && (takeIdx === -1 || i < takeIdx); });
       var displaced = skipped.filter(function (s) { return s.takenBy; })[0] || null;
       var walked = {};
       steps.forEach(function (s) { walked[s.name] = true; });
-      var last = e.stages[e.stages.length - 1];
+      var os = e.pick ? { free: [], pullable: [] } : outsideOf(board, e.spans, e.c.id, walked, claimsFinal);
       return {
-        kind: e.def.key, label: e.def.label, key: e.key, hierLabel: e.hier.label,
-        step: e.step, deferred: e.deferred, draft: e.c, spans: e.spans,
+        kind: e.def.key, label: e.def.label, key: e.key, hierLabel: e.hier.label, time: e.time,
+        step: e.step, deferred: e.deferred, adjusted: adjusted || e.changed, byOrder: e.byOrder, draft: e.c, spans: e.spans,
         pick: e.pick ? { name: e.pick.name, via: e.pick.via } : null,
         status: e.pickStatus || null,
         steps: steps,
         skipped: skipped.map(function (s) { return { name: s.name, via: s.via, why: s.why, step: s.step }; }),
-        alternates: (last && last.alternates) || [],
+        alternates: steps.filter(function (s) { return s.verdict === 'alt'; }).map(function (s) { return s.name; }),
         firstChoice: displaced ? displaced.name : null,
         displacedBy: displaced ? displaced.takenBy : null,
-        outside: e.pick ? [] : outsideFree(board, e.spans, e.c.id, walked, run.claims),
-        pullable: e.pick ? [] : outsideOf(board, e.spans, e.c.id, walked, run.claims).pullable,
+        outside: os.free,
+        pullable: os.pullable,
         handoff: e.handoff || null
       };
     });
     return {
       time: t,
-      items: items,
-      unfilled: items.filter(function (it) { return !it.pick; }).length
+      items: out,
+      unfilled: out.filter(function (it) { return !it.pick; }).length,
+      // the doc's order alone would leave this many with nobody
+      unfilledByOrder: sol.greedyUncovered,
+      searched: sol.nodes,
+      capped: sol.capped
     };
   }
 
@@ -4577,7 +4772,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   // even from clinic (chief's rule, 9/2026: Surg 2 takes the globe) — and
   // whatever clinic they leave passes down the clinic-coverage chain.
   function planAddOn(kind, t, roster, data, board) {
-    var it = planAddOns([kind], t, roster, data, board).items[0];
+    var it = planAddOns([{ kind: kind, t: t }], t, roster, data, board).items[0];
     return {
       kind: it.kind, label: it.label, time: t, key: it.key, hierLabel: it.hierLabel,
       step: it.step, deferred: it.deferred, draft: it.draft, spans: it.spans,
@@ -4590,14 +4785,27 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   /* lateCover — "the morning OR runs past 12:30: who covers their PM    */
   /* clinic until they are out?"                                         */
   /* ------------------------------------------------------------------ */
-  // The clinic-coverage chain (how-to Step 12; Surg 2 first — the AY legend:
-  // "Surg 2 … Cover Cornea/Glaucoma if Surg 3/4 has PM cases") over
-  // [start, end); the coverer must be free the whole time. `exclude`: names
-  // to skip (the late resident is always skipped).
+  // A junior running late: free juniors first (chief, 9/28/2026: "if there
+  // are free juniors (PGY2 and 3), they can be the default to help take
+  // over if the PGY2 is running later in the OR with Carrasco … will have
+  // Parekh cover if Patel goes past 12:30"), PGY-3s before PGY-2s
+  // (assumption). Then — and for a senior running late — the clinic-
+  // coverage chain (how-to Step 12; Surg 2 first — the AY legend: "Surg 2
+  // … Cover Cornea/Glaucoma if Surg 3/4 has PM cases"). The coverer must be
+  // free the whole of [start, end). `exclude`: names to skip (the late
+  // resident is always skipped).
   function lateCover(name, clinic, start, end, roster, data, board, exclude, excludeId) {
     data = getData(data);
     var pulled = { clinic: clinic, owner: name, start: start, end: end, session: 'pm' };
-    return findClinicCover(pulled, roster, data, board, [name].concat(exclude || []), excludeId || null);
+    var skip = [name].concat(exclude || []);
+    var lead = [];
+    var y = boardYear(board, name);
+    if (y === 'pgy2' || y === 'pgy3') {
+      freeNames(board, [{ start: start, end: end }], excludeId || null, ['pgy3', 'pgy2']).forEach(function (n) {
+        if (skip.indexOf(n) === -1) lead.push({ name: n, source: 'free junior' });
+      });
+    }
+    return findClinicCover(pulled, roster, data, board, skip, excludeId || null, lead);
   }
 
   /* ------------------------------------------------------------------ */
@@ -5906,7 +6114,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   var caseSectionOpen = { wills: true, private: true, jhn: true, other: true };
   var coverageTime = null;   // minutes; null = default (now if today, else 1 PM)
   var coverageFollowNow = true;
-  var planKinds = ['globe']; // Coverage: what comes in (one, or several at once)
+  // Coverage: add-ons to place, each with its own time (null = the planner's
+  // default time: now if today, else 1 PM)
+  var planItems = [{ kind: 'globe', t: null }];
 
   // New-year setup (UISPEC5 §E): the built-in data object is captured at boot
   // so 'Remove imported configuration' can always revert to it; usingOverride
@@ -8544,13 +8754,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return 13 * 60;
   }
 
-  function setCoverageTime(t, followNow) {
-    coverageTime = t;
-    coverageFollowNow = !!followNow;
-    renderCoverageBody();
-    renderAvailStrip();
-  }
-
   // Who can take something on, AM and PM (chief, 9/28/2026: "rather then by
   // specific time, can just have a place to say available in AM and then
   // another part that says available in PM … the goal is to be able to on
@@ -8600,8 +8803,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   function availWhen(x, s) {
     var S = window.Status;
     var b = App.board;
-    var from = s === 'am' ? b.dayStart : b.noon;
-    var to = s === 'am' ? b.noon : b.dayEnd;
+    var from = x.from != null ? x.from : (s === 'am' ? b.dayStart : b.noon);
+    var to = x.to != null ? x.to : (s === 'am' ? b.noon : b.dayEnd);
     var c = function (m) { return S.fmtClock(m).replace(/ [AP]M$/, ''); };
     var r = x.ranges;
     if (r.length === 1) {
@@ -8614,27 +8817,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       return 'except ' + c(r[0].end) + '–' + c(r[1].start) + (gap && gap.label ? ' (' + gap.label + ')' : '');
     }
     return r.map(function (w) { return c(w.start) + '–' + c(w.end); }).join(', ');
-  }
-
-  // The add-on planner keeps a clock of its own: the how-to's "busy in a
-  // scheduled case at the time of the add-on" needs one.
-  function planTimeRow(t) {
-    var S = window.Status;
-    var row = el('div', { class: 'plan-time' });
-    row.appendChild(el('span', { class: 'time-label', text: 'At' }));
-    var inp = el('input', { type: 'time', value: S.fmtHHMM(t).replace(/^(\d\d)(\d\d)$/, '$1:$2'), step: '300', 'aria-label': 'When the add-on comes in' });
-    inp.addEventListener('change', function () {
-      var m = /^(\d{1,2}):(\d{2})/.exec(inp.value);
-      if (m) setCoverageTime((+m[1]) * 60 + (+m[2]), false);
-    });
-    row.appendChild(inp);
-    if (isToday()) {
-      row.appendChild(el('button', {
-        type: 'button', class: 'btn btn-small' + (coverageFollowNow ? ' btn-primary' : ''), text: 'Now',
-        onclick: function () { setCoverageTime(null, true); }
-      }));
-    }
-    return row;
   }
 
   // One add-on case from a plan: named by its kind (the surgeon is rarely
@@ -8685,39 +8867,84 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     ]);
   }
 
+  function planTimeOf(item, t) { return item.t != null ? item.t : t; }
+
+  // One row per add-on: what it is, when it comes in, remove.
+  function planRow(item, idx, t) {
+    var S = window.Status;
+    var row = el('div', { class: 'plan-row' });
+    var sel = el('select', { class: 'sel plan-kind', 'aria-label': 'Kind of add-on' });
+    (window.Assign.ADDON_KINDS || []).forEach(function (k) { sel.appendChild(el('option', { value: k.key, text: k.label })); });
+    sel.value = item.kind;
+    sel.addEventListener('change', function () { item.kind = sel.value; renderCoverageBody(); });
+    var inp = el('input', {
+      type: 'time', class: 'plan-when', step: '300', 'aria-label': 'Comes in at',
+      value: S.fmtHHMM(planTimeOf(item, t)).replace(/^(\d\d)(\d\d)$/, '$1:$2')
+    });
+    inp.addEventListener('change', function () {
+      var m = /^(\d{1,2}):(\d{2})/.exec(inp.value);
+      if (m) { item.t = (+m[1]) * 60 + (+m[2]); renderCoverageBody(); }
+    });
+    row.appendChild(el('span', { class: 'plan-n', text: String(idx + 1) }));
+    row.appendChild(sel);
+    row.appendChild(el('label', { class: 'plan-at' }, ['at ', inp]));
+    if (planItems.length > 1) {
+      row.appendChild(el('button', {
+        type: 'button', class: 'btn-icon danger', title: 'Remove this add-on', text: '×',
+        onclick: function () { planItems.splice(idx, 1); renderCoverageBody(); }
+      }));
+    }
+    return row;
+  }
+
   function planCard(t) {
     var S = window.Status;
     var b = App.board;
-    var many = planKinds.length > 1;
+    var many = planItems.length > 1;
     var card = el('div', { class: 'card plan-card' });
-    card.appendChild(el('h2', {}, [(many ? 'If these come in together ' : 'If something comes in '), el('span', {
+    card.appendChild(el('h2', {}, ['If add-ons come in ', el('span', {
       class: 'h-note',
-      text: many
-        ? 'In the how-to’s order: add-on glaucoma → Surg 4 and cornea → Surg 3 (Step 6), trauma then plastics (Step 9), then anything skipped down the remaining-cases chain (Step 10). Nobody takes two, and clinic cover (Step 12) never uses someone taking a case.'
-        : 'Walks the how-to chain against who is busy right then. Pick more than one for simultaneous cases.'
+      text: 'Each at its own time. Assigned in the how-to’s order — add-on glaucoma → Surg 4 and cornea → Surg 3 (Step 6), trauma then plastics (Step 9), anything skipped down the remaining-cases chain in time order (Step 10) — nobody taking two at once. If that order would leave an add-on with nobody while another choice covers it, the plan takes that choice and says so.'
     })]));
-    card.appendChild(planTimeRow(t));
-    var kinds = el('div', { class: 'plan-kinds' });
-    (window.Assign.ADDON_KINDS || []).forEach(function (k) {
-      var on = planKinds.indexOf(k.key) !== -1;
-      kinds.appendChild(el('button', {
-        type: 'button', class: 'filter-chip' + (on ? ' active' : ''), 'aria-pressed': on ? 'true' : 'false',
-        text: (on && many ? '✓ ' : '') + k.label,
+    var rows = el('div', { class: 'plan-rows' });
+    planItems.forEach(function (item, idx) { rows.appendChild(planRow(item, idx, t)); });
+    card.appendChild(rows);
+    card.appendChild(el('div', { class: 'plan-add' }, [
+      el('button', {
+        type: 'button', class: 'btn btn-small', text: '+ Add another add-on',
         onclick: function () {
-          if (on && planKinds.length > 1) planKinds = planKinds.filter(function (x) { return x !== k.key; });
-          else if (!on) planKinds = planKinds.concat([k.key]);
+          var last = planItems[planItems.length - 1];
+          planItems.push({ kind: 'globe', t: last ? planTimeOf(last, t) : null });
           renderCoverageBody();
         }
-      }));
-    });
-    card.appendChild(kinds);
+      }),
+      isToday() ? el('button', {
+        type: 'button', class: 'btn btn-small', text: 'Times → now',
+        title: 'Set every add-on to the current time',
+        onclick: function () { planItems.forEach(function (it) { it.t = null; }); coverageFollowNow = true; coverageTime = null; renderCoverageBody(); }
+      }) : null
+    ]));
 
+    var list = planItems.map(function (it) { return { kind: it.kind, t: planTimeOf(it, t) }; });
     if (many) {
-      var joint = window.Assign.planAddOns(planKinds, t, App.roster, data(), b);
-      var list = el('div', { class: 'plan-joint' });
-      joint.items.forEach(function (it) {
+      var joint = window.Assign.planAddOns(list, t, App.roster, data(), b);
+      if (joint.unfilledByOrder > joint.unfilled) {
+        var moved = joint.items.filter(function (it) { return it.adjusted; });
+        card.appendChild(el('div', { class: 'warn-line plan-changed' }, [
+          el('b', { text: 'Changed from the how-to’s plain order: ' }),
+          'by the order alone ' + joint.unfilledByOrder + ' add-on' + (joint.unfilledByOrder === 1 ? '' : 's') +
+            ' would have nobody; this plan covers ' + (joint.unfilled ? 'more' : 'all') + '. ' +
+            moved.slice().sort(function (x, y) { return x.time - y.time; }).map(function (it) {
+              return it.label + ' at ' + S.fmtClock(it.time) + ': ' + (it.pick ? it.pick.name : 'nobody') + ' (the order alone: ' + (it.byOrder || 'nobody') + ')';
+            }).join('; ') + '.'
+        ]));
+      }
+      var box = el('div', { class: 'plan-joint' });
+      joint.items.slice().sort(function (x, y) { return x.time - y.time; }).forEach(function (it) {
         var row = el('div', { class: 'plan-joint-row' + (it.pick ? '' : ' bad') });
-        row.appendChild(el('span', { class: 'plan-joint-kind', text: it.label }));
+        row.appendChild(el('span', { class: 'plan-joint-kind' }, [
+          el('span', { class: 'plan-joint-time', text: S.fmtClock(it.time) }), ' ', it.label
+        ]));
         var skips = skipSummary(it);
         row.appendChild(el('span', { class: 'plan-joint-who' }, it.pick ? [
           '→ ', el('b', { text: it.pick.name }), el('span', { class: 'plan-via', text: ' ' + it.pick.via }),
@@ -8727,10 +8954,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
           '⚠ nobody in the how-to chain is free — Surg 2’s call',
           el('span', { class: 'plan-why plan-skips', text: outsideText(it.outside, it.pullable) + (skips ? '. ' + skips : '') })
         ]));
-        list.appendChild(row);
-        if (it.pick && it.handoff) list.appendChild(handoffLine(it.pick.name, it.handoff));
+        box.appendChild(row);
+        if (it.pick && it.handoff) box.appendChild(handoffLine(it.pick.name, it.handoff));
       });
-      card.appendChild(list);
+      card.appendChild(box);
       var filled = joint.items.filter(function (it) { return it.pick; });
       if (filled.length) {
         card.appendChild(el('div', { class: 'plan-actions' }, [
@@ -8738,10 +8965,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
             type: 'button', class: 'btn btn-primary',
             text: 'Add ' + (filled.length === 1 ? 'it' : 'all ' + filled.length) + ' as add-on cases',
             onclick: function () {
-              filled.forEach(function (it) { addPlannedCase(it.kind, t, it.pick.name, it.handoff); });
+              filled.forEach(function (it) { addPlannedCase(it.kind, it.time, it.pick.name, it.handoff); });
               touch();
               refreshEverything();
-              toast(filled.length + ' add-on case' + (filled.length === 1 ? '' : 's') + ' added at ' + S.fmtClock(t) + ' — fill in the surgeons on Surgery');
+              toast(filled.length + ' add-on case' + (filled.length === 1 ? '' : 's') + ' added — fill in the surgeons on Surgery');
             }
           }),
           el('span', { class: 'field-hint', text: 'Adds them to Surgery (Wills/ASC) so the board, clinics and the copied schedule all follow.' })
@@ -8750,7 +8977,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       return card;
     }
 
-    var plan = window.Assign.planAddOn(planKinds[0], t, App.roster, data(), b);
+    var one = list[0];
+    var plan = window.Assign.planAddOn(one.kind, one.t, App.roster, data(), b);
     card.appendChild(el('div', {
       class: 'field-hint plan-chain',
       text: 'How-to Step ' + plan.step + ': ' + plan.hierLabel +
@@ -8787,10 +9015,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         type: 'button', class: 'btn btn-primary',
         text: 'Add it as an add-on case → ' + plan.pick.name + (ho && ho.primary ? ' (backup ' + ho.primary.name + ')' : ''),
         onclick: function () {
-          var def = addPlannedCase(planKinds[0], t, plan.pick.name, ho);
+          var def = addPlannedCase(one.kind, one.t, plan.pick.name, ho);
           touch();
           refreshEverything();
-          toast(def.label + ' added at ' + S.fmtClock(t) + ' → ' + plan.pick.name + ' — fill in the surgeon on Surgery');
+          toast(def.label + ' added at ' + S.fmtClock(one.t) + ' → ' + plan.pick.name + ' — fill in the surgeon on Surgery');
         }
       }),
       el('span', { class: 'field-hint', text: 'Adds it to Surgery (Wills/ASC) so the board, clinics and the copied schedule all follow.' })
@@ -8846,6 +9074,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       card.appendChild(el('p', { class: 'empty-note', text: 'Nobody goes from a morning OR to an afternoon clinic today.' }));
       return card;
     }
+    var offered = []; // one coverer per late clinic — never the same person for two
     rows.forEach(function (r) {
       var o = (App.state.overruns || []).filter(function (x) { return x.name === r.name; })[0];
       var line = el('div', { class: 'late-row' + (o ? ' on' : '') });
@@ -8878,7 +9107,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         }));
       } else {
         var want = lateUntil[r.name] || S.fmtHHMM(Math.max(b.pmClinicStart + 60, r.amCase ? r.amCase.end : 0)).replace(/^(\d\d)(\d\d)$/, '$1:$2');
-        var lc = window.Assign.lateCover(r.name, r.clinic, b.pmClinicStart, S.parseClock(want), App.roster, data(), b);
+        var lc = window.Assign.lateCover(r.name, r.clinic, b.pmClinicStart, S.parseClock(want), App.roster, data(), b, offered);
+        if (lc.primary) offered.push(lc.primary.name);
         ctl.appendChild(el('span', { class: 'late-sugg' }, lc.primary ? [
           'If it runs past ' + S.fmtClock(b.pmClinicStart) + ': ', el('b', { text: lc.primary.name }), ' (' + lc.primary.source + ') covers ' + r.clinic
         ] : ['If it runs past ' + S.fmtClock(b.pmClinicStart) + ': nobody on the coverage chain is free to cover ' + r.clinic + ' — Surg 2’s call; ' + outsideText(lc.outside, lc.pullable)]));

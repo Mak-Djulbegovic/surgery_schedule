@@ -66,7 +66,9 @@ var sp = Status.caseSpans({ category: 'cataract', count: 4, serviceCount: 4, sta
 same(sp.spans, [{ start: 450, end: 570 }], 'x4 cataracts at 7:30 -> 7:30–9:30 (30 min each)');
 eq(sp.estimated, true, 'no until -> estimated');
 sp = Status.caseSpans({ category: 'cataract', count: 7, serviceCount: 2, start: '0730', serviceTimes: '1030 & 1300' }, DATA);
-same(sp.spans, [{ start: 630, end: 660 }, { start: 780, end: 810 }], 'service times -> busy only for the service cases');
+same(sp.spans, [{ start: 450, end: 660 }], 'cataracts: part of that OR until the list is done, service and private (chief 9/28) — 7:30–11:00');
+sp = Status.caseSpans({ category: 'other', count: 7, serviceCount: 2, start: '0730', serviceTimes: '1030 & 1300' }, DATA);
+same(sp.spans, [{ start: 630, end: 690 }, { start: 780, end: 840 }], 'any other list: service times -> busy only for the service cases');
 sp = Status.caseSpans({ category: 'cornea', count: 1, serviceCount: 1, start: '1300', until: '1500' }, DATA);
 same(sp.spans, [{ start: 780, end: 900 }], "'until' replaces the estimated end");
 eq(sp.estimated, false, 'typed until -> not estimated');
@@ -75,17 +77,20 @@ eq(sp.unknownStart, true, "'AM TF' -> unknown start");
 eq(sp.start, 450, "'AM TF' assumed 7:30");
 sp = Status.caseSpans({ category: 'cataract', count: 3, serviceCount: 3, start: '1:00' }, DATA);
 same(sp.spans, [{ start: 780, end: 870 }], "CPEC sheet '1:00' x3 -> 1:00–2:30 PM");
-// chief 9/28: a resident is only needed for the service case(s) of a list
-sp = Status.caseSpans({ category: 'cataract', count: 10, serviceCount: 1, start: '0730', serviceTimes: '1015' }, DATA);
-same(sp.spans, [{ start: 615, end: 645 }], 'Henry x10, 1 service at 10:15 -> busy 10:15–10:45 only');
+// chief 9/28: outside cataracts, a resident is only needed for the service case(s) of a list
+sp = Status.caseSpans({ category: 'other', count: 10, serviceCount: 1, start: '0730', serviceTimes: '1015' }, DATA);
+same(sp.spans, [{ start: 615, end: 675 }], 'Henry x10, 1 service at 10:15 -> busy 10:15–11:15 only');
 eq(sp.svcAssumed, false, '…at a given time');
-sp = Status.caseSpans({ category: 'cataract', count: 10, serviceCount: 1, start: '1015' }, DATA);
-same(sp.spans, [{ start: 615, end: 645 }], 'Henry x10, 1 service, only a time typed -> one case at that time (not the whole list)');
+sp = Status.caseSpans({ category: 'other', count: 10, serviceCount: 1, start: '1015' }, DATA);
+same(sp.spans, [{ start: 615, end: 675 }], 'Henry x10, 1 service, only a time typed -> one case at that time (not the whole list)');
 eq(sp.svcAssumed, true, '…flagged: service time assumed at the list start');
+sp = Status.caseSpans({ category: 'glaucoma', count: 6, serviceCount: 2, start: '0730' }, DATA);
+same(sp.spans, [{ start: 450, end: 630 }], 'x6 glaucoma with 2 service, no service time -> the 2 service cases, assumed first');
 sp = Status.caseSpans({ category: 'cataract', count: 6, serviceCount: 2, start: '0730' }, DATA);
-same(sp.spans, [{ start: 450, end: 510 }], 'x6 with 2 service, no service time -> the 2 service cases, assumed first');
-sp = Status.caseSpans({ category: 'cataract', count: 6, serviceCount: 6, start: '0730' }, DATA);
-same(sp.spans, [{ start: 450, end: 630 }], 'all service -> the whole list');
+same(sp.spans, [{ start: 450, end: 630 }], 'x6 cataracts with 2 service -> the whole list (part of that OR until done)');
+eq(sp.svcAssumed, false, '…nothing assumed for cataracts');
+sp = Status.caseSpans({ category: 'other', count: 6, serviceCount: 6, start: '0730' }, DATA);
+same(sp.spans, [{ start: 450, end: 810 }], 'all service -> the whole list');
 
 /* ---------- classification (chief's rule: PT, idle OR/Surg = free; CPEC = clinic, 9/28) ---------- */
 eq(Status.kindOfClass(Status.classifyText('CPEC', DATA)), 'clinic', 'CPEC is a clinic (chief, 9/28/2026)');
@@ -261,14 +266,14 @@ ok(!b2.availableInSession('am').some(function (x) { return x.name === 'Momenaei'
 
 /* ---------- available AM / PM (chief, 9/28/2026) ---------- */
 b = Status.build(roster, day({ cases: [
-  { id: 'h1', section: 'wills', surgeon: 'Henry', count: 10, serviceCount: 1, start: '0730', serviceTimes: '1015', category: 'cataract', assigned: 'Cheng', backup: '' }
+  { id: 'h1', section: 'wills', surgeon: 'Henry', count: 10, serviceCount: 1, start: '0730', serviceTimes: '1015', category: 'other', assigned: 'Cheng', backup: '' }
 ] }), DATA);
 var avAM = b.availableInSession('am');
 var avPM = b.availableInSession('pm');
 function av(list, n) { return list.filter(function (x) { return x.name === n; })[0]; }
 var ch2 = av(avAM, 'Cheng');
 eq(ch2 && ch2.group, 'free', 'Cheng (Surg 1, Henry x10) is available AM…');
-same(ch2 && ch2.ranges.map(function (r) { return [r.start, r.end]; }), [[420, 615], [645, 720]], '…except 10:15–10:45, his one service case');
+same(ch2 && ch2.ranges.map(function (r) { return [r.start, r.end]; }), [[450, 615], [675, 720]], '…except 10:15–11:15, his one service case (the AM counts from 7:30, the OR start)');
 ok(ch2 && ch2.gaps.some(function (g) { return g.start === 615 && /Henry x10/.test(g.label); }), '…and the gap is labelled with the case');
 eq(av(avPM, 'Cheng') && av(avPM, 'Cheng').full, true, 'Cheng is available all afternoon');
 eq(av(avAM, 'Tang') && av(avAM, 'Tang').group, 'pull', 'Tang (Retina Private) is listed to pull first');
