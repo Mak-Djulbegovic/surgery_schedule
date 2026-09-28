@@ -12,7 +12,7 @@ how-to's order. Status: **released as v2 (9/2026)**; v1 is archived in `v1/`.
 | 2 Roster | Step 2 — Surg 1–5 | as before; Surg 3/4 shown as **all day** ("Cornea PM if no case") |
 | 3 Surgery | Steps 3–10 — cases | **one line per attending**, reading like the sent schedule: `Surgeon × # · start · category · svc → resident`. The suggested resident is a dashed pill (one click); an assigned one gets a status dot (green free, amber leaves a clinic, red out/double-booked); the backup line appears under the line only when the case pulls someone out of clinic. Service times / done by / notes / add-on / move / delete sit behind **⋯**. **Enter** adds the next line. The CPEC sheet is a prefill banner (Add all / Choose…) that shrinks to one line once added. The old Assign tab is gone |
 | 4 Clinics | Steps 11–12 — clinics | counts as before; each clinic shows who is out / pulled into a case and who covers; "Needs coverage" list on top |
-| 5 Coverage | the new backup view | time control (Now / any time), who is free, "if a globe comes in at t", everyone's day on one timeline, add-on call names |
+| 5 Coverage | the new backup view | needs coverage, available AM / PM (free, then Retina / Uveitis to pull first), "if something comes in at t" (its own time box), a morning OR running late, add-on call names |
 | 6 Preview & Copy | — | the document |
 
 How-to, CPEC sheet, block schedules and Setup moved to a **Library** menu.
@@ -35,8 +35,8 @@ with their note on a second line, and quiet grey fields in the Surgery and
 Clinics rows that turn white when edited. The brand mark is the landing
 page's iris in miniature on a white tile (also the favicon). On phones the
 app bar is two short rows, the free lists fold into one line ("Free AM 13 ·
-PM 9 ▾"), clinic count and note sit side by side, and each timeline bar
-runs full width under its name. Preview & Copy lists what is still open
+PM 9 ▾"), clinic count and note sit side by side, and Available AM /
+PM stack. Preview & Copy lists what is still open
 (cases without a resident, gaps) with links to fix them.
 
 ## Saving and working at the same time (9/28/2026)
@@ -65,6 +65,46 @@ automatic save in case they X out of the tab."
   its own it stops saving and asks — Keep mine / Use the other version.
   Shared workroom computers on one browser profile still share drafts —
   documented, not solved (would need sign-in or per-person keys).
+
+## Finding people on the fly (9/28/2026, later)
+
+- **Busy only for the service case** (chief: "if Henry has 10 cases, he is
+  [only] responsible for his case when it is listed as a service case. In
+  this case it was 1015, so he is theoretically available to leave for an
+  emergent add-on after that case or to go to clinic"). For a list with
+  private and service cases the resident is busy only for the service cases:
+  at the service time(s), one case length each; with no service time given,
+  at the list start (`svcAssumed`, and the Surgery row asks "When is the
+  service case?"). All-service lists still take the whole list. The Surgery
+  row now has the service time right after Svc (it used to be under ⋯).
+  The paste reader also takes "1015 service", "10:15 service", "service case
+  at 10:15AM", "(1 service, 10:15AM)" — it used to read "1015 service" as
+  1,015 service cases.
+- **Retina / Uveitis first, no cover** (chief: "the first to pull from often
+  times is retina/uveitis so there is no coverage needed for retina or
+  uveitis"). `data.availability.pullFirstTexts` = Retina, Retina Private
+  (assumption: private retina counts), Uveitis. Pulling someone out of one —
+  into a case, or to cover — makes no gap and asks for no backup; nobody
+  needs to cover them when out. They are listed right after the free
+  residents (Available, the resident dropdown, "Surg 2's call" lists), count
+  for the doc's free-junior step at Surg 2's discretion (after the truly
+  free), and fill the doc's last clinic-coverage step, "Retina", which now
+  takes Uveitis too. The doc's order is unchanged: a free Surg 2 still comes
+  first, since nobody has to be pulled.
+- **Never Path** (chief: "residents should NEVER be pulled from path").
+  `neverPullTexts` = Path: skipped by every chain and cover, never listed as
+  available, greyed out in the dropdown — even if a configuration called
+  Path free.
+- **Coverage tab** (chief: "the bars at the bottom … can remove … rather
+  than by specific time, a place to say available in AM and another part
+  that says available in PM … to on the fly find assignments"). The
+  timeline and the "Free at [time]" card are gone. **Available AM /
+  Available PM**: seniors and juniors free for all or part of the session
+  (stretches under 30 minutes are left out; partial ones say "from 10:45",
+  "until 10:15" or "except 10:15–10:45 (Henry x10)"), then "Pull first":
+  Retina / Uveitis. The add-on planner keeps its own time box — the doc's
+  "busy in a scheduled case at the time of the add-on" needs one. The free
+  strip under the tabs uses the same rule.
 
 ## Coverage, dynamic (9/28/2026)
 
@@ -279,8 +319,9 @@ Mechanics, with a board:
 - `data.caseMinutes` (turnover included): cataract 30, cornea 90,
   glaucoma 90, plastics 60, peds 60, retina 90, trauma 120, other 60 —
   **estimates, not measured**.
-- Part-private lists without service times are treated as busy for the whole
-  list (conservative).
+- A list with private and service cases but no service time: the service
+  cases are assumed to open the list (the row asks for the time). Before
+  9/28 the resident was counted busy for the whole list.
 - Sessions: AM before 12:00, PM from 12:00; the board runs 7:00–17:00.
 
 ## Decided by the chief (9/27/2026)

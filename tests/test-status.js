@@ -75,6 +75,17 @@ eq(sp.unknownStart, true, "'AM TF' -> unknown start");
 eq(sp.start, 450, "'AM TF' assumed 7:30");
 sp = Status.caseSpans({ category: 'cataract', count: 3, serviceCount: 3, start: '1:00' }, DATA);
 same(sp.spans, [{ start: 780, end: 870 }], "CPEC sheet '1:00' x3 -> 1:00–2:30 PM");
+// chief 9/28: a resident is only needed for the service case(s) of a list
+sp = Status.caseSpans({ category: 'cataract', count: 10, serviceCount: 1, start: '0730', serviceTimes: '1015' }, DATA);
+same(sp.spans, [{ start: 615, end: 645 }], 'Henry x10, 1 service at 10:15 -> busy 10:15–10:45 only');
+eq(sp.svcAssumed, false, '…at a given time');
+sp = Status.caseSpans({ category: 'cataract', count: 10, serviceCount: 1, start: '1015' }, DATA);
+same(sp.spans, [{ start: 615, end: 645 }], 'Henry x10, 1 service, only a time typed -> one case at that time (not the whole list)');
+eq(sp.svcAssumed, true, '…flagged: service time assumed at the list start');
+sp = Status.caseSpans({ category: 'cataract', count: 6, serviceCount: 2, start: '0730' }, DATA);
+same(sp.spans, [{ start: 450, end: 510 }], 'x6 with 2 service, no service time -> the 2 service cases, assumed first');
+sp = Status.caseSpans({ category: 'cataract', count: 6, serviceCount: 6, start: '0730' }, DATA);
+same(sp.spans, [{ start: 450, end: 630 }], 'all service -> the whole list');
 
 /* ---------- classification (chief's rule: PT, idle OR/Surg = free; CPEC = clinic, 9/28) ---------- */
 eq(Status.kindOfClass(Status.classifyText('CPEC', DATA)), 'clinic', 'CPEC is a clinic (chief, 9/28/2026)');
@@ -175,7 +186,7 @@ var ha = b.statusAt('Hamou', 810);
 eq(ha.kind, 'clinic', "Hamou takes Ransone's Plastics clinic PM");
 eq(b.statusAt('Hamou', 540).kind, 'clinic', 'Hamou keeps their own AM (Peds)');
 var uv = b.needs.filter(function (n) { return n.type === 'clinic' && n.clinic === 'Uveitis'; });
-eq(uv.length, 1, 'flags that Uveitis AM loses Patel');
+eq(uv.length, 0, 'Patel leaving Uveitis AM to cover Ransone needs no cover (chief 9/28: pull from retina/uveitis first, no coverage needed)');
 // taking Patel off Uveitis AM clears it
 b = Status.build(roster, day({
   absences: [{ id: 'a1', name: 'Ransone', am: true, pm: true, reason: 'vacation', coverAM: 'Patel', coverPM: 'Hamou' }],
@@ -225,6 +236,46 @@ eq(ch && ch.ranges[0].start, 420, 'free from 7:00…');
 eq(ch && ch.ranges[0].end, 450, '…until the 7:30 list');
 eq(ch && ch.ranges[1] && ch.ranges[1].start, 510, 'free again at 8:30 (x2 est. 30 min each)');
 ok(!am.some(function (x) { return x.name === 'Aguwa'; }), 'Aguwa (CPEC) is in clinic, not on the free list');
+
+/* ---------- Retina / Uveitis: pull first, no cover; never Path (chief, 9/28/2026) ---------- */
+b = Status.build(roster, day({}), DATA);
+eq(b.statusAt('Tang', 540).pullFirst, true, 'Tang in Retina Private: pull first');
+eq(b.statusAt('Patel', 540).pullFirst, true, 'Patel in Uveitis AM: pull first');
+eq(b.statusAt('Patel', 840).pullFirst, false, 'Patel in Glaucoma PM: not pull first');
+eq(b.statusAt('Momenaei', 540).neverPull, true, 'Momenaei on Path AM: never pulled');
+eq(b.statusAt('Momenaei', 840).neverPull, false, '…ER PM is not Path');
+b = Status.build(roster, day({ cases: [{ id: 't1', section: 'wills', surgeon: 'X', count: 1, serviceCount: 1, start: '1300', category: 'other', assigned: 'Tang', backup: '' }] }), DATA);
+eq(b.needs.length, 0, 'Tang pulled out of Retina Private into a case: no coverage needed');
+b = Status.build(roster, day({ cases: [{ id: 'p1', section: 'wills', surgeon: 'X', count: 1, serviceCount: 1, start: '1300', category: 'other', assigned: 'Patel', backup: '' }] }), DATA);
+eq(b.needs.length, 1, 'Patel pulled out of Glaucoma PM still needs cover');
+var mixed = b.statusDuring('Patel', 690, 750);
+eq(mixed.kind + ' ' + mixed.pullFirst, 'clinic false', 'half Uveitis, half Glaucoma: not pull first (the Glaucoma half needs cover)');
+b = Status.build(roster, day({ absences: [{ id: 'a1', name: 'Tang', am: true, pm: true, reason: 'sick', coverAM: '', coverPM: '' }] }), DATA);
+eq(b.needs.length, 0, 'Tang out: Retina Private needs no cover');
+// Path stays never-pulled even if a configuration called it free
+var D2 = JSON.parse(JSON.stringify(DATA));
+D2.availability.freeTexts = ['PT', 'Path'];
+var b2 = Status.build(roster, day({}), D2);
+eq(b2.statusAt('Momenaei', 540).neverPull, true, 'Path is never pulled, whatever else says so');
+ok(!b2.availableInSession('am').some(function (x) { return x.name === 'Momenaei'; }), '…and never listed as available');
+
+/* ---------- available AM / PM (chief, 9/28/2026) ---------- */
+b = Status.build(roster, day({ cases: [
+  { id: 'h1', section: 'wills', surgeon: 'Henry', count: 10, serviceCount: 1, start: '0730', serviceTimes: '1015', category: 'cataract', assigned: 'Cheng', backup: '' }
+] }), DATA);
+var avAM = b.availableInSession('am');
+var avPM = b.availableInSession('pm');
+function av(list, n) { return list.filter(function (x) { return x.name === n; })[0]; }
+var ch2 = av(avAM, 'Cheng');
+eq(ch2 && ch2.group, 'free', 'Cheng (Surg 1, Henry x10) is available AM…');
+same(ch2 && ch2.ranges.map(function (r) { return [r.start, r.end]; }), [[420, 615], [645, 720]], '…except 10:15–10:45, his one service case');
+ok(ch2 && ch2.gaps.some(function (g) { return g.start === 615 && /Henry x10/.test(g.label); }), '…and the gap is labelled with the case');
+eq(av(avPM, 'Cheng') && av(avPM, 'Cheng').full, true, 'Cheng is available all afternoon');
+eq(av(avAM, 'Tang') && av(avAM, 'Tang').group, 'pull', 'Tang (Retina Private) is listed to pull first');
+eq(av(avAM, 'Patel') && av(avAM, 'Patel').group, 'pull', 'Patel (Uveitis AM) is listed to pull first');
+ok(!av(avPM, 'Patel'), 'Patel (Glaucoma PM) is not available PM');
+ok(!av(avAM, 'Momenaei') && !av(avPM, 'Momenaei'), 'Momenaei (Path, then ER) is never listed');
+ok(!av(avAM, 'Aguwa'), 'CPEC is a clinic — not available');
 
 /* ---------- weekend ---------- */
 b = Status.build(Engine.resolveDay('2026-09-26', DATA), day({}), DATA);

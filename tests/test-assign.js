@@ -265,8 +265,8 @@ deepEq(cov.map(function (e) { return e.name; }),
   ['Calotti', 'Aguwa', 'Bair', 'Shields', 'Cheng', 'Wibbelsman', 'Samuel'],
   'coverage order: Surg 2,3,4, Cooper, Surg 1,5, then Retina (no Wills OR today)');
 deepEq(cov.map(function (e) { return e.source; }),
-  ['Surg 2', 'Surg 3', 'Surg 4', 'Cooper (PGY-4)', 'Surg 1', 'Surg 5', 'Retina'],
-  'each entry labels its chain source');
+  ['Surg 2', 'Surg 3', 'Surg 4', 'Cooper (PGY-4)', 'Surg 1', 'Surg 5', 'Retina / Uveitis'],
+  'each entry labels its chain source (the doc\'s Retina step also takes Uveitis — chief 9/28)');
 ok(cov.map(function (e) { return e.name; }).indexOf('Ransone') === -1 ||
    cov.filter(function (e) { return e.name === 'Ransone'; }).length <= 1,
   'names deduped');

@@ -1058,11 +1058,11 @@ select.picker { max-width: 280px; min-width: 150px; }
 .ssec-add { margin-left: auto; }
 .ssec-hint { margin: 6px 0 4px; }
 
-/* the line: Surgeon × # | start | category | svc → resident ⋯ */
+/* the line: Surgeon × # | start | category | svc @ time → resident ⋯ */
 .scols, .srow-main {
   display: grid;
-  grid-template-columns: minmax(110px, 0.9fr) 14px 54px 72px 110px 62px 16px minmax(230px, 1.7fr) 32px;
-  grid-template-areas: "sur x cnt st cat svc arr res more";
+  grid-template-columns: minmax(110px, 0.9fr) 14px 54px 72px 110px 54px 74px 16px minmax(220px, 1.7fr) 32px;
+  grid-template-areas: "sur x cnt st cat svc svct arr res more";
   gap: 6px;
   align-items: center;
 }
@@ -1087,6 +1087,9 @@ select.picker { max-width: 280px; min-width: 150px; }
 .s-cat { grid-area: cat; }
 .s-svc-wrap { grid-area: svc; display: flex; align-items: center; gap: 4px; min-width: 0; }
 .s-svc-label { display: none; font-size: 11px; color: var(--faint); }
+.s-svct-wrap { grid-area: svct; display: flex; align-items: center; gap: 3px; min-width: 0; }
+.s-svct-wrap.hidden { display: none; }
+.s-at { font-size: 12px; color: var(--faint); }
 .s-arrow { grid-area: arr; }
 .s-res { grid-area: res; }
 .s-more { grid-area: more; }
@@ -1166,13 +1169,16 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 
 /* ---------------- Coverage ---------------- */
 
-.time-bar { margin-bottom: 16px; }
 .time-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
-.time-bar input[type="time"] {
+.plan-time { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 10px; }
+.plan-time input[type="time"] {
   border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13.5px;
 }
-.cov-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; }
-.cov-grid > .card { margin-bottom: 16px; }
+/* available AM | PM */
+.avail-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 24px; }
+.avail-h { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--text); }
+.free-chip.pull { border-color: var(--accent-border); background: var(--accent-soft); }
+.free-chip.partial { border-style: dashed; }
 .free-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .free-label { width: 64px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
 .free-chip {
@@ -1239,47 +1245,6 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .late-until { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12.5px; }
 .late-time { border: 1px solid var(--border); border-radius: 7px; padding: 4px 6px; font: inherit; font-size: 13px; }
 select.late-pick { max-width: 240px; }
-
-.tl-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
-.tl-key { display: inline-flex; align-items: center; gap: 5px; }
-.tl-swatch { width: 14px; height: 10px; border-radius: 3px; display: inline-block; }
-.tl-group {
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint);
-  padding: 8px 0 3px; border-bottom: 1px solid var(--border);
-}
-.tl-row {
-  display: grid;
-  grid-template-columns: 130px minmax(0, 1fr) 210px;
-  gap: 10px; align-items: center;
-  padding: 4px 0; border-bottom: 1px solid var(--border-soft);
-}
-.tl-name { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 13px; }
-.tl-role { font-size: 11px; color: var(--faint); font-weight: 700; }
-.tl-track { position: relative; height: 16px; background: var(--border-soft); border-radius: 5px; overflow: hidden; }
-.tl-axis { border-bottom: none; padding: 0; }
-.tl-axis-track { height: 14px; background: none; overflow: visible; }
-.tl-tick {
-  position: absolute; top: 0; transform: translateX(-50%);
-  font-size: 10.5px; font-weight: 700; color: var(--faint); white-space: nowrap;
-}
-.tl-tick.first { transform: none; }
-.tl-tick.last { transform: translateX(-100%); }
-.tl-seg { position: absolute; top: 0; bottom: 0; }
-.tl-now { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--text); }
-.tl-noon { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(29, 39, 51, 0.25); }
-.tl-status { font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.k-free { background: #9fd5b5; }
-.k-case { background: #7fa9d8; }
-.k-clinic { background: #cdbfe4; }
-.k-duty { background: #c9d0d8; }
-.k-out { background: repeating-linear-gradient(45deg, #f2c1bd, #f2c1bd 4px, #fbe3e1 4px, #fbe3e1 8px); }
-.k-off { background: transparent; }
-.tl-status.k-free, .tl-status.k-case, .tl-status.k-clinic, .tl-status.k-duty, .tl-status.k-out, .tl-status.k-off { background: none; }
-.tl-status.k-free { color: var(--green-text); font-weight: 600; }
-.tl-status.k-case { color: var(--pgy3); font-weight: 600; }
-.tl-status.k-out { color: var(--red-text); }
-.tl-status.k-clinic { color: var(--pgy4); }
-.tl-status.k-duty { color: var(--muted); }
 
 /* ---------------- preview ---------------- */
 
@@ -1498,19 +1463,7 @@ select.imp-type.unset { border-color: var(--amber-border); background: var(--amb
   .ph-actions { flex-basis: 100%; }
   .card { padding: 16px; }
 
-  .cov-grid { grid-template-columns: 1fr; }
-  /* name and status on one line, the day's bar full width under it */
-  .tl-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: "name status" "track track";
-    gap: 3px 10px;
-    padding: 6px 0;
-  }
-  .tl-name { grid-area: name; }
-  .tl-track { grid-area: track; }
-  .tl-status { grid-area: status; text-align: right; max-width: 62vw; }
-  .tl-axis { padding: 0; }
-  .tl-axis .tl-name, .tl-axis .tl-status { display: none; }
+  .avail-cols { grid-template-columns: 1fr; }
 
   /* clinic: name, then staff, then count + note side by side */
   .clinic-row {
@@ -1539,9 +1492,12 @@ select.imp-type.unset { border-color: var(--amber-border); background: var(--amb
     grid-template-areas:
       "sur sur sur sur sur more"
       "x cnt st cat svc svc"
+      "svct svct svct svct svct svct"
       "arr res res res res res";
   }
   .s-svc-label { display: inline; }
+  .s-svct-wrap .s-svct { max-width: 140px; }
+  .s-svct-wrap::after { content: 'service case time'; font-size: 11px; color: var(--faint); margin-left: 4px; }
   .s-details-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .s-d-pill { grid-column: 1 / -1; }
 }

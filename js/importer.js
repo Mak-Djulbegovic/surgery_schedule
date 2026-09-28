@@ -107,6 +107,11 @@
   }
 
   var TIME_ONLY = /^(?:\d{1,2}(?::?\d{2})?\s*(?:[ap]\.?m\.?)?|am\s*tf|pm)$/i;
+
+  // how many times are listed: '1030 & 1300' → 2
+  function timeCount(str) {
+    return Math.max(1, (String(str).match(/\d{1,2}(?::?\d{2})?\s*(?:[ap]\.?m\.?)?/gi) || []).length);
+  }
   var TIMES = /^(?:\d{1,2}(?::?\d{2})?\s*(?:[ap]\.?m\.?)?)(?:\s*(?:&|,|and)\s*\d{1,2}(?::?\d{2})?\s*(?:[ap]\.?m\.?)?)*$/i;
 
   /* ------------------------------------------------------------------ */
@@ -138,16 +143,37 @@
     var bm = /^\s*\(([^()]*)\)/.exec(rest);
     if (bm) {
       rest = rest.slice(bm[0].length);
+      var svcNoTime = false; // '1 service' just read — a bare time next is its time
       bm[1].split(/\s*,\s*/).forEach(function (part) {
         part = trim(part);
         if (!part) return;
         var x;
+        var afterSvc = svcNoTime;
+        svcNoTime = false;
         if (/^all\s+service(?:\s+cases?)?$/i.test(part)) { c.serviceCount = c.count; return; }
-        if ((x = /^(?:service\s*x\s*(\d+)|x?\s*(\d+)\s+service(?:\s+cases?)?)(?:\s+start(?:s|ing)?)?(?:\s*(?:@|at)\s*(.+))?$/i.exec(part))) {
+        // 'service x 4 start @ 9:15AM', '4 service', 'x1 service at 1015' — a
+        // count is one or two digits; '1015 service' is a time (below)
+        if ((x = /^(?:service\s*x\s*(\d{1,2})|x?\s*(\d{1,2})\s+service(?:\s+cases?)?)(?:\s+start(?:s|ing)?)?(?:\s*(?:@|at)\s*(.+))?$/i.exec(part))) {
           c.serviceCount = parseInt(x[1] || x[2], 10);
           if (x[3]) c.serviceTimes = trim(x[3]);
+          else svcNoTime = true;
           return;
         }
+        // 'service case at 10:15AM', 'service @ 1030 & 1300' — one service
+        // case per time
+        if ((x = /^service(?:\s+cases?)?(?:\s+start(?:s|ing)?)?\s*(?:@|at)\s*(.+)$/i.exec(part)) && TIMES.test(trim(x[1]))) {
+          c.serviceTimes = trim(x[1]);
+          if (c.serviceCount == null) c.serviceCount = timeCount(x[1]);
+          return;
+        }
+        // '10:15 service', '1015 service case' — service at that time
+        if ((x = /^(.+?)\s+service(?:\s+cases?)?$/i.exec(part)) && TIMES.test(trim(x[1])) && !/^\d{1,2}$/.test(trim(x[1]))) {
+          c.serviceTimes = trim(x[1]);
+          if (c.serviceCount == null) c.serviceCount = timeCount(x[1]);
+          return;
+        }
+        // '(1 service, 10:15AM)': a bare time right after the service count
+        if (afterSvc && TIME_ONLY.test(part) && !/^(?:am\s*tf|pm)$/i.test(part)) { c.serviceTimes = part; return; }
         if ((x = /^(\d+)\s*private\s*\/\s*(\d+)\s*service$/i.exec(part))) { c.serviceCount = parseInt(x[2], 10); notes.push(part); return; }
         if (/^(?:cc'?d|cross[-\s]?checked|all\s+private|no\s+service(?:\s+cases?)?)$/i.test(part)) { c.serviceCount = 0; notes.push(part); return; }
         if ((x = /^(.+?)\s+start$/i.exec(part)) && !c.start) { c.start = trim(x[1]); return; }

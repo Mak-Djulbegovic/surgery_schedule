@@ -399,7 +399,14 @@ const SCHED_DATA = {
   // (chief, 9/28/2026: "if people are assigned CPEC, assume that they are in
   // clinic — this goes for the whole app"). dutyTexts are fixed duties
   // that are not pulled. Day Float only ever covers the Night Float resident.
-  // noCoverTexts need no coverage when the resident is out.
+  // noCoverTexts need no coverage when the resident is out — or, for a
+  // clinic, when they are pulled out of it.
+  // pullFirstTexts: clinics to pull from first — their residents count as
+  // available, and leaving needs no cover (chief, 9/28/2026: "the first to
+  // pull from often times is retina/uveitis so there is no coverage needed
+  // for retina or uveitis"). ASSUMPTION: Retina Private counts as retina.
+  // neverPullTexts: never pulled for a case or to cover (chief, 9/28/2026:
+  // "residents should NEVER be pulled from path").
   // offsiteTexts: at another hospital — never pulled into a Wills case or
   // clinic by a chain (ASSUMPTION, 9/2026: Cooper Clinic / Cooper OR are at
   // Cooper; remove them here if those residents can be pulled).
@@ -407,7 +414,9 @@ const SCHED_DATA = {
     freeTexts: ['PT'],
     dutyTexts: ['ER', 'Jeff Consults', 'Cooper Consults'],
     offsiteTexts: ['Cooper Clinic', 'Cooper OR'],
-    noCoverTexts: ['PT', 'Day Float']
+    noCoverTexts: ['PT', 'Day Float', 'Retina', 'Retina Private', 'Uveitis'],
+    pullFirstTexts: ['Retina', 'Retina Private', 'Uveitis'],
+    neverPullTexts: ['Path']
   },
 
   // When PM clinics actually start (chief, 9/28/2026: "if the morning
