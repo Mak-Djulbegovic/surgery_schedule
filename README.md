@@ -96,6 +96,15 @@ app — never your entered data.
 - **Other people are never affected**: there is no server — each person's
   drafts live only in their own browser, so two residents building the same
   day on their own phones or computers never see or overwrite each other.
+- **Taking over a day someone else built**: the Surg 2 who builds a day is
+  often not that day's Surg 2. Paste the schedule you were sent (landing
+  page, or Library → **Paste a sent schedule**): the app reads it back into
+  that day — cases with residents and backups, who's out and who covers,
+  Night Float, clinic counts and edits, add-on names — checks that it
+  rebuilds the same schedule line for line, and saves it, so Coverage runs
+  live in your browser and *Start from yesterday* can build tomorrow from
+  it. Case types are not in the text, so they are guessed (shown; fix any
+  on Surgery).
 - **Same browser, two tabs** (or a shared workroom computer on one browser
   profile): these share storage. When one tab saves the day another tab has
   open, the other tab takes that version instead of later writing an old
@@ -113,6 +122,7 @@ js/engine.js          date → who-is-where resolution (blocks, overrides, nth-w
 js/status.js          who is out / in a case / in clinic / free, minute by minute
 js/assign.js          case classification + availability-aware assignment/backup suggestions
 js/export.js          document formatting + clipboard
+js/importer.js        reads a pasted schedule back into a day (hand-off)
 js/app.js             UI controller and per-date persistence
 tests/                plain-Node test suites (no dependencies)
 tools/bundle.js       builds the single-file dist/surg-schedule.html
@@ -155,6 +165,7 @@ node tests/test-integration.js
 node tests/test-status.js
 node tests/test-coverage.js
 node tests/test-vacation.js
+node tests/test-import.js
 ```
 
 The suites verify the engine against a fully known example day (7/22/2026)

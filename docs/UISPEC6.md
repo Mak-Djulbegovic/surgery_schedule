@@ -66,6 +66,43 @@ automatic save in case they X out of the tab."
   Shared workroom computers on one browser profile still share drafts —
   documented, not solved (would need sign-in or per-person keys).
 
+## Hand-off: paste a sent schedule (9/28/2026)
+
+The chief: "if the person who is Surg 2 on a Wednesday is not the person on
+Surg 2 on Tuesday, they may not have the schedule… the Surg 2 person makes
+the schedule for the next day… this is necessary for the live coverage
+part." Each browser keeps its own drafts, so the day's Surg 2 needs a way to
+get the day into theirs.
+
+- **Where**: the landing ("Built by someone else? Paste the schedule they
+  sent"), Library → Paste a sent schedule, and callouts on Out today (blank
+  day) and Coverage (no cases). Route `#/import/<date>`.
+- **What it reads** (js/importer.js, pure): the app's own copied format, with
+  or without `**` (Copy plain text / Copy formatted pasted from an email),
+  tolerant of bullets, en/em dashes, blank lines, non-breaking spaces and the
+  emoji ⚠. Cases (surgeon, count, start, service count + times, resident,
+  backup, backup note, notes; UNASSIGNED stays open), Vacation lines →
+  absences with per-session coverers / NC / TBD / reason, "N strong",
+  free-text notes, Night Float, lectures, clinic counts/notes, add-on names.
+  Manual clinic edits are rebuilt by diffing the listed staff against what
+  the block schedule + absences would print ("X (for Y)" is about Y).
+- **Which day**: the add-on labels name it; otherwise the day (today or
+  tomorrow) whose Surg 1–5 match the paste, preferring today. Shown and
+  changeable; a Surg mismatch with the block schedule is flagged.
+- **Honesty check**: the read day is rebuilt and compared line by line with
+  the paste (skipped non-schedule lines excluded); differences are listed.
+  Unknown resident names and Vacation notes that start with a name are
+  flagged; skipped lines are listed.
+- **Not in the text, so guessed**: case type (for case lengths) — globe/trauma
+  by name → privates and today's CPEC-sheet surgeons = cataract → the clinic
+  the backup covers → the resident's Surg role (3 cornea, 4 glaucoma, 1/5
+  cataract) → JHN = plastics → other. Listed before loading. Also not
+  carried: "done by" times and add-on flags.
+- **Load**: saves the day in this browser (replacing a draft only after a
+  confirm), then opens Coverage if it is today, else Surgery. Tests:
+  `tests/test-import.js` (round trip with/without `**`, mail-mangled,
+  hand-typed lines) + a two-browser hand-off in Playwright.
+
 ## The status model (js/status.js — pure, Node-tested)
 
 Every resident, every 5 minutes from 7:00 to 17:00, is one of:

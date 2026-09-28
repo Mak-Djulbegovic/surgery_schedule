@@ -1246,6 +1246,38 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 
 /* ---------------- preview ---------------- */
 
+/* ---------------- paste a sent schedule ---------------- */
+
+.import-text {
+  min-height: 220px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.5;
+}
+.import-when { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 12px; }
+.import-when .mini-label { margin: 0; }
+.import-when input[type="date"] { padding: 5px 8px; }
+.import-note { margin: 0 0 6px; }
+.import-check {
+  margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+  background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text);
+  font-size: 13px; font-weight: 600;
+}
+.import-check.ok { background: var(--green-bg); border-color: var(--green-border); color: var(--green-text); }
+.import-check-head { margin-bottom: 4px; }
+.import-diff { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.import-diff.minus { color: var(--red-text); }
+.import-diff.plus { color: var(--green-text); }
+.import-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 14px; margin-top: 14px; }
+.import-foot .field-hint { margin-right: auto; }
+.import-callout {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px;
+  margin-bottom: 14px; padding: 10px 14px; border-radius: var(--radius);
+  background: var(--accent-soft); border: 1px dashed var(--accent-border);
+  font-size: 13px; color: var(--text);
+}
+.import-callout .btn-link { font-size: 13px; padding: 0; }
+.home-paste { align-self: center; font-size: 12.5px; }
+
 .send-col { max-width: 820px; }
 .send-col .toolbar { margin-bottom: 14px; }
 .send-check { flex-basis: 100%; font-size: 13px; font-weight: 600; }
