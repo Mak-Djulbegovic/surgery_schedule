@@ -14,6 +14,8 @@
   var APP_VERSION = 'v2';
   var LS_PREFIX = 'surgsched:v1:day:';
   var DATA_OVERRIDE_KEY = 'surgsched:v1:dataOverride';
+  // Where this browser last was (date + tab) — for "Pick up where you left off".
+  var LAST_KEY = 'surgsched:v2:last';
   var SAVE_DEBOUNCE_MS = 300;
   var WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   var CATEGORIES = ['cataract', 'cornea', 'glaucoma', 'plastics', 'peds', 'retina', 'trauma', 'other'];
@@ -306,6 +308,7 @@
       if (m) maxId = Math.max(maxId, +m[1]);
     });
     out.seq = (typeof st.seq === 'number' && st.seq > maxId) ? st.seq : maxId + 1;
+    if (typeof st.savedAt === 'number') out.savedAt = st.savedAt;
     out.date = dateISO;
     return out;
   }
@@ -318,26 +321,64 @@
     return defaultState(dateISO);
   }
 
+  // Everything is saved in this browser's localStorage and nowhere else:
+  // nobody on another device or browser can see or change it.
   var saveTimer = null;
   // True only once the user has actually edited the loaded day. saveNow() is a
   // no-op while false, so merely visiting a date (or closing the tab) never
   // fabricates a "saved draft" for a day the user never touched — the Home
   // draft-detection and Recent-days chips rely on keys meaning real edits.
   var stateDirty = false;
+  // Edits not yet written. Only real changes are written, so flushing on
+  // tab-hide never rewrites an unchanged day (which would ping other tabs).
+  var unsaved = false;
+  var saveFailed = false;   // localStorage refused the write (blocked / full)
+  var syncConflict = false; // another tab saved this day while we had unsaved edits
   function saveNow() {
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-    if (App.state && stateDirty) lsSet(LS_PREFIX + App.state.date, JSON.stringify(App.state));
+    if (!App.state || !stateDirty || !unsaved || syncConflict) return;
+    App.state.savedAt = Date.now();
+    var ok = lsSet(LS_PREFIX + App.state.date, JSON.stringify(App.state));
+    unsaved = !ok;
+    saveFailed = !ok;
+    renderSaveState();
   }
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(saveNow, SAVE_DEBOUNCE_MS);
   }
 
+  function clockOf(ts) {
+    var d = new Date(ts);
+    var h = d.getHours(), m = d.getMinutes();
+    return (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m + (h < 12 ? ' AM' : ' PM');
+  }
+  function savedWhen(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    return isoOf(d) === isoOf(new Date()) ? clockOf(ts) : WEEKDAY_NAMES[d.getDay()].slice(0, 3) + ' ' + fmtMDYY(d) + ' ' + clockOf(ts);
+  }
+
+  // Header: "Saving…" / "✓ Saved 12:41 PM" / "⚠ Not saved".
+  function renderSaveState() {
+    var n = $('saveState');
+    if (!n || !App.state) return;
+    var cls = 'save-state', text = '';
+    if (syncConflict) { cls += ' bad'; text = '⚠ Not saved — pick a version above'; }
+    else if (saveFailed) { cls += ' bad'; text = '⚠ Not saved — this browser is blocking storage'; }
+    else if (unsaved) { cls += ' busy'; text = 'Saving…'; }
+    else if (App.state.savedAt) { cls += ' ok'; text = '✓ Saved ' + savedWhen(App.state.savedAt); }
+    n.className = cls;
+    n.textContent = text;
+  }
+
   // Call after every manual input: debounced persist, live preview refresh,
   // and a debounced recompute of who-is-where (strip + tab badges).
   function touch() {
     stateDirty = true;
+    unsaved = true;
     scheduleSave();
+    renderSaveState();
     if (App.activeTab === 'preview') renderPreview();
     scheduleLive();
   }
@@ -3487,6 +3528,9 @@
     keys.forEach(lsRemove);
     App.state = defaultState(App.state.date);
     stateDirty = false; // fresh defaults — don't resurrect a key on next save
+    unsaved = false;
+    syncConflict = false;
+    hideSyncBanner();
     computeRoster();
     renderAll();
     renderHome();
@@ -3619,12 +3663,88 @@
     saveNow(); // flush pending edits for the old date
     App.state = loadState(dateISO);
     stateDirty = false;   // freshly loaded — nothing user-edited yet
+    unsaved = false;
+    saveFailed = false;
+    syncConflict = false;
+    hideSyncBanner();
     refreshAddOnsForDate(); // untouched add-on rows follow the schedule date
     coverageTime = null;
     coverageFollowNow = true;
     addOnOther = {};
     computeRoster();
     renderAll();
+    renderSaveState();
+    // Changing the date inside the app: the URL follows (so a reload or a
+    // restored tab reopens this day) and so does "where you left off".
+    if (!document.body.classList.contains('home-active') && App.currentRoute && App.currentRoute !== 'home') {
+      syncHash(App.currentRoute, true);
+    }
+    rememberPlace();
+  }
+
+  function rememberPlace() {
+    if (!App.state || document.body.classList.contains('home-active')) return;
+    if (WORKFLOW_TABS.indexOf(App.activeTab) === -1) return;
+    lsSet(LAST_KEY, JSON.stringify({ date: App.state.date, tab: App.activeTab, at: Date.now() }));
+  }
+
+  /* Two tabs (or windows) of this app in the SAME browser share storage.
+     When another one saves the day open here, take its version — so a tab
+     left open never later writes an old copy over newer work. If this tab
+     has unsaved edits too, stop and ask which version to keep. */
+  function onStorage(e) {
+    if (e.storageArea && e.storageArea !== window.localStorage) return;
+    var key = e.key;
+    if (key !== null && key.indexOf(LS_PREFIX) !== 0) return;
+    if (document.body.classList.contains('home-active')) {
+      updateHomeCreate();
+      renderHomeRecent();
+      renderHomeResume();
+      return;
+    }
+    if (!App.state || (key !== null && key !== LS_PREFIX + App.state.date)) return;
+    if (unsaved) {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+      showSyncConflict();
+      return;
+    }
+    takeStoredDay('Updated — this day was changed in another tab or window');
+  }
+
+  function takeStoredDay(msg) {
+    App.state = loadState(App.state.date);
+    stateDirty = false;
+    unsaved = false;
+    syncConflict = false;
+    hideSyncBanner();
+    computeRoster();
+    renderAll();
+    renderSaveState();
+    if (msg) toast(msg);
+  }
+
+  function showSyncConflict() {
+    syncConflict = true;
+    var bn = $('syncBanner');
+    if (bn) {
+      clearNode(bn);
+      bn.appendChild(el('span', { class: 'sync-text', text: 'This day was also changed in another tab or window, and your latest edits here are not saved yet.' }));
+      bn.appendChild(el('button', {
+        type: 'button', class: 'btn btn-small btn-primary', text: 'Keep mine',
+        onclick: function () { syncConflict = false; hideSyncBanner(); unsaved = true; stateDirty = true; saveNow(); toast('Saved your version'); }
+      }));
+      bn.appendChild(el('button', {
+        type: 'button', class: 'btn btn-small', text: 'Use the other version',
+        onclick: function () { takeStoredDay('Loaded the version from the other tab'); }
+      }));
+      bn.classList.remove('hidden');
+    }
+    renderSaveState();
+  }
+
+  function hideSyncBanner() {
+    var bn = $('syncBanner');
+    if (bn) { bn.classList.add('hidden'); clearNode(bn); }
   }
 
   function startFromYesterday() {
@@ -3690,6 +3810,7 @@
       : fresh;
     syncAddOnLabels();
     stateDirty = true; // explicit user action — this day now really has content
+    unsaved = true;
     saveNow();
     renderAll();
     toast('Copied night float, who’s out, lectures & add-ons from ' + src + (App.state.absences.length ? ' — pick today’s coverers on Out today' : ''));
@@ -3697,11 +3818,16 @@
 
   function clearDay() {
     if (!window.confirm('Clear everything saved for ' + App.state.date + '? This cannot be undone.')) return;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     lsRemove(LS_PREFIX + App.state.date);
     App.state = defaultState(App.state.date);
     stateDirty = false; // back to untouched — don't resurrect the key on next save
+    unsaved = false;
+    syncConflict = false;
+    hideSyncBanner();
     computeRoster(); // re-prefill Night Float / buddies and rebuild the board
     renderAll();
+    renderSaveState();
     toast('Cleared ' + App.state.date);
   }
 
@@ -3922,6 +4048,39 @@
     });
   }
 
+  // "Pick up where you left off": the day and step this browser was last on,
+  // when that day has a saved draft (closing the tab loses nothing).
+  function lastPlace() {
+    var last = null;
+    try { last = JSON.parse(lsGet(LAST_KEY) || 'null'); } catch (e) { last = null; }
+    if (!last || !/^\d{4}-\d{2}-\d{2}$/.test(String(last.date)) || WORKFLOW_TABS.indexOf(last.tab) === -1) return null;
+    return last;
+  }
+
+  // The card shows only for a day other than the one picked below — for the
+  // picked day the big button already continues it (on the step you left).
+  function renderHomeResume() {
+    var btn = $('homeResume');
+    if (!btn) return;
+    var last = lastPlace();
+    var hd = $('homeDate');
+    var raw = last ? lsGet(LS_PREFIX + last.date) : null;
+    var recent = last && typeof last.at === 'number' && Date.now() - last.at < 7 * 86400000;
+    var ok = !!(raw && recent && !(hd && hd.value === last.date));
+    btn.classList.toggle('hidden', !ok);
+    clearNode(btn);
+    btn.onclick = null;
+    if (!ok) return;
+    var savedAt = 0;
+    try { savedAt = JSON.parse(raw).savedAt || 0; } catch (e) { savedAt = 0; }
+    var d = parseISO(last.date);
+    btn.appendChild(el('span', { class: 'resume-k', text: '↩ Pick up where you left off' }));
+    btn.appendChild(el('b', { class: 'resume-what', text: weekdayName(d) + ' ' + fmtMDYY(d) + ' · ' + TAB_TITLES[last.tab] }));
+    var sub = [draftText(draftSummary(last.date)), savedAt ? 'saved ' + savedWhen(savedAt) : ''].filter(Boolean).join(' · ');
+    if (sub) btn.appendChild(el('span', { class: 'resume-sub', text: sub }));
+    btn.onclick = function () { enterApp(last.date, last.tab); };
+  }
+
   function renderHomeRecent() {
     var host = $('homeRecent');
     if (!host) return;
@@ -3932,7 +4091,7 @@
       return;
     }
     host.classList.remove('hidden');
-    host.appendChild(el('div', { class: 'home-recent-label', text: 'Pick up where you left off' }));
+    host.appendChild(el('div', { class: 'home-recent-label', text: 'Recent days' }));
     var grid = el('div', { class: 'recent-grid' });
     dates.forEach(function (dISO) {
       var d = parseISO(dISO);
@@ -3956,13 +4115,20 @@
     if (!hd || !btn) return;
     var v = hd.value;
     var valid = /^\d{4}-\d{2}-\d{2}$/.test(v);
-    var hasDraft = !!(valid && lsGet(LS_PREFIX + v));
+    var raw = valid ? lsGet(LS_PREFIX + v) : null;
+    var hasDraft = !!raw;
     var label = valid ? weekdayName(parseISO(v)) + ' ' + fmtMDYY(parseISO(v)) : '';
     btn.textContent = !valid ? 'Create Surg Schedule →' : (hasDraft ? 'Continue ' : 'Start ') + label + ' →';
     if (hint) {
-      hint.textContent = hasDraft ? 'Saved draft — picks up right where you left off.' : '';
+      var last = lastPlace();
+      var savedAt = 0;
+      try { savedAt = (raw && JSON.parse(raw).savedAt) || 0; } catch (e) { savedAt = 0; }
+      var bits = [last && last.date === v ? 'Saved draft — reopens on ' + TAB_TITLES[last.tab] : 'Saved draft — picks up where you left off'];
+      if (savedAt) bits.push('saved ' + savedWhen(savedAt));
+      hint.textContent = hasDraft ? bits.join(' · ') : '';
       hint.classList.toggle('hidden', !hasDraft);
     }
+    renderHomeResume();
     renderHomeQuick();
     renderHomePreview(valid ? v : '');
   }
@@ -3978,6 +4144,7 @@
     renderHomeSteps();
     updateHomeCreate();
     renderHomeRecent();
+    renderHomeResume();
   }
 
   function enterApp(dateISO, tab) {
@@ -4012,9 +4179,16 @@
   var ROUTE_ALIASES = { cases: 'surgery', assign: 'surgery' };
 
   function routeFromHash() {
-    var h = String(window.location.hash || '').replace(/^#\/?/, '');
+    var h = String(window.location.hash || '').replace(/^#\/?/, '').split('/')[0];
     if (ROUTE_ALIASES[h]) h = ROUTE_ALIASES[h];
     return VALID_ROUTES.indexOf(h) !== -1 ? h : null;
+  }
+
+  // #/surgery/2026-09-28 — the day rides in the URL so a reload, a restored
+  // tab or a phone reopening a tab lands on the same day and step.
+  function dateFromHash() {
+    var d = String(window.location.hash || '').replace(/^#\/?/, '').split('/')[1] || '';
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
   }
 
   // Record the applied route and mirror it into the URL. Writing
@@ -4022,7 +4196,7 @@
   // hash (Back/Forward), the hash already matches and nothing is written.
   function syncHash(route, replace) {
     App.currentRoute = route;
-    var target = '#/' + route;
+    var target = '#/' + route + (route !== 'home' && App.state ? '/' + App.state.date : '');
     if (window.location.hash === target) return;
     try {
       if (replace && window.history && window.history.replaceState) {
@@ -4035,14 +4209,18 @@
 
   function onHashChange() {
     var route = routeFromHash();
-    if (!route || route === App.currentRoute) return;
+    var day = dateFromHash();
+    if (!route) return;
+    var sameDay = !day || (App.state && day === App.state.date);
+    if (route === App.currentRoute && sameDay) return;
     if (route === 'home') {
       goHome();
     } else if (document.body.classList.contains('home-active')) {
       // Deep link / Forward into a tab while sitting on Home.
       var hd = $('homeDate');
-      enterApp((hd && hd.value) || tomorrowISO(), route);
+      enterApp(day || (hd && hd.value) || tomorrowISO(), route);
     } else {
+      if (!sameDay) setDate(day);
       setTab(route);
     }
   }
@@ -4090,6 +4268,7 @@
     renderAvailStrip();
     renderBadges();
     syncHash(tab);
+    rememberPlace();
   }
 
   function renderAll() {
@@ -4210,7 +4389,10 @@
     var btnHomeCreate = $('btnHomeCreate');
     if (btnHomeCreate) {
       btnHomeCreate.addEventListener('click', function () {
-        enterApp((homeDate && homeDate.value) || tomorrowISO());
+        var v = (homeDate && homeDate.value) || tomorrowISO();
+        var last = lastPlace();
+        // a saved draft reopens on the step it was left on
+        enterApp(v, last && last.date === v && lsGet(LS_PREFIX + v) ? last.tab : undefined);
       });
     }
     var btnHomeHowto = $('btnHomeHowto');
@@ -4232,7 +4414,14 @@
       });
     }
 
+    // Autosave already runs 0.3 s after each edit; also flush when the page
+    // is hidden or closed (phones often skip beforeunload).
     window.addEventListener('beforeunload', saveNow);
+    window.addEventListener('pagehide', saveNow);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') saveNow();
+    });
+    window.addEventListener('storage', onStorage);
 
     // First render. A stored override that passed validation can still crash
     // a renderer — that must never brick the boot (Reference/Howto/CPEC empty,
@@ -4266,7 +4455,7 @@
     window.addEventListener('hashchange', onHashChange);
     var initialRoute = routeFromHash();
     if (initialRoute && initialRoute !== 'home') {
-      enterApp(initial, initialRoute);
+      enterApp(dateFromHash() || initial, initialRoute);
     } else {
       App.currentRoute = 'home';
       syncHash('home', true); // replaceState: Back from the landing leaves the site

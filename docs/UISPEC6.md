@@ -39,6 +39,33 @@ PM 9 ▾"), clinic count and note sit side by side, and each timeline bar
 runs full width under its name. Preview & Copy lists what is still open
 (cases without a resident, gaps) with links to fix them.
 
+## Saving and working at the same time (9/28/2026)
+
+The chief: "I do not want my instance affecting someone else who may be
+working on the surg schedule at the same time — but there should be an
+automatic save in case they X out of the tab."
+
+- **No shared state across people — by design.** The app makes no network
+  calls; each browser keeps its own drafts in localStorage. Two people on
+  two devices/browsers are fully isolated (browser-tested: two contexts).
+- **Autosave**: 0.3 s after each edit, plus a flush on `visibilitychange`
+  (hidden), `pagehide` and `beforeunload` — phones often skip
+  `beforeunload`. Only real changes are written (`unsaved` flag), so a flush
+  never rewrites an unchanged day. `savedAt` is stored with the day. Header
+  marker: Saving… / ✓ Saved h:mm / ⚠ Not saved (storage blocked or full —
+  previously a silent failure).
+- **Resume**: the hash carries the day — `#/<tab>/<YYYY-MM-DD>` (old
+  `#/<tab>` links still work) — so reload / restored tab / a phone reloading
+  an evicted tab lands on the same day and step. `surgsched:v2:last`
+  remembers {date, tab}; the landing's "Pick up where you left off" card
+  appears for a day other than the one picked (within 7 days), and the big
+  Continue button reopens a saved draft on the step it was left on.
+- **Same browser, two tabs** share storage. A tab takes another tab's save
+  of the open day (`storage` event) with a toast; if it has unsaved edits of
+  its own it stops saving and asks — Keep mine / Use the other version.
+  Shared workroom computers on one browser profile still share drafts —
+  documented, not solved (would need sign-in or per-person keys).
+
 ## The status model (js/status.js — pure, Node-tested)
 
 Every resident, every 5 minutes from 7:00 to 17:00, is one of:
