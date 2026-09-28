@@ -207,11 +207,10 @@ var CASES = [
 var res = Assign.suggest(CASES, roster, DATA);
 eq(res.length, 6, 'suggest: one result per case');
 
-// Process order: peds & scheduled first (original order), then add-ons.
-sameMembers(res.slice(0, 3).map(function (r) { return r.caseId; }), ['c1', 'c4', 'c6'],
-  'suggest: peds/scheduled/private group processed first');
-sameMembers(res.slice(3).map(function (r) { return r.caseId; }), ['c2', 'c3', 'c5'],
-  'suggest: add-ons processed after scheduled group');
+// Process order = the how-to's steps: cataracts (3), add-on glaucoma then
+// cornea (6), peds (8), trauma (9).
+ok(JSON.stringify(res.map(function (r) { return r.caseId; })) === JSON.stringify(['c1', 'c6', 'c3', 'c2', 'c4', 'c5']),
+  "suggest: processed in the how-to's step order — got " + JSON.stringify(res.map(function (r) { return r.caseId; })));
 
 // c1: Huang cataracts x7 0730 → Surg 1 (Cheng), Surg 5 (Wibbelsman) next in chain
 var c1 = findByCase(res, 'c1');
@@ -443,7 +442,8 @@ contains(html3, '<b>Bair; Calotti</b> to cover glaucoma clinic',
   'html: assigned+backup bolded together, note plain');
 
 /* ================================================================== */
-/* (5) PowerPoint how-to refinements                                         */
+/* (5) PowerPoint how-to refinements — where the deck and the "How to   */
+/* Surgical Schedule" doc differ, the doc wins (chief, 9/28/2026).      */
 
 function firstSuggestion(caseObj) {
   var res = Assign.suggest([caseObj], roster, DATA);
@@ -456,11 +456,15 @@ var ovfl = { id: 'p1', section: 'wills', surgeon: 'X', count: 1, serviceCount: 1
 var s1 = firstSuggestion(ovfl);
 ok(s1 && s1.name === 'Calotti', 'pptx: overflow/add-on cataract goes to Surg 2 (Calotti) first');
 
-// Add-on at JHN/Gibbon/JSC -> Surg 2 first regardless of category.
+// Add-on at JHN/Gibbon/JSC: the deck put Surg 2 first for all of them; the
+// doc types add-ons by kind wherever they are — a plastics add-on there is
+// Step 9 (junior on Plastics OR for TABs/outpatient plastics, then Surg 2).
 var jhnAdd = Object.assign({}, ovfl, { id: 'p2', section: 'jhn', category: 'plastics' });
-ok(Assign.classify(jhnAdd) === 'jhnAddOn', 'pptx: JHN add-on classifies as jhnAddOn');
+ok(Assign.classify(jhnAdd) === 'traumaPlasticsAddOn', 'doc: JHN plastics add-on is a Step 9 plastics add-on');
 var s2 = firstSuggestion(jhnAdd);
-ok(s2 && s2.name === 'Calotti', 'pptx: JHN/Gibbon/JSC add-on goes to Surg 2 (Calotti) first');
+ok(s2 && s2.name === 'Camacho', 'doc: JHN plastics add-on offers the junior on Plastics OR (Camacho) first');
+var jhnOther = Object.assign({}, ovfl, { id: 'p2b', section: 'jhn', category: 'other' });
+ok((firstSuggestion(jhnOther) || {}).name === 'Calotti', 'doc: any other JHN add-on is a remaining case — Surg 2 (Calotti) first');
 
 // Plastics add-on AT WILLS -> junior on Plastics OR first (Camacho, 4th-Wed
 // Plastics OR); real trauma skips the junior and starts at Surg 2.
@@ -471,15 +475,19 @@ var trAdd = Object.assign({}, ovfl, { id: 'p4', section: 'wills', category: 'tra
 var s4 = firstSuggestion(trAdd);
 ok(s4 && s4.name === 'Calotti', 'pptx: trauma add-on skips the Plastics OR junior and goes to Surg 2');
 
-// Add-on cornea/glaucoma now fall back to Surg 2 in the chain.
+// Add-on cornea/glaucoma fall back to Surg 2 — via Step 10's chain.
 var agAdd = Object.assign({}, ovfl, { id: 'p5', category: 'glaucoma' });
 var s5 = firstSuggestion(agAdd);
-ok(s5 && s5.name === 'Bair' && s5.alternates.indexOf('Calotti') !== -1,
-  'pptx: add-on glaucoma -> Surg 4 with Surg 2 as fallback alternate');
+ok(s5 && s5.name === 'Bair' && s5.alternates.indexOf('Calotti') === 0,
+  'doc: add-on glaucoma -> Surg 4, then Surg 2 first on the Step 10 fallback');
+eq(JSON.stringify(DATA.hierarchy.addOnGlaucoma.chain), '["Surg 4"]', 'doc Step 6: add-on glaucoma chain is Surg 4 only');
+eq(JSON.stringify(DATA.hierarchy.addOnCornea.chain), '["Surg 3"]', 'doc Step 6: add-on cornea chain is Surg 3 only');
 
-// Scheduled plastics chain now ends at Surg 2.
-ok((DATA.hierarchy.scheduledPlastics.chain || []).slice(-1)[0] === 'Surg 2',
-  'pptx: scheduled plastics chain ends at Surg 2');
+// Scheduled plastics chain ends at Surg 4 (doc Step 7; then "skip for now").
+ok((DATA.hierarchy.scheduledPlastics.chain || []).slice(-1)[0] === 'Surg 4',
+  'doc: scheduled plastics chain ends at Surg 4');
+ok(!DATA.hierarchy.plasticsAddOn && !DATA.hierarchy.addOnCataract && !DATA.hierarchy.jhnAddOn,
+  'doc: no chains the how-to does not have (plastics add-on free-junior step, add-on cataract, JHN add-on)');
 // Scheduled cataracts include Wills OR.
 ok((DATA.hierarchy.scheduledCataract.chain || []).indexOf('WILLS_OR') !== -1,
   'pptx: scheduled cataract chain includes Wills OR');

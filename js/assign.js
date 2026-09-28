@@ -15,11 +15,15 @@
  *                                   -> several at once, nobody taking two
  *
  * `board` (optional) is a Status board (js/status.js). Without it, suggest /
- * backupPlan behave exactly as before (chain order only). With it they are
- * availability-aware, per the how-to: anyone out or already in a case at
- * that time is skipped ("skip for now"), skipped cases fall through to the
- * remaining-cases chain, then to any free senior, then any free junior;
- * "free junior" resolves to actual free PGY-2/3s.
+ * backupPlan go by chain order only (suggest still in the how-to's step
+ * order, with the remaining-cases chain as the fallback). With it they are
+ * availability-aware and follow the how-to's steps in order (the doc is the
+ * authority for who covers — chief, 9/28/2026): each case type is assigned
+ * at its step from its own chain; anyone out or already in a case at that
+ * time is skipped ("skip for now"), and a case nobody in its chain can take
+ * waits for Step 10, the remaining-cases chain, in chronological order.
+ * Nobody outside the chains is ever picked — past the end of a chain it is
+ * Surg 2's call, and the result lists who else is free (`outside`).
  *
  * All functions accept an optional `data` argument (the SCHED_DATA
  * object); otherwise they fall back to window.SCHED_DATA / require('./data.js').
@@ -48,27 +52,48 @@
   /* classify                                                            */
   /* ------------------------------------------------------------------ */
 
+  // Case type → hierarchy key, by the how-to's categories. Location does not
+  // change the type: an add-on at JHN/Gibbon/JSC is typed like one at Wills.
+  // Add-on cataracts and anything else untyped are "remaining cases".
   function classify(caseObj, data) {
     var cat = (caseObj && caseObj.category) || '';
     var addOn = !!(caseObj && caseObj.addOn);
     if (cat === 'peds') return 'peds';
-    // Add-ons at JHN/Gibbon/Jeff Surgicenter go to Surg 2 first.
-    if (addOn && caseObj && caseObj.section === 'jhn') return 'jhnAddOn';
     if (cat === 'cornea' && addOn) return 'addOnCornea';
     if (cat === 'glaucoma' && addOn) return 'addOnGlaucoma';
-    if (cat === 'cataract' && addOn) return 'addOnCataract';
-    // Plastics add-ons get their own chain (juniors first) when the data
-    // carries one; older/imported configurations keep the combined chain.
-    if (cat === 'plastics' && addOn) {
-      var d = getData(data);
-      return (d && d.hierarchy && d.hierarchy.plasticsAddOn) ? 'plasticsAddOn' : 'traumaPlasticsAddOn';
-    }
-    if (cat === 'trauma') return 'traumaPlasticsAddOn';
+    if (cat === 'trauma' || (cat === 'plastics' && addOn)) return 'traumaPlasticsAddOn';
     if (cat === 'plastics') return 'scheduledPlastics';
     if (cat === 'cornea') return 'scheduledCornea';
     if (cat === 'glaucoma') return 'scheduledGlaucoma';
-    if (cat === 'cataract') return 'scheduledCataract';
+    if (cat === 'cataract' && !addOn) return 'scheduledCataract';
     return 'remaining';
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* the how-to's order of steps                                         */
+  /* ------------------------------------------------------------------ */
+  // Full "How to Surgical Schedule": Steps 3–4 scheduled cataracts, Step 5
+  // scheduled cornea/glaucoma, Step 6 add-on glaucoma → Surg 4 and add-on
+  // cornea → Surg 3, Step 7 scheduled plastics, Step 8 peds, Step 9 add-on
+  // trauma and add-on plastics, Step 10 the remaining cases chronologically,
+  // Step 12 PM clinic coverage. data.hierarchy[key].step overrides.
+  var DOC_STEP = {
+    scheduledCataract: 3, scheduledCornea: 5, scheduledGlaucoma: 5,
+    addOnGlaucoma: 6, addOnCornea: 6, scheduledPlastics: 7, peds: 8,
+    traumaPlasticsAddOn: 9, remaining: 10
+  };
+
+  function stepOf(key, hier) {
+    if (hier && typeof hier.step === 'number') return hier.step;
+    return DOC_STEP[key] || 10;
+  }
+
+  // Within a step the doc's own listing order: "Add on Glaucoma … Add on
+  // Cornea" (Step 6), "add-on trauma and add on Plastics" (Step 9).
+  function subRank(caseObj) {
+    var cat = (caseObj && caseObj.category) || '';
+    if (cat === 'glaucoma' || cat === 'trauma') return 0;
+    return 1;
   }
 
   function needsResident(caseObj) {
@@ -269,17 +294,6 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* suggest                                                             */
-  /* ------------------------------------------------------------------ */
-
-  function processGroup(key) {
-    if (key === 'remaining') return 2;
-    if (key === 'addOnCornea' || key === 'addOnGlaucoma' || key === 'addOnCataract' ||
-        key === 'jhnAddOn' || key === 'traumaPlasticsAddOn' || key === 'plasticsAddOn') return 1;
-    return 0; // peds + scheduled specialty + plastics + cataract
-  }
-
-  /* ------------------------------------------------------------------ */
   /* availability-aware chain walk (needs a Status board)                */
   /* ------------------------------------------------------------------ */
 
@@ -309,36 +323,34 @@
     return out;
   }
 
-  // Ordered candidates for one case: its own chain, then (unless it IS the
-  // remaining chain) the remaining-cases chain — the how-to's "skip for now,
-  // then assign the remaining cases" — then any free senior, then any free
-  // junior. requireFree marks people who qualify only by being free right
-  // then (free juniors, fall-through).
-  function availCandidates(chain, key, roster, data, board, spans, selfId) {
-    var hierarchy = (data && data.hierarchy) || {};
+  // The OR-block tokens: the how-to's "1st year on Plastics OR", "1st or
+  // 2nd year on Peds OR" … take a resident only while they are on that OR —
+  // one in clinic at the time stays in clinic (chief, 9/2026: "if the
+  // plastics resident is in clinic then they will stay in clinic as
+  // default"). Surg roles and the Cooper senior ARE pulled from clinic
+  // (Surg 3/4 "are all day even if they have clinic"; Surg 2 takes the
+  // globe) and someone covers.
+  var OR_TOKENS = { PEDS_OR_JUNIOR: true, PLASTICS_OR_PGY2: true, PLASTICS_OR_JUNIOR: true, WILLS_OR: true, RETINA: true };
+
+  // One chain, in order, for one case. FREE_JUNIOR ("free and willing 1st
+  // or 2nd year at the discretion of Surg 2") resolves to the juniors who
+  // are actually free for the whole case (requireFree).
+  function chainCandidates(chain, roster, board, spans, selfId, step) {
     var out = [];
     var seen = {};
-    function push(name, via, requireFree, stage, token) {
+    function push(name, via, token) {
       if (!name || seen[name]) return;
       seen[name] = true;
-      out.push({ name: name, via: via, requireFree: !!requireFree, stage: stage, token: token || '' });
+      out.push({ name: name, via: via, token: token, step: step, requireFree: token === 'FREE_JUNIOR', orBlock: !!OR_TOKENS[token] });
     }
-    function addChain(ch, stage) {
-      (ch || []).forEach(function (token) {
-        if (token === 'FREE_JUNIOR') {
-          freeNames(board, spans, selfId, ['pgy2', 'pgy3']).forEach(function (n) {
-            push(n, FREE_JUNIOR_LABEL, true, stage, token);
-          });
-          return;
-        }
-        var r = resolveToken(token, roster);
-        r.names.forEach(function (n) { push(n, r.label, false, stage, token); });
-      });
-    }
-    addChain(chain, 'chain');
-    if (key !== 'remaining' && hierarchy.remaining) addChain(hierarchy.remaining.chain, 'remaining');
-    freeNames(board, spans, selfId, ['pgy4']).forEach(function (n) { push(n, 'free senior', true, 'fallthrough'); });
-    freeNames(board, spans, selfId, ['pgy2', 'pgy3']).forEach(function (n) { push(n, 'free junior', true, 'fallthrough'); });
+    (chain || []).forEach(function (token) {
+      if (token === 'FREE_JUNIOR') {
+        freeNames(board, spans, selfId, ['pgy2', 'pgy3']).forEach(function (n) { push(n, FREE_JUNIOR_LABEL, token); });
+        return;
+      }
+      var r = resolveToken(token, roster);
+      r.names.forEach(function (n) { push(n, r.label, token); });
+    });
     return out;
   }
 
@@ -352,34 +364,323 @@
     return st.label;
   }
 
-  // Walk one case's candidates against the board plus this pass's own
-  // suggestions (`extra`: name -> spans). A candidate is skipped only when
-  // out, already in a case, or (for requireFree people) not free. Being in
-  // clinic does NOT skip a chain member — they are pulled and someone covers
-  // (e.g. Surg 2 leaves the clinic they were covering to take a globe).
-  function walkCase(c, key, chain, roster, data, board, extra) {
-    var spans = board.caseSpansFor(c).spans;
-    var cands = availCandidates(chain, key, roster, data, board, spans, c.id);
+  // claims: name -> [{ start, end, what, by }] — residents already picked for
+  // another case in this pass (`what` is the skip reason shown).
+  function claimAt(list, spans) {
+    for (var i = 0; i < (list || []).length; i++) {
+      if (spansOverlap([list[i]], spans)) return list[i];
+    }
+    return null;
+  }
+
+  // One step of the how-to for one case: walk `chain` in order. A candidate
+  // is skipped when out, already in a case, off-site, already picked for
+  // another case then, not free when only a free resident qualifies, or in
+  // clinic when drawn from an OR block. `tried`: names already walked for
+  // this case at an earlier step — not repeated (nothing frees up between).
+  function walkStep(c, chain, step, roster, board, claims, spans, tried) {
+    var cands = chainCandidates(chain, roster, board, spans, c.id, step);
     var steps = [];
     var primary = null;
     var primaryStatus = null;
     var alternates = [];
     cands.forEach(function (cand) {
+      if (tried && tried[cand.name]) return;
       var st = board.statusDuringSpans(cand.name, spans, { exclude: c.id });
+      var cl = null;
       var why = null;
       if (st.kind === 'out') why = st.label;
       else if (st.kind === 'case') why = busyText(st);
       else if (st.cls === 'offsite') why = st.label; // at Cooper — not pulled to Wills
-      else if (spansOverlap(extra[cand.name], spans)) why = 'suggested for another case at this time';
+      else if ((cl = claimAt(claims[cand.name], spans))) why = cl.what;
       else if (cand.requireFree && st.kind !== 'free') why = st.label;
-      if (!why && !primary) { primary = cand; primaryStatus = st; }
-      else if (!why) alternates.push(cand.name);
+      else if (cand.orBlock && st.kind === 'clinic') why = st.label + ' — stays in clinic';
+      var verdict = why ? 'skip' : (primary ? 'alt' : 'take');
+      if (verdict === 'take') { primary = cand; primaryStatus = st; }
+      else if (verdict === 'alt') alternates.push(cand.name);
       steps.push({
-        name: cand.name, via: cand.via, stage: cand.stage, token: cand.token, status: st,
-        verdict: why ? 'skip' : (primary === cand ? 'take' : 'alt'), why: why
+        name: cand.name, via: cand.via, step: step, token: cand.token, status: st,
+        verdict: verdict, why: why, takenBy: cl ? (cl.by || null) : null
       });
     });
-    return { primary: primary, primaryStatus: primaryStatus, steps: steps, alternates: alternates, spans: spans };
+    return { primary: primary, primaryStatus: primaryStatus, steps: steps, alternates: alternates };
+  }
+
+  // Free for all of `spans`, in none of the chains walked and not already
+  // picked: the how-to never reaches them, so they are listed for Surg 2 to
+  // decide — never suggested. Seniors first.
+  function outsideFree(board, spans, selfId, walked, claims) {
+    var out = [];
+    ['pgy4', 'pgy3', 'pgy2'].forEach(function (y) {
+      board.order.forEach(function (n) {
+        if (walked[n] || boardYear(board, n) !== y) return;
+        if (claimAt((claims || {})[n], spans)) return;
+        if (board.statusDuringSpans(n, spans, { exclude: selfId }).kind === 'free') out.push(n);
+      });
+    });
+    return out;
+  }
+
+  function stepsOf(e) {
+    var all = [];
+    (e.stages || []).forEach(function (w) { all = all.concat(w.steps); });
+    return all;
+  }
+
+  // The how-to, run over a set of cases against the board. entries:
+  // [{ c, i, key, hier, chain, step, sub, spans, private }]. Steps before 10
+  // go first, in step order (the doc's listing order within a step, then the
+  // input order); a case nobody in its chain can take is skipped for now.
+  // Then Step 10: the remaining cases and everything skipped, in
+  // chronological order, down the remaining-cases chain. Sets e.stages,
+  // e.pick, e.pickStatus, e.deferred; returns the entries in the order they
+  // were settled, and the claims.
+  function runSteps(entries, roster, data, board, claimOf) {
+    var hierarchy = (data && data.hierarchy) || {};
+    var remChain = (hierarchy.remaining && hierarchy.remaining.chain) || [];
+    var claims = {};
+    var settled = [];
+    function take(e, w) {
+      e.pick = w.primary;
+      e.pickStatus = w.primaryStatus;
+      if (!w.primary || trimStr(e.c.assigned)) return; // an assigned case is on the board already
+      var cl = claimOf(e);
+      claims[w.primary.name] = (claims[w.primary.name] || []).concat(e.spans.map(function (sp) {
+        return { start: sp.start, end: sp.end, what: cl.what, by: cl.by || null };
+      }));
+    }
+    var later = [];
+    entries.slice().sort(function (a, b) {
+      return a.step - b.step || a.sub - b.sub || a.i - b.i;
+    }).forEach(function (e) {
+      e.stages = [];
+      e.pick = null;
+      e.pickStatus = null;
+      e.deferred = false;
+      if (e.step >= 10) { later.push(e); return; }
+      if (e.private) { settled.push(e); return; }
+      var w = walkStep(e.c, e.chain, e.step, roster, board, claims, e.spans, null);
+      e.stages.push(w);
+      if (w.primary) { take(e, w); settled.push(e); } else later.push(e);
+    });
+    later.sort(function (a, b) {
+      var ka = startKey(a.c);
+      var kb = startKey(b.c);
+      if (ka !== kb) return ka < kb ? -1 : 1;
+      return a.step - b.step || a.sub - b.sub || a.i - b.i;
+    }).forEach(function (e) {
+      if (e.private) { settled.push(e); return; }
+      var tried = {};
+      stepsOf(e).forEach(function (s) { tried[s.name] = true; });
+      e.deferred = e.step < 10;
+      var w = walkStep(e.c, e.deferred ? remChain : e.chain, 10, roster, board, claims, e.spans, tried);
+      e.stages.push(w);
+      take(e, w);
+      settled.push(e);
+    });
+    return { settled: settled, claims: claims };
+  }
+
+  // Trauma skips the junior on Plastics OR — the doc gives them only TABs
+  // and add-on outpatient plastics.
+  function chainFor(key, c, hier) {
+    var chain = (hier && hier.chain) || [];
+    if (key === 'traumaPlasticsAddOn' && c && c.category === 'trauma') {
+      chain = chain.filter(function (t) { return t !== 'PLASTICS_OR_JUNIOR'; });
+    }
+    return chain;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* suggest                                                             */
+  /* ------------------------------------------------------------------ */
+
+  function trimStr(s) { return String(s == null ? '' : s).replace(/^\s+|\s+$/g, ''); }
+
+  function privateResult(c) {
+    return { caseId: c.id, name: '', reasons: ['private — no resident needed'], warnings: [], alternates: [] };
+  }
+
+  // One settled case, availability-aware (the board path of suggest()).
+  function boardResult(e, board, load, claims) {
+    var c = e.c;
+    var hier = e.hier;
+    var steps = stepsOf(e);
+    var takeIdx = -1;
+    steps.forEach(function (s, i) { if (takeIdx === -1 && s.verdict === 'take') takeIdx = i; });
+    var skipped = steps.filter(function (s, i) {
+      return s.verdict === 'skip' && (takeIdx === -1 || i < takeIdx);
+    }).map(function (s) { return { name: s.name, via: s.via, why: s.why, step: s.step }; });
+    var last = e.stages[e.stages.length - 1];
+
+    if (!e.pick) {
+      var walked = {};
+      steps.forEach(function (s) { walked[s.name] = true; });
+      var outside = outsideFree(board, e.spans, c.id, walked, claims);
+      return {
+        caseId: c.id, name: '', status: null, skipped: skipped, alternates: [], outside: outside,
+        step: e.step, deferred: e.deferred,
+        reasons: [hier.label + ' — nobody in the how-to chain is free then'],
+        warnings: ['Surg 2’s call — ' + (outside.length
+          ? 'free, but outside the how-to chain: ' + outside.join(', ')
+          : 'nobody else is free then either')]
+      };
+    }
+    var p = e.pick;
+    var st = e.pickStatus;
+    var reasons = [hier.label + ' → ' + p.via + (e.deferred ? ' (remaining-cases chain)' : '')];
+    if (e.deferred) reasons.push('how-to Step ' + e.step + ': skipped for now → Step 10');
+    var warnings = [];
+    if (p.via === FREE_JUNIOR_LABEL) {
+      warnings.push(p.name + ' is a free junior — confirm with Surg 2 (their discretion)');
+    }
+    if (st && st.kind === 'clinic') {
+      warnings.push(p.name + ' leaves ' + (st.clinic || 'clinic') + (st.covering && st.covering !== p.name ? ' (covering for ' + st.covering + ')' : '') + ' — needs a backup');
+    } else if (st && st.kind === 'duty') {
+      warnings.push(p.name + ' is on ' + st.label);
+    }
+    var alternates = (last && last.alternates) || [];
+    var nextName = alternates[0] || null;
+    var primaryLoad = load[p.name] || 0;
+    if (nextName !== null && primaryLoad >= (load[nextName] || 0) + 2) {
+      warnings.push(p.name + ' already has ' + primaryLoad + ' cases — consider next in chain (' + nextName + ')');
+    }
+    if (board.caseSpansFor(c).unknownStart) warnings.push('No start time — assumed 7:30 AM');
+    if (!trimStr(c.assigned)) load[p.name] = primaryLoad + 1;
+    return {
+      caseId: c.id, name: p.name, status: st, skipped: skipped, outside: [],
+      step: e.step, deferred: e.deferred,
+      reasons: reasons, warnings: warnings, alternates: alternates.slice(0, 6)
+    };
+  }
+
+  // Without a board: chain order only — the case's own chain, then the
+  // remaining-cases chain the how-to falls back to (Step 10).
+  function legacyResult(e, roster, hierarchy, load) {
+    var c = e.c;
+    var hier = e.hier;
+    var candidates = resolveChain(e.chain, roster);
+    if (e.step < 10 && hierarchy.remaining) {
+      var have = {};
+      candidates.forEach(function (x) { if (x.name) have[x.name] = true; });
+      resolveChain(hierarchy.remaining.chain, roster).forEach(function (x) {
+        if (x.name && !have[x.name]) { have[x.name] = true; candidates.push(x); }
+      });
+    }
+
+    var primary = null;
+    var alternates = [];
+    var nextName = null;
+    for (var i = 0; i < candidates.length; i++) {
+      var cand = candidates[i];
+      if (cand.freeJunior) {
+        alternates.push(cand.via);
+        continue;
+      }
+      if (!primary) {
+        primary = cand;
+      } else {
+        if (nextName === null) nextName = cand.name;
+        alternates.push(cand.name);
+      }
+    }
+
+    if (!primary) {
+      return {
+        caseId: c.id,
+        name: '',
+        reasons: [hier.label + ' — no one in the chain is available today'],
+        warnings: ['No resident resolvable from the hierarchy chain'],
+        alternates: alternates
+      };
+    }
+
+    var reasons = [hier.label + ' → ' + primary.via];
+    var warnings = [];
+
+    // Load-balance: still suggest the first choice, but warn.
+    var primaryLoad = load[primary.name] || 0;
+    if (nextName !== null && primaryLoad >= (load[nextName] || 0) + 2) {
+      warnings.push(primary.name + ' already has ' + primaryLoad +
+        ' cases — consider next in chain (' + nextName + ')');
+    }
+
+    // Session conflicts.
+    var sess = sessionOf(c);
+    var spans = spansDay(c);
+    if (spans) {
+      warnings.push('x' + c.count + ' starting ' + c.start + ' — likely spans AM and PM');
+    }
+    var sessions = spans ? ['am', 'pm'] : [sess];
+    var resident = findResident(roster, primary.name);
+    if (resident) {
+      sessions.forEach(function (s) {
+        var cell = resident[s];
+        var text = cell && cell.text;
+        if (isClinicText(text)) {
+          warnings.push(primary.name + ' is in ' + text + ' clinic ' + s.toUpperCase());
+        }
+      });
+    }
+
+    // Count the suggestion toward this pass's load (unless the case already
+    // carries a manual assignment, which was pre-counted).
+    if (!c.assigned) load[primary.name] = primaryLoad + 1;
+
+    return {
+      caseId: c.id,
+      name: primary.name,
+      reasons: reasons,
+      warnings: warnings,
+      alternates: alternates
+    };
+  }
+
+  function suggest(cases, roster, data, board) {
+    data = getData(data);
+    var hierarchy = (data && data.hierarchy) || {};
+
+    // Load = # of cases per resident this pass (pre-existing manual
+    // assignments count from the start).
+    var load = {};
+    (cases || []).forEach(function (c) {
+      if (c && c.assigned) load[c.assigned] = (load[c.assigned] || 0) + 1;
+    });
+
+    var entries = [];
+    (cases || []).forEach(function (c, i) {
+      if (!c) return;
+      var key = classify(c, data);
+      var hier = hierarchy[key] || { label: key, chain: [] };
+      entries.push({
+        c: c, i: i, key: key, hier: hier, chain: chainFor(key, c, hier),
+        step: stepOf(key, hier), sub: subRank(c), private: !needsResident(c),
+        spans: board ? board.caseSpansFor(c).spans : null
+      });
+    });
+
+    if (board) {
+      var run = runSteps(entries, roster, data, board, function (e) {
+        return { what: 'suggested for ' + (trimStr(e.c.surgeon) || 'another case') + ' at this time' };
+      });
+      return run.settled.map(function (e) {
+        return e.private ? privateResult(e.c) : boardResult(e, board, load, run.claims);
+      });
+    }
+
+    // No board: the same step order, chronological within Step 10.
+    entries.sort(function (a, b) {
+      if (a.step !== b.step) return a.step - b.step;
+      if (a.step >= 10) {
+        var ka = startKey(a.c);
+        var kb = startKey(b.c);
+        if (ka !== kb) return ka < kb ? -1 : 1;
+      }
+      return a.sub - b.sub || a.i - b.i;
+    });
+    return entries.map(function (e) {
+      return e.private ? privateResult(e.c) : legacyResult(e, roster, hierarchy, load);
+    });
   }
 
   // Where would `name` have been during `spans` — which clinic (theirs, or
@@ -397,10 +698,11 @@
     return found;
   }
 
-  // Who covers `pulled.clinic` over its window: the clinic-coverage chain
-  // (Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 → Wills OR →
-  // Retina), then any free senior, then any free junior. A coverer must be
-  // free — not out, in a case, in a clinic, on fixed duty or off-site.
+  // Who covers `pulled.clinic` over its window — Step 12, the clinic-
+  // coverage chain only (Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 →
+  // Surg 5 → Wills OR → Retina). A coverer must be free — not out, in a
+  // case, in a clinic, on fixed duty or off-site. When nobody on the chain
+  // is, `outside` lists who else is free (Surg 2's call, never picked).
   function findClinicCover(pulled, roster, data, board, excludeNames, excludeId) {
     var hierarchy = (data && data.hierarchy) || {};
     var chain = (hierarchy.clinicCoverage && hierarchy.clinicCoverage.chain) || [];
@@ -416,13 +718,6 @@
         cands.push({ name: n, source: r.label, token: token });
       });
     });
-    var spans = [{ start: pulled.start, end: pulled.end }];
-    freeNames(board, spans, excludeId, ['pgy4']).forEach(function (n) {
-      if (!seen[n]) { seen[n] = true; cands.push({ name: n, source: 'free senior', token: '' }); }
-    });
-    freeNames(board, spans, excludeId, ['pgy2', 'pgy3']).forEach(function (n) {
-      if (!seen[n]) { seen[n] = true; cands.push({ name: n, source: 'free junior', token: '' }); }
-    });
     var steps = [];
     var ok = [];
     cands.forEach(function (cand) {
@@ -434,186 +729,9 @@
     return {
       primary: ok[0] ? { name: ok[0].name, source: ok[0].source } : null,
       second: ok[1] ? { name: ok[1].name, source: ok[1].source } : null,
-      steps: steps
+      steps: steps,
+      outside: ok.length ? [] : outsideFree(board, [{ start: pulled.start, end: pulled.end }], excludeId, seen, null)
     };
-  }
-
-  // One case, availability-aware (the board path of suggest()).
-  function suggestWithBoard(c, key, hier, chain, roster, data, board, extra, load) {
-    var w = walkCase(c, key, chain, roster, data, board, extra);
-    var takeIdx = -1;
-    w.steps.forEach(function (s, i) { if (takeIdx === -1 && s.verdict === 'take') takeIdx = i; });
-    var skipped = w.steps.filter(function (s, i) {
-      return s.verdict === 'skip' && (takeIdx === -1 ? s.stage === 'chain' : i < takeIdx);
-    }).map(function (s) { return { name: s.name, via: s.via, why: s.why }; });
-
-    if (!w.primary) {
-      return {
-        caseId: c.id, name: '', status: null, skipped: skipped, alternates: [],
-        reasons: [hier.label + ' — nobody in the chain is free then'],
-        warnings: ['Everyone in the chain is out or already in a case at this time — and nobody else is free']
-      };
-    }
-    var p = w.primary;
-    var st = w.primaryStatus;
-    var reasons = [hier.label + ' → ' + p.via + (p.stage === 'remaining' ? ' (remaining-cases chain)' : '')];
-    var warnings = [];
-    if (p.via === FREE_JUNIOR_LABEL || p.via === 'free junior') {
-      warnings.push(p.name + ' is a free junior — confirm with Surg 2 (their discretion)');
-    }
-    if (st && st.kind === 'clinic') {
-      warnings.push(p.name + ' leaves ' + (st.clinic || 'clinic') + (st.covering && st.covering !== p.name ? ' (covering for ' + st.covering + ')' : '') + ' — needs a backup');
-    } else if (st && st.kind === 'duty') {
-      warnings.push(p.name + ' is on ' + st.label);
-    }
-    var nextName = w.alternates[0] || null;
-    var primaryLoad = load[p.name] || 0;
-    if (nextName !== null && primaryLoad >= (load[nextName] || 0) + 2) {
-      warnings.push(p.name + ' already has ' + primaryLoad + ' cases — consider next in chain (' + nextName + ')');
-    }
-    if (board.caseSpansFor(c).unknownStart) warnings.push('No start time — assumed 7:30 AM');
-    if (!trimStr(c.assigned)) {
-      extra[p.name] = (extra[p.name] || []).concat(w.spans);
-      load[p.name] = primaryLoad + 1;
-    }
-    return {
-      caseId: c.id, name: p.name, status: st, skipped: skipped,
-      reasons: reasons, warnings: warnings, alternates: w.alternates.slice(0, 6)
-    };
-  }
-
-  function trimStr(s) { return String(s == null ? '' : s).replace(/^\s+|\s+$/g, ''); }
-
-  function suggest(cases, roster, data, board) {
-    data = getData(data);
-    var hierarchy = (data && data.hierarchy) || {};
-    var results = [];
-    var extra = {}; // board path: name -> spans suggested earlier in this pass
-
-    // Load = # of cases per resident this pass (pre-existing manual
-    // assignments count from the start).
-    var load = {};
-    (cases || []).forEach(function (c) {
-      if (c && c.assigned) load[c.assigned] = (load[c.assigned] || 0) + 1;
-    });
-
-    // Process order: peds & scheduled first, then add-ons, then remaining
-    // chronologically (string sort on normalized 24h start).
-    var entries = (cases || []).map(function (c, i) {
-      return { c: c, i: i, key: classify(c, data) };
-    });
-    entries.sort(function (a, b) {
-      var ga = processGroup(a.key);
-      var gb = processGroup(b.key);
-      if (ga !== gb) return ga - gb;
-      if (ga === 2) {
-        var ka = startKey(a.c);
-        var kb = startKey(b.c);
-        if (ka !== kb) return ka < kb ? -1 : 1;
-      }
-      return a.i - b.i; // stable
-    });
-
-    entries.forEach(function (entry) {
-      var c = entry.c;
-      if (!c) return;
-
-      if (!needsResident(c)) {
-        results.push({
-          caseId: c.id,
-          name: '',
-          reasons: ['private — no resident needed'],
-          warnings: [],
-          alternates: []
-        });
-        return;
-      }
-
-      var hier = hierarchy[entry.key] || { label: entry.key, chain: [] };
-      var chain = hier.chain || [];
-      // The junior on Plastics OR takes only TABs / outpatient plastics
-      // add-ons — real trauma skips them and starts at Surg 2.
-      if (entry.key === 'traumaPlasticsAddOn' && c.category === 'trauma') {
-        chain = chain.filter(function (t) { return t !== 'PLASTICS_OR_JUNIOR'; });
-      }
-
-      if (board) {
-        results.push(suggestWithBoard(c, entry.key, hier, chain, roster, data, board, extra, load));
-        return;
-      }
-
-      var candidates = resolveChain(chain, roster);
-
-      var primary = null;
-      var alternates = [];
-      var nextName = null;
-      for (var i = 0; i < candidates.length; i++) {
-        var cand = candidates[i];
-        if (cand.freeJunior) {
-          alternates.push(cand.via);
-          continue;
-        }
-        if (!primary) {
-          primary = cand;
-        } else {
-          if (nextName === null) nextName = cand.name;
-          alternates.push(cand.name);
-        }
-      }
-
-      if (!primary) {
-        results.push({
-          caseId: c.id,
-          name: '',
-          reasons: [hier.label + ' — no one in the chain is available today'],
-          warnings: ['No resident resolvable from the hierarchy chain'],
-          alternates: alternates
-        });
-        return;
-      }
-
-      var reasons = [hier.label + ' → ' + primary.via];
-      var warnings = [];
-
-      // Load-balance: still suggest the first choice, but warn.
-      var primaryLoad = load[primary.name] || 0;
-      if (nextName !== null && primaryLoad >= (load[nextName] || 0) + 2) {
-        warnings.push(primary.name + ' already has ' + primaryLoad +
-          ' cases — consider next in chain (' + nextName + ')');
-      }
-
-      // Session conflicts.
-      var sess = sessionOf(c);
-      var spans = spansDay(c);
-      if (spans) {
-        warnings.push('x' + c.count + ' starting ' + c.start + ' — likely spans AM and PM');
-      }
-      var sessions = spans ? ['am', 'pm'] : [sess];
-      var resident = findResident(roster, primary.name);
-      if (resident) {
-        sessions.forEach(function (s) {
-          var cell = resident[s];
-          var text = cell && cell.text;
-          if (isClinicText(text)) {
-            warnings.push(primary.name + ' is in ' + text + ' clinic ' + s.toUpperCase());
-          }
-        });
-      }
-
-      // Count the suggestion toward this pass's load (unless the case already
-      // carries a manual assignment, which was pre-counted above).
-      if (!c.assigned) load[primary.name] = primaryLoad + 1;
-
-      results.push({
-        caseId: c.id,
-        name: primary.name,
-        reasons: reasons,
-        warnings: warnings,
-        alternates: alternates
-      });
-    });
-
-    return results;
   }
 
   /* ------------------------------------------------------------------ */
@@ -640,14 +758,16 @@
     return out;
   }
 
-  // Backup plan per Step 3 of the how-to: when the assigned resident staffs a
-  // PM clinic that this case could pull them out of, the first free name in
-  // the clinic-coverage chain covers the clinic; the next is the 2nd backup.
+  // Backup plan per Step 12 of the how-to (Step 3 of the short version): when
+  // the assigned resident staffs a PM clinic that this case could pull them
+  // out of, the first free name in the clinic-coverage chain covers the
+  // clinic; the next is the 2nd backup.
   // Returns { clinic, primary: {name, source}, second: {name, source}|null }
   // or null when no coverage is needed / nobody is free.
   // With a board: returns { clinic, owner, window: {start,end,session},
-  // primary: {name, source}|null, second, steps } — primary is null when
-  // nobody is free to cover (the UI says so rather than hiding the problem).
+  // primary: {name, source}|null, second, steps, outside } — primary is null
+  // when nobody on the chain is free to cover (the UI says so rather than
+  // hiding the problem; `outside` lists who else is free — Surg 2's call).
   function backupPlan(caseObj, roster, data, allCases, board) {
     var assigned = String((caseObj && caseObj.assigned) || '').replace(/^\s+|\s+$/g, '');
     if (!assigned) return null;
@@ -660,7 +780,7 @@
       var cover = findClinicCover(pulled, roster, data, board, [assigned], caseObj.id);
       return {
         clinic: pulled.clinic, owner: pulled.owner, window: pulled,
-        primary: cover.primary, second: cover.second, steps: cover.steps
+        primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside
       };
     }
     var res = findResident(roster, assigned);
@@ -686,7 +806,8 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* planAddOn — "a globe comes in at 2 PM: who takes it?"               */
+  /* planAddOns — "a globe comes in while an emergent glaucoma AND a     */
+  /* cornea case also need someone" (rare); planAddOn — just one         */
   /* ------------------------------------------------------------------ */
 
   var ADDON_KINDS = [
@@ -698,123 +819,78 @@
     { key: 'other', label: 'Other add-on', category: 'other' }
   ];
 
-  // Walks the add-on's chain at time t against the board. The first chain
-  // member who is not out or in a case takes it — even from clinic (chief's
-  // rule, 9/2026: Surg 2 takes the globe) — and whatever clinic they leave
-  // passes down the clinic-coverage chain (`handoff`).
-  function planAddOn(kind, t, roster, data, board) {
-    data = getData(data);
-    var S = getStatus();
+  function kindDef(kind) {
     var def = ADDON_KINDS[0];
     ADDON_KINDS.forEach(function (k) { if (k.key === kind) def = k; });
-    var hierarchy = (data && data.hierarchy) || {};
-    var draft = {
-      id: '__plan__', section: 'wills', surgeon: '', category: def.category, addOn: true,
-      count: 1, serviceCount: 1, start: S ? S.fmtHHMM(t) : '', assigned: '', backup: ''
-    };
-    var key = classify(draft, data);
-    var hier = hierarchy[key] || { label: key, chain: [] };
-    var chain = hier.chain || [];
-    if (key === 'traumaPlasticsAddOn' && def.category === 'trauma') {
-      chain = chain.filter(function (tok) { return tok !== 'PLASTICS_OR_JUNIOR'; });
-    }
-    var w = walkCase(draft, key, chain, roster, data, board, {});
-    var handoff = null;
-    if (w.primary && w.primaryStatus && w.primaryStatus.kind === 'clinic') {
-      var pulled = pulledClinic(board, w.primary.name, w.spans, null);
-      if (pulled) {
-        var cover = findClinicCover(pulled, roster, data, board, [w.primary.name], null);
-        handoff = { clinic: pulled.clinic, owner: pulled.owner, window: pulled, primary: cover.primary, second: cover.second, steps: cover.steps };
-      }
-    }
-    return {
-      kind: def.key, label: def.label, time: t, key: key, hierLabel: hier.label,
-      draft: draft, spans: w.spans, pick: w.primary, pickStatus: w.primaryStatus,
-      steps: w.steps, alternates: w.alternates, handoff: handoff
-    };
+    return def;
   }
 
-  /* ------------------------------------------------------------------ */
-  /* planAddOns — several at once: "a globe comes in while an emergent   */
-  /* glaucoma AND a cornea case also need someone" (rare)                */
-  /* ------------------------------------------------------------------ */
-  // Each kind walks its own chain exactly as planAddOn does. Then the
-  // residents are chosen together, so nobody takes two cases at once: the
-  // choice with the lowest total chain position wins (a case nobody can
-  // take costs more than any pick); on a tie the more urgent kind keeps its
-  // earlier pick (globe → cornea → glaucoma → plastics → cataract → other —
-  // so Surg 2 keeps the globe). Everyone pulled out of a clinic gets a
-  // coverer from the clinic-coverage chain: free, not already covering
-  // another, and never one of the residents taking a case.
-  var URGENCY = ['globe', 'cornea', 'glaucoma', 'plastics', 'cataract', 'other'];
-
+  // Add-ons coming in at time t, assigned exactly as the how-to orders it:
+  // Step 6 (add-on glaucoma → Surg 4, add-on cornea → Surg 3 — skip for now
+  // if they are in a case), Step 9 (trauma, then plastics, down their
+  // chain), then Step 10 for anything skipped or left (Surg 2 → Surg 3 →
+  // Surg 4 → Cooper → Surg 1 → Surg 5). Nobody takes two at once. Then
+  // Step 12: everyone pulled out of a clinic hands it down the clinic-
+  // coverage chain — never to someone taking one of these cases, and never
+  // one coverer for two clinics. Nobody in the chains free → no pick, and
+  // `outside` lists who else is free (Surg 2's call).
   function planAddOns(kinds, t, roster, data, board) {
     data = getData(data);
-    var plans = (kinds || []).map(function (k) { return planAddOn(k, t, roster, data, board); });
-    var urgency = function (p) { var u = URGENCY.indexOf(p.kind); return u === -1 ? URGENCY.length : u; };
-    var order = plans.map(function (p, i) { return i; }).sort(function (a, b) {
-      return urgency(plans[a]) - urgency(plans[b]) || a - b;
-    });
-    var MAXC = 8;
-    var MISS = 100; // nobody for a case: worse than any pick
-    var cands = plans.map(function (p) {
-      return p.steps.filter(function (st) { return st.verdict !== 'skip'; }).slice(0, MAXC);
-    });
-    var best = null;
-    var pick = plans.map(function () { return -1; });
-    var used = {};
-    function better(cost, vec) {
-      if (!best || cost < best.cost) return true;
-      if (cost > best.cost) return false;
-      for (var i = 0; i < vec.length; i++) {
-        if (vec[i] !== best.vec[i]) return vec[i] < best.vec[i];
-      }
-      return false;
-    }
-    function dfs(k, cost) {
-      if (best && cost > best.cost) return;
-      if (k === order.length) {
-        var vec = order.map(function (i) { return pick[i] < 0 ? MISS : pick[i]; });
-        if (better(cost, vec)) best = { cost: cost, vec: vec, pick: pick.slice() };
-        return;
-      }
-      var i = order[k];
-      for (var r = 0; r < cands[i].length; r++) {
-        var n = cands[i][r].name;
-        if (used[n]) continue;
-        used[n] = true;
-        pick[i] = r;
-        dfs(k + 1, cost + r);
-        used[n] = false;
-      }
-      pick[i] = -1;
-      dfs(k + 1, cost + MISS);
-    }
-    dfs(0, 0);
-
-    var takenBy = {};
-    var items = plans.map(function (p, i) {
-      var r = best ? best.pick[i] : -1;
-      var c = r >= 0 ? cands[i][r] : null;
-      if (c) takenBy[c.name] = p.label;
+    var S = getStatus();
+    var hierarchy = (data && data.hierarchy) || {};
+    var entries = (kinds || []).map(function (kind, i) {
+      var def = kindDef(kind);
+      var draft = {
+        id: '__plan' + i + '__', section: 'wills', surgeon: '', category: def.category, addOn: true,
+        count: 1, serviceCount: 1, start: S ? S.fmtHHMM(t) : '', assigned: '', backup: ''
+      };
+      var key = classify(draft, data);
+      var hier = hierarchy[key] || { label: key, chain: [] };
       return {
-        kind: p.kind, label: p.label, key: p.key, hierLabel: p.hierLabel, draft: p.draft, spans: p.spans,
-        pick: c ? { name: c.name, via: c.via } : null, status: c ? c.status : null, rank: r,
-        firstChoice: cands[i][0] ? cands[i][0].name : null, steps: p.steps, handoff: null
+        c: draft, i: i, def: def, key: key, hier: hier, chain: chainFor(key, draft, hier),
+        step: stepOf(key, hier), sub: subRank(draft), private: false,
+        spans: board.caseSpansFor(draft).spans
       };
     });
-    items.forEach(function (it) {
-      if (it.pick && it.firstChoice && it.firstChoice !== it.pick.name) it.displacedBy = takenBy[it.firstChoice] || null;
+    var run = runSteps(entries, roster, data, board, function (e) {
+      return { what: 'taking the ' + e.def.label.toLowerCase(), by: e.def.label };
     });
-    var busy = Object.keys(takenBy);
-    order.forEach(function (i) {
-      var it = items[i];
-      if (!it.pick || !it.status || it.status.kind !== 'clinic') return;
-      var pulled = pulledClinic(board, it.pick.name, it.spans, null);
+
+    var busy = entries.filter(function (e) { return e.pick; }).map(function (e) { return e.pick.name; });
+    run.settled.forEach(function (e) {
+      if (!e.pick || !e.pickStatus || e.pickStatus.kind !== 'clinic') return;
+      var pulled = pulledClinic(board, e.pick.name, e.spans, null);
       if (!pulled) return;
       var cover = findClinicCover(pulled, roster, data, board, busy, null);
-      it.handoff = { clinic: pulled.clinic, owner: pulled.owner, window: pulled, primary: cover.primary, second: cover.second };
+      e.handoff = {
+        clinic: pulled.clinic, owner: pulled.owner, window: pulled,
+        primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside
+      };
       if (cover.primary) busy.push(cover.primary.name);
+    });
+
+    var items = entries.map(function (e) {
+      var steps = stepsOf(e);
+      var takeIdx = -1;
+      steps.forEach(function (s, i) { if (takeIdx === -1 && s.verdict === 'take') takeIdx = i; });
+      var skipped = steps.filter(function (s, i) { return s.verdict === 'skip' && (takeIdx === -1 || i < takeIdx); });
+      var displaced = skipped.filter(function (s) { return s.takenBy; })[0] || null;
+      var walked = {};
+      steps.forEach(function (s) { walked[s.name] = true; });
+      var last = e.stages[e.stages.length - 1];
+      return {
+        kind: e.def.key, label: e.def.label, key: e.key, hierLabel: e.hier.label,
+        step: e.step, deferred: e.deferred, draft: e.c, spans: e.spans,
+        pick: e.pick ? { name: e.pick.name, via: e.pick.via } : null,
+        status: e.pickStatus || null,
+        steps: steps,
+        skipped: skipped.map(function (s) { return { name: s.name, via: s.via, why: s.why, step: s.step }; }),
+        alternates: (last && last.alternates) || [],
+        firstChoice: displaced ? displaced.name : null,
+        displacedBy: displaced ? displaced.takenBy : null,
+        outside: e.pick ? [] : outsideFree(board, e.spans, e.c.id, walked, run.claims),
+        handoff: e.handoff || null
+      };
     });
     return {
       time: t,
@@ -823,14 +899,28 @@
     };
   }
 
+  // "A globe comes in at 2 PM: who takes it?" — the same procedure for one
+  // add-on. The first chain member who is not out or in a case takes it —
+  // even from clinic (chief's rule, 9/2026: Surg 2 takes the globe) — and
+  // whatever clinic they leave passes down the clinic-coverage chain.
+  function planAddOn(kind, t, roster, data, board) {
+    var it = planAddOns([kind], t, roster, data, board).items[0];
+    return {
+      kind: it.kind, label: it.label, time: t, key: it.key, hierLabel: it.hierLabel,
+      step: it.step, deferred: it.deferred, draft: it.draft, spans: it.spans,
+      pick: it.pick, pickStatus: it.status, steps: it.steps, skipped: it.skipped,
+      alternates: it.alternates, outside: it.outside, handoff: it.handoff
+    };
+  }
+
   /* ------------------------------------------------------------------ */
   /* lateCover — "the morning OR runs past 12:30: who covers their PM    */
   /* clinic until they are out?"                                         */
   /* ------------------------------------------------------------------ */
-  // The clinic-coverage chain (Surg 2 first — the AY legend: "Surg 2 …
-  // Cover Cornea/Glaucoma if Surg 3/4 has PM cases") over [start, end);
-  // the coverer must be free the whole time. `exclude`: names to skip
-  // (the late resident is always skipped).
+  // The clinic-coverage chain (how-to Step 12; Surg 2 first — the AY legend:
+  // "Surg 2 … Cover Cornea/Glaucoma if Surg 3/4 has PM cases") over
+  // [start, end); the coverer must be free the whole time. `exclude`: names
+  // to skip (the late resident is always skipped).
   function lateCover(name, clinic, start, end, roster, data, board, exclude, excludeId) {
     data = getData(data);
     var pulled = { clinic: clinic, owner: name, start: start, end: end, session: 'pm' };
@@ -847,6 +937,7 @@
     planAddOn: planAddOn,
     planAddOns: planAddOns,
     lateCover: lateCover,
+    stepOf: stepOf,
     ADDON_KINDS: ADDON_KINDS,
     FREE_JUNIOR_LABEL: FREE_JUNIOR_LABEL
   };

@@ -126,8 +126,10 @@ eq(Assign.classify({ category: 'cornea', addOn: true }), 'addOnCornea', 'cornea 
 eq(Assign.classify({ category: 'glaucoma', addOn: true }), 'addOnGlaucoma', 'glaucoma add-on -> addOnGlaucoma');
 eq(Assign.classify({ category: 'trauma' }), 'traumaPlasticsAddOn', 'trauma -> traumaPlasticsAddOn');
 eq(Assign.classify({ category: 'trauma', addOn: true }), 'traumaPlasticsAddOn', 'trauma add-on -> traumaPlasticsAddOn');
-eq(Assign.classify({ category: 'plastics', addOn: true }), 'plasticsAddOn', 'plastics add-on -> plasticsAddOn (juniors-first chain, 9/2026)');
-eq(Assign.classify({ category: 'plastics', addOn: true }, { hierarchy: {} }), 'traumaPlasticsAddOn', 'plastics add-on falls back to the combined chain when the data has no plasticsAddOn');
+eq(Assign.classify({ category: 'plastics', addOn: true }), 'traumaPlasticsAddOn', 'plastics add-on -> traumaPlasticsAddOn (how-to Step 9: no free-junior step)');
+eq(Assign.classify({ category: 'plastics', addOn: true, section: 'jhn' }), 'traumaPlasticsAddOn', 'plastics add-on at JHN -> same Step 9 chain (location does not change the type)');
+eq(Assign.classify({ category: 'cornea', addOn: true, section: 'jhn' }), 'addOnCornea', 'cornea add-on at JHN -> addOnCornea (Step 6)');
+eq(Assign.classify({ category: 'cataract', addOn: true }), 'remaining', 'cataract add-on -> remaining (Step 10 — the how-to has no add-on cataract chain)');
 eq(Assign.classify({ category: 'plastics' }), 'scheduledPlastics', 'plastics -> scheduledPlastics');
 eq(Assign.classify({ category: 'cornea' }), 'scheduledCornea', 'cornea -> scheduledCornea');
 eq(Assign.classify({ category: 'glaucoma' }), 'scheduledGlaucoma', 'glaucoma -> scheduledGlaucoma');
@@ -181,7 +183,8 @@ res = Assign.suggest([
 eq(res[0].name, 'Momenaei', 'peds goes to the junior on Peds OR when present');
 ok(/junior on Peds OR/.test(res[0].reasons.join(' ')), 'reason cites the Peds OR junior');
 deepEq(res[0].alternates.filter(function (a) { return !/free junior/.test(a); }),
-  ['Bair', 'Aguwa'], 'Surg 4 then Surg 3 remain as alternates');
+  ['Bair', 'Aguwa', 'Calotti', 'Shields', 'Cheng', 'Wibbelsman'],
+  'Surg 4 then Surg 3, then the Step 10 fallback (Surg 2, Cooper, Surg 1, Surg 5) as alternates');
 
 /* ------------------------------------------------------------------ */
 section('trauma add-on -> Calotti (Surg 2)');
@@ -248,8 +251,8 @@ var mixed = [
   { id: 'x5', section: 'wills', surgeon: 'Marous', count: 7, serviceCount: 2, start: '0730', category: 'cataract', addOn: false, assigned: '' }
 ];
 res = Assign.suggest(mixed, ROSTER);
-deepEq(res.map(function (r) { return r.caseId; }), ['x3', 'x5', 'x2', 'x4', 'x1'],
-  'peds & scheduled first, then add-ons, then remaining chronologically');
+deepEq(res.map(function (r) { return r.caseId; }), ['x5', 'x2', 'x3', 'x4', 'x1'],
+  "the how-to's step order: cataracts (Step 3), add-on cornea (6), peds (8), then remaining chronologically (10)");
 var x5 = findByCase(res, 'x5');
 eq(x5.name, 'Cheng', 'scheduled cataract -> Surg 1 (Cheng)');
 ok(hasWarning(x5, /spans AM and PM/), 'x7 at 0730 flagged as likely spanning the day');

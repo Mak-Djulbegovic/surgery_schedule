@@ -1540,7 +1540,12 @@
                 (S && plan.window ? ' ' + shortClock(plan.window.start) + '–' + shortClock(plan.window.end) : '') + ' — backup'
               : '↳ backup'
           }));
-          if (plan && !plan.primary && !trim(c.backup)) line.appendChild(el('span', { class: 's-note-warn', text: 'nobody free on the chain' }));
+          if (plan && !plan.primary && !trim(c.backup)) {
+            line.appendChild(el('span', {
+              class: 's-note-warn',
+              text: 'nobody on the coverage chain is free' + ((plan.outside || []).length ? ' — free outside it: ' + plan.outside.slice(0, 3).join(', ') : '')
+            }));
+          }
           line.appendChild(backupPill(c, plan));
           sub.appendChild(line);
         }
@@ -1552,7 +1557,7 @@
         if ((sugg.skipped || []).length) {
           bits.push('skipped ' + sugg.skipped.slice(0, 3).map(function (s) { return s.name + ' (' + s.why + ')'; }).join(', '));
         }
-        if (!sugg.name) bits.unshift('nobody in the chain is free then');
+        if (!sugg.name) bits.unshift('nobody in the how-to chain is free then');
         bits.forEach(function (t) { sub.appendChild(el('div', { class: 's-note', text: t })); });
       }
       sub.classList.toggle('hidden', !sub.firstChild);
@@ -2347,6 +2352,7 @@
             onclick: function () { ov.cover = lc.primary.name; touch(); refreshEverything(); }
           }));
         }
+        if (ov && lc && !lc.primary) actions.appendChild(el('span', { class: 'field-hint', text: 'Nobody on the coverage chain is free — Surg 2’s call; ' + outsideText(lc.outside) }));
         if (ov) {
           actions.appendChild(el('button', {
             type: 'button', class: 'btn btn-small', text: 'NC — leave uncovered',
@@ -2371,6 +2377,7 @@
             }
           }));
         }
+        if (target && plan && !plan.primary) actions.appendChild(el('span', { class: 'field-hint', text: 'Nobody on the coverage chain is free — Surg 2’s call; ' + outsideText(plan.outside) }));
         if (target) {
           actions.appendChild(el('button', {
             type: 'button', class: 'btn btn-small', text: 'NC — leave uncovered',
@@ -2756,12 +2763,26 @@
     return def;
   }
 
+  // Free, but not on the how-to chain — listed for Surg 2, never picked.
+  function outsideText(list) {
+    return (list || []).length ? 'free, but outside the how-to chain: ' + list.join(', ') : 'nobody else is free then either';
+  }
+
+  // Who the plan passed over on the way to its pick, and why.
+  function skipSummary(it) {
+    var bits = (it.skipped || []).slice(0, 3).map(function (s) { return s.name + ' — ' + s.why; });
+    if ((it.skipped || []).length > 3) bits.push('+' + (it.skipped.length - 3) + ' more');
+    return (it.deferred ? 'Step ' + it.step + ': skipped for now → Step 10. ' : '') + (bits.length ? 'Passed over ' + bits.join('; ') : '');
+  }
+
   function handoffLine(pickName, ho) {
     var S = window.Status;
     return el('div', { class: 'handoff ' + (ho.primary ? '' : 'bad') }, [
       pickName + ' leaves ' + ho.clinic + (ho.owner !== pickName ? ' (covering for ' + ho.owner + ')' : '') + ' → ',
-      ho.primary ? el('b', { text: ho.primary.name }) : el('b', { text: 'nobody free to cover' }),
-      ho.primary ? ' (' + ho.primary.source + ') covers ' + ho.clinic + ' ' + S.fmtClock(ho.window.start) + '–' + S.fmtClock(ho.window.end) : ''
+      ho.primary ? el('b', { text: ho.primary.name }) : el('b', { text: 'nobody on the coverage chain is free' }),
+      ho.primary
+        ? ' (' + ho.primary.source + ') covers ' + ho.clinic + ' ' + S.fmtClock(ho.window.start) + '–' + S.fmtClock(ho.window.end)
+        : ' — Surg 2’s call; ' + outsideText(ho.outside)
     ]);
   }
 
@@ -2773,7 +2794,7 @@
     card.appendChild(el('h2', {}, [(many ? 'If these come in together at ' : 'If something comes in at ') + S.fmtClock(t) + ' ', el('span', {
       class: 'h-note',
       text: many
-        ? 'Each walks its own chain; nobody takes two at once, the most urgent keeps its first choice on a tie, and clinic cover never uses someone taking a case.'
+        ? 'In the how-to’s order: add-on glaucoma → Surg 4 and cornea → Surg 3 (Step 6), trauma then plastics (Step 9), then anything skipped down the remaining-cases chain (Step 10). Nobody takes two, and clinic cover (Step 12) never uses someone taking a case.'
         : 'Walks the how-to chain against who is busy right then. Pick more than one for simultaneous cases.'
     })]));
     var kinds = el('div', { class: 'plan-kinds' });
@@ -2797,11 +2818,15 @@
       joint.items.forEach(function (it) {
         var row = el('div', { class: 'plan-joint-row' + (it.pick ? '' : ' bad') });
         row.appendChild(el('span', { class: 'plan-joint-kind', text: it.label }));
+        var skips = skipSummary(it);
         row.appendChild(el('span', { class: 'plan-joint-who' }, it.pick ? [
           '→ ', el('b', { text: it.pick.name }), el('span', { class: 'plan-via', text: ' ' + it.pick.via }),
           el('span', { class: 'plan-why', text: ' — ' + statusBrief(it.status) }),
-          it.displacedBy ? el('span', { class: 'plan-why', text: ' (' + it.firstChoice + ' is taking the ' + it.displacedBy.toLowerCase() + ')' }) : null
-        ] : ['⚠ nobody free — this one needs the chiefs']));
+          skips ? el('span', { class: 'plan-why plan-skips', text: skips }) : null
+        ] : [
+          '⚠ nobody in the how-to chain is free — Surg 2’s call',
+          el('span', { class: 'plan-why plan-skips', text: outsideText(it.outside) + (skips ? '. ' + skips : '') })
+        ]));
         list.appendChild(row);
         if (it.pick && it.handoff) list.appendChild(handoffLine(it.pick.name, it.handoff));
       });
@@ -2826,11 +2851,21 @@
     }
 
     var plan = window.Assign.planAddOn(planKinds[0], t, App.roster, data(), b);
-    card.appendChild(el('div', { class: 'field-hint plan-chain', text: plan.hierLabel + ' chain, then the remaining-cases chain, then any free senior, then any free junior.' }));
+    card.appendChild(el('div', {
+      class: 'field-hint plan-chain',
+      text: 'How-to Step ' + plan.step + ': ' + plan.hierLabel +
+        (plan.step < 10 ? ' — if nobody on it can, skip for now and use the remaining-cases chain (Step 10)' : '') +
+        '. Past the chain it’s Surg 2’s call.'
+    }));
     var ol = el('ol', { class: 'plan-steps' });
     var shownAlt = 0;
+    var lastStep = null;
     plan.steps.some(function (st) {
       if (st.verdict === 'alt') { if (shownAlt >= 2) return true; shownAlt++; }
+      if (lastStep !== null && st.step !== lastStep) {
+        ol.appendChild(el('li', { class: 'plan-stage', text: 'Skipped for now → Step 10, remaining cases' }));
+      }
+      lastStep = st.step;
       ol.appendChild(el('li', { class: 'plan-step ' + st.verdict }, [
         el('span', { class: 'plan-verdict', text: st.verdict === 'take' ? '✓ takes it' : st.verdict === 'skip' ? 'skip' : 'next' }),
         el('b', { text: st.name }),
@@ -2842,7 +2877,7 @@
     card.appendChild(ol);
 
     if (!plan.pick) {
-      card.appendChild(el('div', { class: 'warn-line bad', text: '⚠ Nobody is free — this one needs the chiefs.' }));
+      card.appendChild(el('div', { class: 'warn-line bad', text: '⚠ Nobody in the how-to chain is free — Surg 2’s call: ' + outsideText(plan.outside) + '.' }));
       return card;
     }
     var ho = plan.handoff;
@@ -2946,7 +2981,7 @@
         var lc = window.Assign.lateCover(r.name, r.clinic, b.pmClinicStart, S.parseClock(want), App.roster, data(), b);
         ctl.appendChild(el('span', { class: 'late-sugg' }, lc.primary ? [
           'If it runs past ' + S.fmtClock(b.pmClinicStart) + ': ', el('b', { text: lc.primary.name }), ' (' + lc.primary.source + ') covers ' + r.clinic
-        ] : ['If it runs past ' + S.fmtClock(b.pmClinicStart) + ': nobody free to cover ' + r.clinic]));
+        ] : ['If it runs past ' + S.fmtClock(b.pmClinicStart) + ': nobody on the coverage chain is free to cover ' + r.clinic + ' — Surg 2’s call; ' + outsideText(lc.outside)]));
         var tIn = el('input', { type: 'time', class: 'late-time', value: want, step: '900', 'aria-label': 'Running late until' });
         tIn.addEventListener('change', function () { lateUntil[r.name] = tIn.value; renderCoverageBody(); });
         ctl.appendChild(el('label', { class: 'late-until' }, ['until ', tIn]));
@@ -3554,7 +3589,7 @@
     WILLS_OR: 'Wills OR',
     RETINA: 'Retina',
     PEDS_OR_JUNIOR: 'junior on Peds OR',
-    FREE_JUNIOR: 'free junior',
+    FREE_JUNIOR: 'free junior at Surg 2’s discretion',
     PLASTICS_OR_PGY2: 'PGY-2 on Plastics OR',
     PLASTICS_OR_JUNIOR: 'junior on Plastics OR'
   };
@@ -3700,14 +3735,18 @@
     host.appendChild(av);
 
     // 3. The rules in 30 seconds — condensed chains (pulled from SCHED_DATA)
+    // In the how-to doc's order of steps — the authority for who covers.
     var rules = refCard('The rules in 30 seconds');
     rules.appendChild(bulletList([
+      'Scheduled cataracts → ' + chainText('scheduledCataract', 'Surg 1 → Surg 5 → Wills OR') + ' (per the lounge-wall block schedule).',
       'Scheduled cornea → Surg 3. Scheduled glaucoma → Surg 4.',
-      'Cataracts → ' + chainText('scheduledCataract', 'Surg 1 → Surg 5 → Wills OR') + ' (per the lounge-wall block schedule).',
+      'Add-on glaucoma → Surg 4. Add-on cornea (incl. trauma needing tissue) → Surg 3. Busy in a case? Skip for now.',
+      'Scheduled plastics → ' + chainText('scheduledPlastics', 'PGY-2 on Plastics OR → free junior → Surg 4') + '.',
       'Peds → ' + chainText('peds', 'junior on Peds OR → free junior → Surg 4 → Surg 3') + '.',
-      'Trauma → Surg 2 first (unless corneal tissue is needed — then cornea).',
-      'Everything else, chronologically: ' + chainText('remaining', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + '.',
-      'Clinic coverage: ' + chainText('clinicCoverage', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 → Wills OR → Retina') + '.'
+      'Trauma and plastics add-ons → ' + chainText('traumaPlasticsAddOn', 'junior on Plastics OR → Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + ' (the plastics junior only for TABs / outpatient plastics).',
+      'Anything skipped or left, chronologically: ' + chainText('remaining', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + '.',
+      'PM clinic coverage: ' + chainText('clinicCoverage', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 → Wills OR → Retina') + '.',
+      'Past the end of a chain it is Surg 2’s call — the app shows who else is free but does not pick them.'
     ], 'howto-rules'));
     rules.appendChild(el('div', { class: 'howto-foot' }, [
       el('span', { class: 'field-hint', text: 'Full chains, notes, and the block grids live in the Reference tab.' }),
@@ -3751,16 +3790,21 @@
 
     // Hierarchy chains
     var hCard = refCard('Case-assignment hierarchy');
+    hCard.appendChild(el('p', {
+      class: 'field-hint',
+      text: 'From “How to Surgical Schedule”, assigned step by step in this order. A case nobody on its chain can take is skipped for now and picked up at Step 10.'
+    }));
     var hTbl = el('table', { class: 'tbl' });
     hTbl.appendChild(el('thead', {}, [el('tr', {}, [
-      el('th', { text: 'Case type' }), el('th', { text: 'Chain' }), el('th', { text: 'Note' })
+      el('th', { text: 'Step' }), el('th', { text: 'Case type' }), el('th', { text: 'Chain' }), el('th', { text: 'Note' })
     ])]));
     var hBody = el('tbody');
     Object.keys(d.hierarchy || {}).forEach(function (key) {
       var h = d.hierarchy[key];
       hBody.appendChild(el('tr', {}, [
+        el('td', { text: h.step != null ? String(h.step) : '' }),
         el('td', {}, [el('strong', { text: h.label })]),
-        el('td', { text: (h.chain || []).join(' → ') }),
+        el('td', { text: (h.chain || []).map(function (tok) { return CHAIN_TOKEN_LABELS[tok] || tok; }).join(' → ') }),
         el('td', {}, [el('span', { class: 'field-hint', text: h.note || '' })])
       ]));
     });

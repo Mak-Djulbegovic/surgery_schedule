@@ -1199,6 +1199,12 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .plan-step.alt .plan-verdict { color: var(--muted); }
 .plan-via { font-size: 12px; color: var(--muted); }
 .plan-why { font-size: 12px; color: var(--faint); }
+.plan-skips { display: block; margin-top: 2px; font-weight: 400; }
+.plan-joint-row.bad .plan-skips { color: var(--red-text); opacity: 0.85; }
+.plan-stage {
+  padding: 5px 0 3px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted); border-bottom: 1px solid var(--border-soft);
+}
 .handoff {
   font-size: 13px; padding: 7px 10px; border-radius: 7px; margin-bottom: 8px;
   background: var(--accent-soft); border: 1px solid var(--accent-border);

@@ -362,30 +362,35 @@ const SCHED_DATA = {
     'Surg 6': 'PGY-3 (block 6, Thu): shadow Surg 1/5 or Anhalt cases; otherwise OR backup at Wills, JHN, or Gibbon'
   },
 
-  // Case-assignment hierarchy from the "How to Surgical Schedule" doc.
+  // Case-assignment hierarchy from the "How to Surgical Schedule" doc — the
+  // authority for who covers (chief, 9/28/2026: "defer to this for the rules
+  // of who to cover"). `step` is the doc's step number (full version). Cases
+  // are assigned step by step in that order; a case nobody in its chain can
+  // take is skipped "for now" and picked up at Step 10 with the remaining
+  // cases, chronologically. Past the end of the Step 10 chain it is Surg 2's
+  // call — the app lists who else is free but never picks them.
   // Chain entries are either Surg roles, or special tokens:
-  //   PEDS_OR_JUNIOR   = 1st or 2nd year on Peds OR that day
-  //   PLASTICS_OR_PGY2 = 1st year on Plastics OR that day
-  //   FREE_JUNIOR      = free/willing 1st or 2nd year at the discretion of Surg 2
-  //   COOPER           = PGY-4 on the Cooper block (years.pgy4.cooperBlock)
-  //   WILLS_OR         = resident on Wills OR block
-  //   RETINA           = resident on Retina block
+  //   PEDS_OR_JUNIOR     = 1st or 2nd year on Peds OR that day
+  //   PLASTICS_OR_PGY2   = 1st year on Plastics OR that day
+  //   PLASTICS_OR_JUNIOR = 1st or 2nd year on Plastics OR (TABs / outpatient plastics only)
+  //   FREE_JUNIOR        = free/willing 1st or 2nd year at the discretion of Surg 2
+  //   COOPER             = PGY-4 on the Cooper block (years.pgy4.cooperBlock)
+  //   WILLS_OR           = resident on Wills OR block
+  //   RETINA             = resident on Retina block
+  // The OR-block tokens take a resident only while they are on that OR — one
+  // in clinic at the time stays in clinic (chief, 9/2026: "if the plastics
+  // resident is in clinic then they will stay in clinic as default").
   hierarchy: {
-    scheduledCataract: { label: 'Scheduled cataracts', chain: ['Surg 1', 'Surg 5', 'WILLS_OR'], note: 'Assign per the surgical block schedule on the lounge wall; check NextGen and Cerner to delineate service vs private. PGY-3s join Wills OR cataracts Tue/Thu.' },
-    addOnCataract: { label: 'Overflow / add-on cataracts', chain: ['Surg 2', 'Surg 1', 'Surg 5', 'WILLS_OR'], note: 'Surg 2 is the first to get overflow cataracts if available.' },
-    scheduledCornea: { label: 'Scheduled cornea', chain: ['Surg 3'], note: 'Surg 3 should know scheduled cases and reach out to the operating attending beforehand.' },
-    scheduledGlaucoma: { label: 'Scheduled glaucoma', chain: ['Surg 4'], note: 'Surg 4 should know scheduled cases and reach out to the operating attending beforehand.' },
-    addOnCornea: { label: 'Add-on cornea (incl. trauma requiring tissue)', chain: ['Surg 3', 'Surg 2'], note: 'Emergent PKP / ruptures needing new corneal tissue go to cornea; Surg 2 next up if the subspecialty resident is not available.' },
-    addOnGlaucoma: { label: 'Add-on glaucoma', chain: ['Surg 4', 'Surg 2'], note: 'Tubes go to glaucoma; Surg 2 next up if the subspecialty resident is not available.' },
-    scheduledPlastics: { label: 'Scheduled plastics (incl. Gibbon/JHN)', chain: ['PLASTICS_OR_PGY2', 'FREE_JUNIOR', 'Surg 4', 'Surg 2'], note: 'Run the master daily schedule for JHN/Gibbon and specifically check for combo cases with Wills attendings.' },
-    peds: { label: 'Peds', chain: ['PEDS_OR_JUNIOR', 'FREE_JUNIOR', 'Surg 4', 'Surg 3'], note: 'Strabismus requires a resident — juniors on Peds get priority; schedule a senior backup if cases may run into evening clinic. Non-strab peds cases do not require coverage but attendings prefer one. If short, check with the Peds fellow.' },
-    traumaPlasticsAddOn: { label: 'Trauma and plastics add-ons', chain: ['PLASTICS_OR_JUNIOR', 'Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'], note: 'The junior on Plastics OR takes only TABs and add-on outpatient plastics; trauma goes to Surg 2 first (unless corneal tissue is needed — then cornea).' },
-    // Added 9/2026 from the chief's note "PGY-2 and PGY-3 go first to plastics
-    // cases": plastics add-ons try a free junior before the senior chain.
-    plasticsAddOn: { label: 'Plastics add-ons (TABs, lids, outpatient)', chain: ['PLASTICS_OR_JUNIOR', 'FREE_JUNIOR', 'Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'], note: 'PGY-2s and PGY-3s go first to plastics cases: the junior on Plastics OR, then a free junior (Surg 2’s discretion — TABs / lid procedures can go to free 1st and 2nd years), then Surg 2 onward.' },
-    jhnAddOn: { label: 'Add-ons at JHN/Gibbon/Jeff Surgicenter', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'], note: 'Add-on cases at JHN/Gibbon/JSC go to Surg 2 first if available.' },
-    remaining: { label: 'Remaining cases (chronological order)', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'] },
-    clinicCoverage: { label: 'Clinic coverage', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5', 'WILLS_OR', 'RETINA'], note: 'The PM clinic manager is helpful with clinic assignments.' }
+    scheduledCataract: { step: 3, label: 'Scheduled cataracts', chain: ['Surg 1', 'Surg 5', 'WILLS_OR'], note: 'Steps 3–4: assign per the master cataract schedule on the lounge wall; check NextGen ("CPEC Surgery") and Cerner to delineate service vs private. PGY-3s join Wills OR cataracts Tue/Thu.' },
+    scheduledCornea: { step: 5, label: 'Scheduled cornea', chain: ['Surg 3'], note: 'Step 5. Surg 3 should know scheduled cases and reach out to the operating attending beforehand.' },
+    scheduledGlaucoma: { step: 5, label: 'Scheduled glaucoma', chain: ['Surg 4'], note: 'Step 5. Surg 4 should know scheduled cases and reach out to the operating attending beforehand.' },
+    addOnGlaucoma: { step: 6, label: 'Add-on glaucoma', chain: ['Surg 4'], note: 'Step 6: emergent/add-on glaucoma → Surg 4. If Surg 4 is busy in a scheduled case at the time of the add-on, skip for now (Step 10 picks it up — Surg 2 first).' },
+    addOnCornea: { step: 6, label: 'Add-on cornea (incl. trauma requiring tissue)', chain: ['Surg 3'], note: 'Step 6: emergent/add-on cornea, including trauma needing tissue → Surg 3. If Surg 3 is busy in a scheduled case at the time of the add-on, skip for now (Step 10 picks it up — Surg 2 first).' },
+    scheduledPlastics: { step: 7, label: 'Scheduled plastics (incl. Gibbon/JHN)', chain: ['PLASTICS_OR_PGY2', 'FREE_JUNIOR', 'Surg 4'], note: 'Step 7: 1st year on Plastics OR, then a free and willing 1st or 2nd year at the discretion of Surg 2, then Surg 4. If all are in the OR, skip for now. Bilyk cases are service only if a resident has their name signed on the chart.' },
+    peds: { step: 8, label: 'Peds', chain: ['PEDS_OR_JUNIOR', 'FREE_JUNIOR', 'Surg 4', 'Surg 3'], note: 'Step 8: all peds cases should be covered by a resident — 1st or 2nd year on Peds OR, then a free and willing 1st or 2nd year (Surg 2’s discretion), Surg 4, Surg 3. If all are in the OR, skip for now. If scheduling is tight, ask the peds fellow whether they will be in the OR with the attending.' },
+    traumaPlasticsAddOn: { step: 9, label: 'Trauma and plastics add-ons', chain: ['PLASTICS_OR_JUNIOR', 'Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'], note: 'Step 9: the 1st or 2nd year on plastics only for TABs and add-on outpatient plastics; trauma starts at Surg 2 (unless corneal tissue is needed — then it is an add-on cornea).' },
+    remaining: { step: 10, label: 'Remaining cases (chronological order)', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5'], note: 'Step 10: every case still unassigned — skipped above, add-on cataracts, anything else — in chronological order.' },
+    clinicCoverage: { step: 12, label: 'Clinic coverage', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5', 'WILLS_OR', 'RETINA'], note: 'Step 12: if a PM clinic needs coverage. The PM clinic manager is helpful with clinic assignments.' }
   },
 
   // Availability rules (chief, 9/2026). A resident whose block text is in
@@ -421,14 +426,13 @@ const SCHED_DATA = {
   schedulingNotes: [
     'Surg 2 is the boss. Give them some grace when things get busy.',
     'Surg 2 is first for trauma (not requiring corneal tissue).',
-    'Add-on cases at Wills go to the resident on the subspecialty block if available (tubes → glaucoma; emergent PKP / ruptures requiring new corneal tissue → cornea); Surg 2 next up if the subspecialty resident is not available.',
-    'Add-on cases at JHN/Gibbon/Jeff Surgicenter go to Surg 2 first if available.',
+    'Add-on cases go to the resident on the subspecialty block if available (tubes → glaucoma; emergent PKP / ruptures requiring new corneal tissue → cornea); Surg 2 next up if the subspecialty resident is not available.',
     'Surg 2 is the first to get overflow cataracts if available.',
     'Strabismus cases require a resident — 1st and 2nd years on Peds get priority, but schedule a senior backup if cases may run over into evening clinic.',
-    'Other peds cases (non-strab) do not require resident coverage, but attendings prefer to have one.',
+    'All peds cases should be covered by a resident (how-to Step 8). If scheduling is tight, ask the peds fellow whether they will be in the OR with the attending — then the case can go without a resident.',
     'Ayres pterygiums require a resident.',
     'JP Dunn cases are service at the START of the year (first and fourth Fridays).',
-    'Enucleations / eviscerations / TABs / lid procedures can go to free 1st and 2nd years.',
+    'Scheduled enucleations / eviscerations / TABs / lid procedures can go to a free 1st or 2nd year at Surg 2’s discretion (how-to Step 7).',
     'If the patient has not rolled back to the OR by 4:30, it can be passed to the call person.',
     'For urgent call-outs or coverage issues (especially during MYF, AAO, etc.), involve the chiefs.'
   ],
