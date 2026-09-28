@@ -236,8 +236,34 @@ plan = Assign.planAddOn('globe', 600, roster, DATA, x.b);
 eq(plan.pick, null, 'globe with every senior out: no pick');
 eq(JSON.stringify(plan.outside), '["Nahar"]', '…the free junior is listed, not picked');
 var lc0 = Assign.lateCover('Nahar', 'Glaucoma', 750, 810, roster, DATA, x.b, [], null);
-eq(lc0.primary, null, 'clinic cover: nobody on the coverage chain is free → no pick');
-ok(Array.isArray(lc0.outside), 'clinic cover lists who else is free (outside)');
+eq(lc0.primary && lc0.primary.name + ' / ' + lc0.primary.source, 'Tang / Retina / Uveitis',
+  'clinic cover with every senior out: the doc\'s last step, Retina — Tang is pulled from Retina Private, no cover needed');
+var lcNone = Assign.lateCover('Nahar', 'Glaucoma', 750, 810, roster, DATA, x.b, ['Tang', 'Momenaei', 'Hamou', 'Patel'], null);
+ok(lcNone.primary === null || /Retina/.test(lcNone.primary.source), 'with the Retina / Uveitis residents taken too, no senior is invented');
+ok(Array.isArray(lcNone.outside) && Array.isArray(lcNone.pullable), 'clinic cover lists who else could (outside / pullable)');
+
+/* ---------- Retina / Uveitis first, no cover; never Path (chief, 9/28/2026) ---------- */
+x = board({ absences: [{ id: 'n', name: 'Nahar', am: true, pm: true, reason: 'other', coverAM: 'NC', coverPM: 'NC' }] });
+res = Assign.suggest([{ id: 'p1', section: 'wills', surgeon: 'Bilyk', count: 1, serviceCount: 1, start: '0900', category: 'plastics', addOn: false, assigned: '' }], roster, DATA, x.b);
+eq(res[0].name, 'Patel', 'scheduled plastics, no free junior: the junior in Uveitis (Patel) before Surg 4');
+ok(res[0].warnings.some(function (w) { return /Patel leaves Uveitis — no cover needed/.test(w); }), '…no cover needed');
+ok(!res[0].warnings.some(function (w) { return /needs a backup/.test(w); }), '…so no backup is asked for');
+x = board({ cases: [{ id: 't1', section: 'wills', surgeon: 'X', count: 1, serviceCount: 1, start: '1300', category: 'other', addOn: false, assigned: 'Tang', backup: '' }] });
+eq(Assign.backupPlan(x.day.cases[0], roster, DATA, x.day.cases, x.b), null, 'Tang pulled from Retina Private: no backup plan needed');
+// Path never pulled — even when a configuration would call it free
+var D2 = JSON.parse(JSON.stringify(DATA));
+D2.availability.freeTexts = ['PT', 'Path'];
+var bPath = Status.build(roster, { nightFloat: 'Perez', absences: roster.residents.filter(function (r) { return r.year !== 'pgy2' || r.name === 'Momenaei'; }).filter(function (r) { return r.name !== 'Momenaei'; }).map(function (r, i) {
+  return { id: 'o' + i, name: r.name, am: true, pm: true, reason: 'other', coverAM: 'NC', coverPM: 'NC' };
+}), cases: [], clinicStaffOverrides: {} }, D2);
+res = Assign.suggest([{ id: 'pp', section: 'wills', surgeon: 'Bilyk', count: 1, serviceCount: 1, start: '0900', category: 'plastics', addOn: false, assigned: '' }], roster, D2, bPath);
+ok(res[0].name !== 'Momenaei', 'Momenaei (Path) is never suggested — got ' + JSON.stringify(res[0].name));
+ok((res[0].outside || []).indexOf('Momenaei') === -1 && (res[0].pullable || []).indexOf('Momenaei') === -1, '…nor listed as someone to pull');
+// past the chain, Retina / Uveitis residents are listed to pull first
+x = board(seniorsOut);
+res = Assign.suggest([{ id: 'r2', section: 'wills', surgeon: 'X', count: 1, serviceCount: 1, start: '1000', category: 'other', addOn: false, assigned: '' }], roster, DATA, x.b);
+eq(JSON.stringify(res[0].pullable), '["Tang","Patel"]', 'Surg 2’s call lists Retina / Uveitis to pull first (Tang, Patel)');
+ok(/pull from Retina \/ Uveitis \(no cover needed\): Tang, Patel/.test(res[0].warnings.join(' ')), '…in the warning text');
 
 /* ---------- a morning OR running late into a PM clinic ---------- */
 // Mon 9/28: Nahar (2nd year, block 5) — Glaucoma OR / Plastics OR AM, Glaucoma PM.

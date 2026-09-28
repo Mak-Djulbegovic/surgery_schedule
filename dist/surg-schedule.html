@@ -1066,11 +1066,11 @@ select.picker { max-width: 280px; min-width: 150px; }
 .ssec-add { margin-left: auto; }
 .ssec-hint { margin: 6px 0 4px; }
 
-/* the line: Surgeon × # | start | category | svc → resident ⋯ */
+/* the line: Surgeon × # | start | category | svc @ time → resident ⋯ */
 .scols, .srow-main {
   display: grid;
-  grid-template-columns: minmax(110px, 0.9fr) 14px 54px 72px 110px 62px 16px minmax(230px, 1.7fr) 32px;
-  grid-template-areas: "sur x cnt st cat svc arr res more";
+  grid-template-columns: minmax(110px, 0.9fr) 14px 54px 72px 110px 54px 74px 16px minmax(220px, 1.7fr) 32px;
+  grid-template-areas: "sur x cnt st cat svc svct arr res more";
   gap: 6px;
   align-items: center;
 }
@@ -1095,6 +1095,9 @@ select.picker { max-width: 280px; min-width: 150px; }
 .s-cat { grid-area: cat; }
 .s-svc-wrap { grid-area: svc; display: flex; align-items: center; gap: 4px; min-width: 0; }
 .s-svc-label { display: none; font-size: 11px; color: var(--faint); }
+.s-svct-wrap { grid-area: svct; display: flex; align-items: center; gap: 3px; min-width: 0; }
+.s-svct-wrap.hidden { display: none; }
+.s-at { font-size: 12px; color: var(--faint); }
 .s-arrow { grid-area: arr; }
 .s-res { grid-area: res; }
 .s-more { grid-area: more; }
@@ -1174,13 +1177,16 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 
 /* ---------------- Coverage ---------------- */
 
-.time-bar { margin-bottom: 16px; }
 .time-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
-.time-bar input[type="time"] {
+.plan-time { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 10px; }
+.plan-time input[type="time"] {
   border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13.5px;
 }
-.cov-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; }
-.cov-grid > .card { margin-bottom: 16px; }
+/* available AM | PM */
+.avail-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 24px; }
+.avail-h { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--text); }
+.free-chip.pull { border-color: var(--accent-border); background: var(--accent-soft); }
+.free-chip.partial { border-style: dashed; }
 .free-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .free-label { width: 64px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
 .free-chip {
@@ -1247,47 +1253,6 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .late-until { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12.5px; }
 .late-time { border: 1px solid var(--border); border-radius: 7px; padding: 4px 6px; font: inherit; font-size: 13px; }
 select.late-pick { max-width: 240px; }
-
-.tl-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
-.tl-key { display: inline-flex; align-items: center; gap: 5px; }
-.tl-swatch { width: 14px; height: 10px; border-radius: 3px; display: inline-block; }
-.tl-group {
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint);
-  padding: 8px 0 3px; border-bottom: 1px solid var(--border);
-}
-.tl-row {
-  display: grid;
-  grid-template-columns: 130px minmax(0, 1fr) 210px;
-  gap: 10px; align-items: center;
-  padding: 4px 0; border-bottom: 1px solid var(--border-soft);
-}
-.tl-name { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 13px; }
-.tl-role { font-size: 11px; color: var(--faint); font-weight: 700; }
-.tl-track { position: relative; height: 16px; background: var(--border-soft); border-radius: 5px; overflow: hidden; }
-.tl-axis { border-bottom: none; padding: 0; }
-.tl-axis-track { height: 14px; background: none; overflow: visible; }
-.tl-tick {
-  position: absolute; top: 0; transform: translateX(-50%);
-  font-size: 10.5px; font-weight: 700; color: var(--faint); white-space: nowrap;
-}
-.tl-tick.first { transform: none; }
-.tl-tick.last { transform: translateX(-100%); }
-.tl-seg { position: absolute; top: 0; bottom: 0; }
-.tl-now { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--text); }
-.tl-noon { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(29, 39, 51, 0.25); }
-.tl-status { font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.k-free { background: #9fd5b5; }
-.k-case { background: #7fa9d8; }
-.k-clinic { background: #cdbfe4; }
-.k-duty { background: #c9d0d8; }
-.k-out { background: repeating-linear-gradient(45deg, #f2c1bd, #f2c1bd 4px, #fbe3e1 4px, #fbe3e1 8px); }
-.k-off { background: transparent; }
-.tl-status.k-free, .tl-status.k-case, .tl-status.k-clinic, .tl-status.k-duty, .tl-status.k-out, .tl-status.k-off { background: none; }
-.tl-status.k-free { color: var(--green-text); font-weight: 600; }
-.tl-status.k-case { color: var(--pgy3); font-weight: 600; }
-.tl-status.k-out { color: var(--red-text); }
-.tl-status.k-clinic { color: var(--pgy4); }
-.tl-status.k-duty { color: var(--muted); }
 
 /* ---------------- preview ---------------- */
 
@@ -1506,19 +1471,7 @@ select.imp-type.unset { border-color: var(--amber-border); background: var(--amb
   .ph-actions { flex-basis: 100%; }
   .card { padding: 16px; }
 
-  .cov-grid { grid-template-columns: 1fr; }
-  /* name and status on one line, the day's bar full width under it */
-  .tl-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: "name status" "track track";
-    gap: 3px 10px;
-    padding: 6px 0;
-  }
-  .tl-name { grid-area: name; }
-  .tl-track { grid-area: track; }
-  .tl-status { grid-area: status; text-align: right; max-width: 62vw; }
-  .tl-axis { padding: 0; }
-  .tl-axis .tl-name, .tl-axis .tl-status { display: none; }
+  .avail-cols { grid-template-columns: 1fr; }
 
   /* clinic: name, then staff, then count + note side by side */
   .clinic-row {
@@ -1547,9 +1500,12 @@ select.imp-type.unset { border-color: var(--amber-border); background: var(--amb
     grid-template-areas:
       "sur sur sur sur sur more"
       "x cnt st cat svc svc"
+      "svct svct svct svct svct svct"
       "arr res res res res res";
   }
   .s-svc-label { display: inline; }
+  .s-svct-wrap .s-svct { max-width: 140px; }
+  .s-svct-wrap::after { content: 'service case time'; font-size: 11px; color: var(--faint); margin-left: 4px; }
   .s-details-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .s-d-pill { grid-column: 1 / -1; }
 }
@@ -2163,7 +2119,14 @@ const SCHED_DATA = {
   // (chief, 9/28/2026: "if people are assigned CPEC, assume that they are in
   // clinic — this goes for the whole app"). dutyTexts are fixed duties
   // that are not pulled. Day Float only ever covers the Night Float resident.
-  // noCoverTexts need no coverage when the resident is out.
+  // noCoverTexts need no coverage when the resident is out — or, for a
+  // clinic, when they are pulled out of it.
+  // pullFirstTexts: clinics to pull from first — their residents count as
+  // available, and leaving needs no cover (chief, 9/28/2026: "the first to
+  // pull from often times is retina/uveitis so there is no coverage needed
+  // for retina or uveitis"). ASSUMPTION: Retina Private counts as retina.
+  // neverPullTexts: never pulled for a case or to cover (chief, 9/28/2026:
+  // "residents should NEVER be pulled from path").
   // offsiteTexts: at another hospital — never pulled into a Wills case or
   // clinic by a chain (ASSUMPTION, 9/2026: Cooper Clinic / Cooper OR are at
   // Cooper; remove them here if those residents can be pulled).
@@ -2171,7 +2134,9 @@ const SCHED_DATA = {
     freeTexts: ['PT'],
     dutyTexts: ['ER', 'Jeff Consults', 'Cooper Consults'],
     offsiteTexts: ['Cooper Clinic', 'Cooper OR'],
-    noCoverTexts: ['PT', 'Day Float']
+    noCoverTexts: ['PT', 'Day Float', 'Retina', 'Retina Private', 'Uveitis'],
+    pullFirstTexts: ['Retina', 'Retina Private', 'Uveitis'],
+    neverPullTexts: ['Path']
   },
 
   // When PM clinics actually start (chief, 9/28/2026: "if the morning
@@ -2876,6 +2841,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
  *            (chief's rule, 9/2026; CPEC is a clinic — chief, 9/28/2026)
  *   off    — nothing scheduled (weekend / outside the academic year)
  *
+ * Flags on a status: pullFirst — in a clinic to pull from first, that needs
+ * no cover when they leave (Retina / Uveitis, data.availability.
+ * pullFirstTexts); neverPull — never pulled for anything (Path).
+ *
  * Times are minutes after midnight. The board's working day is 07:00–17:00
  * in 5-minute slots; AM is before 12:00, PM from 12:00.
  */
@@ -2900,6 +2869,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   var DEFAULT_DUTY = ['ER', 'Jeff Consults', 'Cooper Consults'];
   var DEFAULT_OFFSITE = ['Cooper Clinic', 'Cooper OR'];
   var DEFAULT_NO_COVER = ['PT', 'Day Float'];
+  var DEFAULT_PULL_FIRST = ['Retina', 'Retina Private', 'Uveitis'];
+  var DEFAULT_NEVER_PULL = ['Path'];
 
   var RANK = { off: 0, free: 1, duty: 2, clinic: 3, 'case': 4, out: 5 };
 
@@ -2987,10 +2958,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   }
 
   // When the assigned resident is scrubbed for this case.
-  //   - Service-case times given (and only some cases are service): one
-  //     case-length block at each time; extra service cases stack on the last.
-  //   - Otherwise the whole list: start + count × minutes-per-case. That is
-  //     conservative for part-private lists, and flagged as an estimate.
+  //   - A list with private and service cases: the resident is needed only
+  //     for the service cases (chief, 9/28/2026: "he is only responsible for
+  //     his case when it is listed as a service case … available to leave
+  //     for an emergent add-on after that case or to go to clinic"). One
+  //     case-length block at each service time; extra service cases stack
+  //     on the last. No service time: the service cases are assumed to open
+  //     the list (flagged svcAssumed, so the row asks for the time).
+  //   - All service (or a private list someone was put on anyway): the
+  //     whole list, start + count × minutes-per-case, flagged as an estimate.
   //   - 'until' (typed end time, or 'Done' day-of) replaces the last end.
   //   - No start ('AM TF', blank): assume 7:30, flagged unknownStart.
   function caseSpans(c, data) {
@@ -3003,11 +2979,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var start = unknownStart ? DAY_START + 30 : starts[0];
     var svcTimes = clockTokens(c.serviceTimes).sort(function (a, b) { return a - b; });
     var spans = [];
-    if (svcTimes.length && svc > 0 && svc < count) {
+    var svcAssumed = false;
+    if (svc > 0 && svc < count && svcTimes.length) {
       svcTimes.forEach(function (t, i) {
         var n = i === svcTimes.length - 1 ? Math.max(1, svc - (svcTimes.length - 1)) : 1;
         spans.push({ start: t, end: t + n * per });
       });
+    } else if (svc > 0 && svc < count) {
+      spans.push({ start: start, end: start + svc * per });
+      svcAssumed = true;
     } else {
       spans.push({ start: start, end: start + count * per });
     }
@@ -3024,6 +3004,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       end: spans[spans.length - 1].end,
       estimated: estimated,
       unknownStart: unknownStart,
+      svcAssumed: svcAssumed,
       perCase: per
     };
   }
@@ -3089,7 +3070,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     roster = roster || {};
     day = day || {};
     var av = data.availability || {};
-    var noCover = av.noCoverTexts || DEFAULT_NO_COVER;
+    var pullFirst = av.pullFirstTexts || DEFAULT_PULL_FIRST;
+    var neverPull = av.neverPullTexts || DEFAULT_NEVER_PULL;
+    // pull-first clinics need no cover by definition
+    var noCover = (av.noCoverTexts || DEFAULT_NO_COVER).concat(pullFirst);
 
     var byName = {};
     var order = [];
@@ -3178,7 +3162,18 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       (ov.removed || []).forEach(function (n) { removedFrom[label + '|' + sess + '|' + n] = true; });
     });
 
+    // pullFirst / neverPull ride on the status of whatever text they are on
+    function flagged(bd) {
+      if (bd.kind === 'clinic' && pullFirst.indexOf(bd.text) !== -1) bd.pullFirst = true;
+      if (bd.kind !== 'out' && neverPull.indexOf(bd.text) !== -1) bd.neverPull = true;
+      return bd;
+    }
+
     function baseDutyOf(name, s) {
+      return flagged(baseDutyRaw(name, s));
+    }
+
+    function baseDutyRaw(name, s) {
       var res = byName[name];
       var o = outBy[name] && outBy[name][s];
       if (o) {
@@ -3244,7 +3239,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       var a = trim(c.assigned);
       caseInfo[c.id] = {
         c: c, spans: cs.spans, start: cs.start, end: cs.end,
-        estimated: cs.estimated, unknownStart: cs.unknownStart,
+        estimated: cs.estimated, unknownStart: cs.unknownStart, svcAssumed: cs.svcAssumed,
         assigned: a, backup: trim(c.backup)
       };
       if (a && byName[a]) {
@@ -3322,12 +3317,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       if (cr && cr.caseId !== exclude) {
         return {
           kind: 'clinic', label: 'covering ' + cr.clinic + ' for ' + cr.for, clinic: cr.clinic,
-          covering: cr.for, caseId: cr.caseId, session: s, viaCase: true
+          covering: cr.for, caseId: cr.caseId, session: s, viaCase: true,
+          pullFirst: pullFirst.indexOf(cr.clinic) !== -1, neverPull: neverPull.indexOf(cr.clinic) !== -1
         };
       }
       return {
         kind: bd.kind, label: bd.label, text: bd.text, cls: bd.cls, covering: bd.covering || null,
-        clinic: bd.kind === 'clinic' ? bd.text : null, session: s, nfCover: !!bd.nfCover
+        clinic: bd.kind === 'clinic' ? bd.text : null, session: s, nfCover: !!bd.nfCover,
+        pullFirst: !!bd.pullFirst, neverPull: !!bd.neverPull
       };
     }
 
@@ -3353,29 +3350,42 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       return out;
     }
 
+    // Worst status over a set of statuses. neverPull if ANY part is on a
+    // never-pull duty; pullFirst only if EVERY clinic part is a pull-first
+    // clinic (half an hour in Retina and half in Cornea still needs cover).
+    function worstOf(list) {
+      var worst = null;
+      var anyNever = false;
+      var allPull = true;
+      list.forEach(function (st) {
+        if (st.neverPull) anyNever = true;
+        if (st.kind === 'clinic' && !st.pullFirst) allPull = false;
+        // name the clinic that does need cover when a window spans both
+        var coverFirst = worst && st.kind === 'clinic' && worst.kind === 'clinic' && worst.pullFirst && !st.pullFirst;
+        if (!worst || RANK[st.kind] > RANK[worst.kind] || coverFirst) worst = st;
+      });
+      if (!worst) return null;
+      var out = {};
+      for (var k in worst) out[k] = worst[k];
+      out.neverPull = anyNever;
+      out.pullFirst = out.kind === 'clinic' && allPull;
+      return out;
+    }
+
     // Worst status over [start, end) — the answer to "can X do this?".
     // Samples every slot plus the last minute, so short cases are caught.
     function statusDuring(name, start, end, opts) {
       if (!byName[name]) return { kind: 'off', label: '' };
-      var worst = null;
       var times = [];
       for (var t = start; t < end && times.length < 300; t += SLOT) times.push(t);
       if (end - 1 > start) times.push(end - 1);
       if (!times.length) times.push(start);
-      times.forEach(function (tt) {
-        var st = statusAt(name, tt, opts);
-        if (!worst || RANK[st.kind] > RANK[worst.kind]) worst = st;
-      });
-      return worst;
+      return worstOf(times.map(function (tt) { return statusAt(name, tt, opts); }));
     }
 
     function statusDuringSpans(name, spans, opts) {
-      var worst = null;
-      (spans || []).forEach(function (sp) {
-        var st = statusDuring(name, sp.start, sp.end, opts);
-        if (!worst || RANK[st.kind] > RANK[worst.kind]) worst = st;
-      });
-      return worst || { kind: 'off', label: '' };
+      var w = worstOf((spans || []).map(function (sp) { return statusDuring(name, sp.start, sp.end, opts); }));
+      return w || { kind: 'off', label: '' };
     }
 
     function freeAt(t) {
@@ -3408,6 +3418,53 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       return out;
     }
 
+    // Who can be given something to do in a session (chief, 9/28/2026: "a
+    // place to say available in AM and then another part that says
+    // available in PM … to be able to on the fly find assignments"): free
+    // for all or part of it (PT, a Surg role / OR block with nothing booked,
+    // done with their service case) → group 'free'; else in a pull-first
+    // clinic (Retina / Uveitis — no cover needed) → group 'pull'. Stretches
+    // shorter than minMinutes (default 30) are left out. Never anyone out,
+    // in a case, on a fixed duty, off-site, on Path, or in another clinic.
+    // `gaps`: what fills the rest of the session, for "except 10:15–10:45
+    // (Henry x10)".
+    function availableInSession(s, opts) {
+      var min = (opts && opts.minMinutes) || 30;
+      var from = s === 'am' ? DAY_START : NOON;
+      var to = s === 'am' ? NOON : DAY_END;
+      var out = [];
+      function add(list, t0, extra) {
+        var last = list[list.length - 1];
+        if (last && last.end === t0 && (!extra || last.label === extra)) last.end = t0 + SLOT;
+        else list.push(extra ? { start: t0, end: t0 + SLOT, label: extra } : { start: t0, end: t0 + SLOT });
+      }
+      order.forEach(function (n) {
+        var row = grid[n];
+        var free = [];
+        var pull = [];
+        var other = [];
+        for (var i = slotIdx(from); i < slotIdx(to); i++) {
+          var st = row[i];
+          var t0 = DAY_START + i * SLOT;
+          if (!st.neverPull && st.kind === 'free') add(free, t0);
+          else if (!st.neverPull && st.kind === 'clinic' && st.pullFirst) add(pull, t0);
+          else add(other, t0, st.label);
+        }
+        function keep(list) { return list.filter(function (r) { return r.end - r.start >= min; }); }
+        free = keep(free);
+        pull = keep(pull);
+        var ranges = free.length ? free : pull;
+        if (!ranges.length) return;
+        var st0 = base[n][s];
+        out.push({
+          name: n, group: free.length ? 'free' : 'pull', ranges: ranges,
+          full: ranges.length === 1 && ranges[0].start === from && ranges[0].end === to,
+          label: st0.label, text: st0.text, gaps: other
+        });
+      });
+      return out;
+    }
+
     /* what still needs covering */
     var needs = [];
     absences.forEach(function (a) {
@@ -3430,6 +3487,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var expected = [];
     Object.keys(roster.clinics || {}).forEach(function (label) {
       if (classifyText(label, data) !== 'clinic') return;
+      if (noCover.indexOf(label) !== -1) return; // Retina / Uveitis: nobody backfills
       ['am', 'pm'].forEach(function (s) {
         var grp = (roster.clinics[label] || {})[s] || [];
         var names = grp.map(function (p) { return typeof p === 'string' ? p : p && p.name; });
@@ -3443,14 +3501,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     Object.keys(addedTo).forEach(function (n) {
       ['am', 'pm'].forEach(function (s) {
         var label = addedTo[n][s];
-        if (!label || (roster.clinics || {})[label]) return;
+        if (!label || (roster.clinics || {})[label] || noCover.indexOf(label) !== -1) return;
         expected.push({ holder: n, owner: n, clinic: label, session: s });
       });
     });
     order.forEach(function (n) {
       ['am', 'pm'].forEach(function (s) {
         var bd = base[n][s];
-        if (bd.kind === 'clinic' && bd.covering) expected.push({ holder: n, owner: bd.covering, clinic: bd.text, session: s });
+        if (bd.kind === 'clinic' && bd.covering && noCover.indexOf(bd.text) === -1) expected.push({ holder: n, owner: bd.covering, clinic: bd.text, session: s });
       });
     });
 
@@ -3519,6 +3577,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       segments: segments,
       freeAt: freeAt,
       freeInSession: freeInSession,
+      availableInSession: availableInSession,
+      pullFirstTexts: pullFirst,
+      neverPullTexts: neverPull,
       isOut: function (name, s) { return !!(outBy[name] && outBy[name][s]); },
       caseSpansFor: function (c) { return caseSpans(c, data); },
       dayStart: DAY_START,
@@ -3818,12 +3879,18 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       return { label: 'Wills OR', names: orBlockPeople(roster, 'Wills OR', sessions).map(function (p) { return p.name; }) };
     }
     if (token === 'RETINA') {
+      // The doc's "Retina", with Uveitis beside it: the clinics to pull from
+      // first, which need no cover (chief, 9/28/2026).
       var names = [];
       var seen = {};
-      orBlockPeople(roster, 'Retina OR', sessions).concat(clinicPeople(roster, 'Retina', sessions)).forEach(function (p) {
+      var d0 = getData();
+      var pf = (d0 && d0.availability && d0.availability.pullFirstTexts) || ['Retina', 'Retina Private', 'Uveitis'];
+      var people = orBlockPeople(roster, 'Retina OR', sessions);
+      pf.forEach(function (label) { people = people.concat(clinicPeople(roster, label, sessions)); });
+      people.forEach(function (p) {
         if (!seen[p.name]) { seen[p.name] = true; names.push(p.name); }
       });
-      return { label: 'Retina', names: names };
+      return { label: 'Retina / Uveitis', names: names };
     }
     return { label: token, names: [] };
   }
@@ -3873,11 +3940,29 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     years.forEach(function (y) {
       board.order.forEach(function (n) {
         if (boardYear(board, n) !== y) return;
-        if (board.statusDuringSpans(n, spans, { exclude: selfId }).kind === 'free') out.push(n);
+        var st = board.statusDuringSpans(n, spans, { exclude: selfId });
+        if (st.kind === 'free' && !st.neverPull) out.push(n);
       });
     });
     return out;
   }
+
+  // …and those in a pull-first clinic (Retina / Uveitis) for all of `spans`
+  // — pulled with no cover needed (chief, 9/28/2026: "the first to pull from
+  // often times is retina/uveitis").
+  function pullFirstNames(board, spans, selfId, years) {
+    var out = [];
+    years.forEach(function (y) {
+      board.order.forEach(function (n) {
+        if (boardYear(board, n) !== y) return;
+        var st = board.statusDuringSpans(n, spans, { exclude: selfId });
+        if (isPullFirst(st)) out.push({ name: n, clinic: st.clinic || st.text || '' });
+      });
+    });
+    return out;
+  }
+
+  function isPullFirst(st) { return !!(st && st.kind === 'clinic' && st.pullFirst && !st.neverPull); }
 
   // The OR-block tokens: the how-to's "1st year on Plastics OR", "1st or
   // 2nd year on Peds OR" … take a resident only while they are on that OR —
@@ -3902,6 +3987,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     (chain || []).forEach(function (token) {
       if (token === 'FREE_JUNIOR') {
         freeNames(board, spans, selfId, ['pgy2', 'pgy3']).forEach(function (n) { push(n, FREE_JUNIOR_LABEL, token); });
+        pullFirstNames(board, spans, selfId, ['pgy2', 'pgy3']).forEach(function (p) {
+          push(p.name, 'junior in ' + p.clinic + ' — no cover needed, Surg 2’s discretion', token);
+        });
         return;
       }
       var r = resolveToken(token, roster);
@@ -3930,10 +4018,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   }
 
   // One step of the how-to for one case: walk `chain` in order. A candidate
-  // is skipped when out, already in a case, off-site, already picked for
-  // another case then, not free when only a free resident qualifies, or in
-  // clinic when drawn from an OR block. `tried`: names already walked for
-  // this case at an earlier step — not repeated (nothing frees up between).
+  // is skipped when out, already in a case, on Path (never pulled), off-site,
+  // already picked for another case then, not free when only a free resident
+  // qualifies, or in clinic when drawn from an OR block — except a pull-first
+  // clinic (Retina / Uveitis), which counts as available and needs no cover.
+  // `tried`: names already walked for this case at an earlier step — not
+  // repeated (nothing frees up between).
   function walkStep(c, chain, step, roster, board, claims, spans, tried) {
     var cands = chainCandidates(chain, roster, board, spans, c.id, step);
     var steps = [];
@@ -3947,10 +4037,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       var why = null;
       if (st.kind === 'out') why = st.label;
       else if (st.kind === 'case') why = busyText(st);
+      else if (st.neverPull) why = (st.text || st.label) + ' — never pulled';
       else if (st.cls === 'offsite') why = st.label; // at Cooper — not pulled to Wills
       else if ((cl = claimAt(claims[cand.name], spans))) why = cl.what;
-      else if (cand.requireFree && st.kind !== 'free') why = st.label;
-      else if (cand.orBlock && st.kind === 'clinic') why = st.label + ' — stays in clinic';
+      else if (cand.requireFree && st.kind !== 'free' && !isPullFirst(st)) why = st.label;
+      else if (cand.orBlock && st.kind === 'clinic' && !isPullFirst(st)) why = st.label + ' — stays in clinic';
       var verdict = why ? 'skip' : (primary ? 'alt' : 'take');
       if (verdict === 'take') { primary = cand; primaryStatus = st; }
       else if (verdict === 'alt') alternates.push(cand.name);
@@ -3964,17 +4055,26 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
 
   // Free for all of `spans`, in none of the chains walked and not already
   // picked: the how-to never reaches them, so they are listed for Surg 2 to
-  // decide — never suggested. Seniors first.
+  // decide — never suggested. Seniors first. `pullable`: the same for
+  // residents in a pull-first clinic (Retina / Uveitis, no cover needed).
   function outsideFree(board, spans, selfId, walked, claims) {
-    var out = [];
+    return outsideOf(board, spans, selfId, walked, claims).free;
+  }
+
+  function outsideOf(board, spans, selfId, walked, claims) {
+    var free = [];
+    var pullable = [];
     ['pgy4', 'pgy3', 'pgy2'].forEach(function (y) {
       board.order.forEach(function (n) {
         if (walked[n] || boardYear(board, n) !== y) return;
         if (claimAt((claims || {})[n], spans)) return;
-        if (board.statusDuringSpans(n, spans, { exclude: selfId }).kind === 'free') out.push(n);
+        var st = board.statusDuringSpans(n, spans, { exclude: selfId });
+        if (st.neverPull) return;
+        if (st.kind === 'free') free.push(n);
+        else if (isPullFirst(st)) pullable.push(n);
       });
     });
-    return out;
+    return { free: free, pullable: pullable };
   }
 
   function stepsOf(e) {
@@ -4057,6 +4157,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return { caseId: c.id, name: '', reasons: ['private — no resident needed'], warnings: [], alternates: [] };
   }
 
+  // "free, but outside the how-to chain: A, B; or pull from Retina / Uveitis
+  // (no cover needed): C" — who else there is, never an automatic pick.
+  function outsideWords(free, pullable) {
+    var bits = [];
+    if ((free || []).length) bits.push('free, but outside the how-to chain: ' + free.join(', '));
+    if ((pullable || []).length) bits.push((bits.length ? 'or ' : '') + 'pull from Retina / Uveitis (no cover needed): ' + pullable.join(', '));
+    return bits.length ? bits.join('; ') : 'nobody else is free then either';
+  }
+
   // One settled case, availability-aware (the board path of suggest()).
   function boardResult(e, board, load, claims) {
     var c = e.c;
@@ -4072,14 +4181,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     if (!e.pick) {
       var walked = {};
       steps.forEach(function (s) { walked[s.name] = true; });
-      var outside = outsideFree(board, e.spans, c.id, walked, claims);
+      var os = outsideOf(board, e.spans, c.id, walked, claims);
       return {
-        caseId: c.id, name: '', status: null, skipped: skipped, alternates: [], outside: outside,
+        caseId: c.id, name: '', status: null, skipped: skipped, alternates: [],
+        outside: os.free, pullable: os.pullable,
         step: e.step, deferred: e.deferred,
         reasons: [hier.label + ' — nobody in the how-to chain is free then'],
-        warnings: ['Surg 2’s call — ' + (outside.length
-          ? 'free, but outside the how-to chain: ' + outside.join(', ')
-          : 'nobody else is free then either')]
+        warnings: ['Surg 2’s call — ' + outsideWords(os.free, os.pullable)]
       };
     }
     var p = e.pick;
@@ -4087,10 +4195,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var reasons = [hier.label + ' → ' + p.via + (e.deferred ? ' (remaining-cases chain)' : '')];
     if (e.deferred) reasons.push('how-to Step ' + e.step + ': skipped for now → Step 10');
     var warnings = [];
-    if (p.via === FREE_JUNIOR_LABEL) {
-      warnings.push(p.name + ' is a free junior — confirm with Surg 2 (their discretion)');
+    if (p.token === 'FREE_JUNIOR') {
+      warnings.push(p.name + (isPullFirst(st) ? ' is a junior in ' + (st.clinic || 'clinic') : ' is a free junior') + ' — confirm with Surg 2 (their discretion)');
     }
-    if (st && st.kind === 'clinic') {
+    if (isPullFirst(st)) {
+      warnings.push(p.name + ' leaves ' + (st.clinic || 'clinic') + ' — no cover needed');
+    } else if (st && st.kind === 'clinic') {
       warnings.push(p.name + ' leaves ' + (st.clinic || 'clinic') + (st.covering && st.covering !== p.name ? ' (covering for ' + st.covering + ')' : '') + ' — needs a backup');
     } else if (st && st.kind === 'duty') {
       warnings.push(p.name + ' is on ' + st.label);
@@ -4241,12 +4351,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
 
   // Where would `name` have been during `spans` — which clinic (theirs, or
   // one they are covering) this case pulls them out of, and for how long.
+  // A pull-first clinic (Retina / Uveitis) needs no cover, so it never counts.
   function pulledClinic(board, name, spans, excludeId) {
     var found = null;
     (spans || []).forEach(function (sp) {
       for (var t = sp.start; t < sp.end; t += 5) {
         var st = board.statusAt(name, t, { exclude: excludeId });
-        if (st.kind !== 'clinic') continue;
+        if (st.kind !== 'clinic' || isPullFirst(st)) continue; // Retina / Uveitis: no cover needed
         if (!found) found = { clinic: st.clinic, owner: st.covering || name, start: t, end: t + 5, session: st.session };
         else if (st.clinic === found.clinic) found.end = Math.max(found.end, t + 5);
       }
@@ -4256,9 +4367,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
 
   // Who covers `pulled.clinic` over its window — Step 12, the clinic-
   // coverage chain only (Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 →
-  // Surg 5 → Wills OR → Retina). A coverer must be free — not out, in a
-  // case, in a clinic, on fixed duty or off-site. When nobody on the chain
-  // is, `outside` lists who else is free (Surg 2's call, never picked).
+  // Surg 5 → Wills OR → Retina, with Uveitis beside Retina). A coverer must
+  // be free — not out, in a case, in a clinic, on fixed duty, off-site or on
+  // Path — or in a pull-first clinic (Retina / Uveitis: leaving needs no
+  // cover). When nobody on the chain can, `outside` / `pullable` list who
+  // else could (Surg 2's call, never picked).
   function findClinicCover(pulled, roster, data, board, excludeNames, excludeId) {
     var hierarchy = (data && data.hierarchy) || {};
     var chain = (hierarchy.clinicCoverage && hierarchy.clinicCoverage.chain) || [];
@@ -4278,15 +4391,18 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var ok = [];
     cands.forEach(function (cand) {
       var st = board.statusDuring(cand.name, pulled.start, pulled.end, { exclude: excludeId });
-      var fine = st.kind === 'free';
-      steps.push({ name: cand.name, source: cand.source, status: st, verdict: fine ? (ok.length ? 'alt' : 'take') : 'skip', why: fine ? null : busyText(st) });
+      var fine = (st.kind === 'free' && !st.neverPull) || isPullFirst(st);
+      var why = fine ? null : (st.neverPull ? (st.text || st.label) + ' — never pulled' : busyText(st));
+      steps.push({ name: cand.name, source: cand.source, status: st, verdict: fine ? (ok.length ? 'alt' : 'take') : 'skip', why: why });
       if (fine) ok.push(cand);
     });
+    var os = ok.length ? { free: [], pullable: [] } : outsideOf(board, [{ start: pulled.start, end: pulled.end }], excludeId, seen, null);
     return {
       primary: ok[0] ? { name: ok[0].name, source: ok[0].source } : null,
       second: ok[1] ? { name: ok[1].name, source: ok[1].source } : null,
       steps: steps,
-      outside: ok.length ? [] : outsideFree(board, [{ start: pulled.start, end: pulled.end }], excludeId, seen, null)
+      outside: os.free,
+      pullable: os.pullable
     };
   }
 
@@ -4336,7 +4452,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       var cover = findClinicCover(pulled, roster, data, board, [assigned], caseObj.id);
       return {
         clinic: pulled.clinic, owner: pulled.owner, window: pulled,
-        primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside
+        primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside, pullable: cover.pullable
       };
     }
     var res = findResident(roster, assigned);
@@ -4420,7 +4536,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       var cover = findClinicCover(pulled, roster, data, board, busy, null);
       e.handoff = {
         clinic: pulled.clinic, owner: pulled.owner, window: pulled,
-        primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside
+        primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside, pullable: cover.pullable
       };
       if (cover.primary) busy.push(cover.primary.name);
     });
@@ -4445,6 +4561,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         firstChoice: displaced ? displaced.name : null,
         displacedBy: displaced ? displaced.takenBy : null,
         outside: e.pick ? [] : outsideFree(board, e.spans, e.c.id, walked, run.claims),
+        pullable: e.pick ? [] : outsideOf(board, e.spans, e.c.id, walked, run.claims).pullable,
         handoff: e.handoff || null
       };
     });
@@ -4465,7 +4582,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       kind: it.kind, label: it.label, time: t, key: it.key, hierLabel: it.hierLabel,
       step: it.step, deferred: it.deferred, draft: it.draft, spans: it.spans,
       pick: it.pick, pickStatus: it.status, steps: it.steps, skipped: it.skipped,
-      alternates: it.alternates, outside: it.outside, handoff: it.handoff
+      alternates: it.alternates, outside: it.outside, pullable: it.pullable, handoff: it.handoff
     };
   }
 
@@ -4494,6 +4611,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     planAddOns: planAddOns,
     lateCover: lateCover,
     stepOf: stepOf,
+    outsideWords: outsideWords,
     ADDON_KINDS: ADDON_KINDS,
     FREE_JUNIOR_LABEL: FREE_JUNIOR_LABEL
   };
@@ -5205,6 +5323,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   }
 
   var TIME_ONLY = /^(?:\d{1,2}(?::?\d{2})?\s*(?:[ap]\.?m\.?)?|am\s*tf|pm)$/i;
+
+  // how many times are listed: '1030 & 1300' → 2
+  function timeCount(str) {
+    return Math.max(1, (String(str).match(/\d{1,2}(?::?\d{2})?\s*(?:[ap]\.?m\.?)?/gi) || []).length);
+  }
   var TIMES = /^(?:\d{1,2}(?::?\d{2})?\s*(?:[ap]\.?m\.?)?)(?:\s*(?:&|,|and)\s*\d{1,2}(?::?\d{2})?\s*(?:[ap]\.?m\.?)?)*$/i;
 
   /* ------------------------------------------------------------------ */
@@ -5236,16 +5359,37 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var bm = /^\s*\(([^()]*)\)/.exec(rest);
     if (bm) {
       rest = rest.slice(bm[0].length);
+      var svcNoTime = false; // '1 service' just read — a bare time next is its time
       bm[1].split(/\s*,\s*/).forEach(function (part) {
         part = trim(part);
         if (!part) return;
         var x;
+        var afterSvc = svcNoTime;
+        svcNoTime = false;
         if (/^all\s+service(?:\s+cases?)?$/i.test(part)) { c.serviceCount = c.count; return; }
-        if ((x = /^(?:service\s*x\s*(\d+)|x?\s*(\d+)\s+service(?:\s+cases?)?)(?:\s+start(?:s|ing)?)?(?:\s*(?:@|at)\s*(.+))?$/i.exec(part))) {
+        // 'service x 4 start @ 9:15AM', '4 service', 'x1 service at 1015' — a
+        // count is one or two digits; '1015 service' is a time (below)
+        if ((x = /^(?:service\s*x\s*(\d{1,2})|x?\s*(\d{1,2})\s+service(?:\s+cases?)?)(?:\s+start(?:s|ing)?)?(?:\s*(?:@|at)\s*(.+))?$/i.exec(part))) {
           c.serviceCount = parseInt(x[1] || x[2], 10);
           if (x[3]) c.serviceTimes = trim(x[3]);
+          else svcNoTime = true;
           return;
         }
+        // 'service case at 10:15AM', 'service @ 1030 & 1300' — one service
+        // case per time
+        if ((x = /^service(?:\s+cases?)?(?:\s+start(?:s|ing)?)?\s*(?:@|at)\s*(.+)$/i.exec(part)) && TIMES.test(trim(x[1]))) {
+          c.serviceTimes = trim(x[1]);
+          if (c.serviceCount == null) c.serviceCount = timeCount(x[1]);
+          return;
+        }
+        // '10:15 service', '1015 service case' — service at that time
+        if ((x = /^(.+?)\s+service(?:\s+cases?)?$/i.exec(part)) && TIMES.test(trim(x[1])) && !/^\d{1,2}$/.test(trim(x[1]))) {
+          c.serviceTimes = trim(x[1]);
+          if (c.serviceCount == null) c.serviceCount = timeCount(x[1]);
+          return;
+        }
+        // '(1 service, 10:15AM)': a bare time right after the service count
+        if (afterSvc && TIME_ONLY.test(part) && !/^(?:am\s*tf|pm)$/i.test(part)) { c.serviceTimes = part; return; }
         if ((x = /^(\d+)\s*private\s*\/\s*(\d+)\s*service$/i.exec(part))) { c.serviceCount = parseInt(x[2], 10); notes.push(part); return; }
         if (/^(?:cc'?d|cross[-\s]?checked|all\s+private|no\s+service(?:\s+cases?)?)$/i.test(part)) { c.serviceCount = 0; notes.push(part); return; }
         if ((x = /^(.+?)\s+start$/i.exec(part)) && !c.start) { c.start = trim(x[1]); return; }
@@ -6217,12 +6361,23 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
              extra: [{ value, text }], hideNames: [names] } */
   var KIND_GROUPS = [
     { kind: 'free', label: 'Free' },
+    { kind: 'pull', label: 'Pull first — Retina / Uveitis, no cover needed' },
     { kind: 'clinic', label: 'In clinic — would need a backup' },
     { kind: 'duty', label: 'On duty (ER / consults / Day Float)' },
     { kind: 'case', label: 'Already in a case then' },
+    { kind: 'never', label: 'Never pulled (Path)' },
     { kind: 'out', label: 'Out' },
     { kind: 'off', label: 'Residents' }
   ];
+
+  // Picker group for a status: Retina / Uveitis residents are the first to
+  // pull from and Path is never pulled (chief, 9/28/2026).
+  function pickKind(st) {
+    if (!st) return 'off';
+    if (st.neverPull && st.kind !== 'out') return 'never';
+    if (st.kind === 'clinic' && st.pullFirst) return 'pull';
+    return st.kind;
+  }
   var PICK_YEAR_ORDER = ['pgy4', 'pgy3', 'pgy2'];
 
   function statusFor(name, opts) {
@@ -6274,7 +6429,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       if (n === sugg) return;
       if (hide.indexOf(n) !== -1 && n !== value) return;
       var st = statusFor(n, opts);
-      var kind = st ? st.kind : 'off';
+      var kind = pickKind(st);
       if (kind === 'out' && n !== value) return; // out → not offered
       (groups[kind] || (groups[kind] = [])).push({ name: n, year: x.year, st: st });
     });
@@ -6290,7 +6445,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       var og = el('optgroup', { label: g.label });
       list.forEach(function (x) {
         var detail = x.st && x.st.label ? ' — ' + statusShort(x.st) : '';
-        og.appendChild(el('option', { value: x.name, text: x.name + ' (' + x.year + ')' + detail }));
+        var o = el('option', { value: x.name, text: x.name + ' (' + x.year + ')' + detail });
+        if (g.kind === 'never' && x.name !== value) o.disabled = true; // never pulled from Path
+        og.appendChild(o);
       });
       sel.appendChild(og);
     });
@@ -7221,11 +7378,18 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   // Everything on a line that depends on who is where: resident cell,
   // the note line under it (backup / warning / why), and the timing text
   // inside the details.
+  function partPrivate(c) {
+    var svc = parseInt(c.serviceCount, 10) || 0;
+    return svc > 0 && svc < (parseInt(c.count, 10) || 1);
+  }
+
   function renderLineLive(c, row) {
     var b = App.board;
     var info = b && b.caseInfo[c.id];
     var res = row.querySelector('.s-res');
     if (res) renderResCell(c, res);
+    var svcTWrap = row.querySelector('.s-svct-wrap');
+    if (svcTWrap) svcTWrap.classList.toggle('hidden', c.section === 'private' || !(partPrivate(c) || trim(c.serviceTimes)));
 
     var sub = row.querySelector('.s-sub');
     if (sub) {
@@ -7235,6 +7399,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       if (assigned) {
         var chk = assignedCheck(c, info);
         if (chk && chk.tone === 'bad') sub.appendChild(el('div', { class: 's-note bad', text: '⚠ ' + chk.text }));
+        if (info && info.svcAssumed) {
+          sub.appendChild(el('div', { class: 's-note', text: 'When is the service case? ' + assigned + ' counts as busy ' + spanText(info.spans) + ' (the list start) — add the time after Svc' }));
+        }
         var plan = null;
         if (window.Assign && window.Assign.backupPlan && b) {
           try { plan = window.Assign.backupPlan(c, App.roster, data(), App.state.cases, b); } catch (e) { plan = null; }
@@ -7252,7 +7419,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
           if (plan && !plan.primary && !trim(c.backup)) {
             line.appendChild(el('span', {
               class: 's-note-warn',
-              text: 'nobody on the coverage chain is free' + ((plan.outside || []).length ? ' — free outside it: ' + plan.outside.slice(0, 3).join(', ') : '')
+              text: 'nobody on the coverage chain is free — ' + outsideText(plan.outside, plan.pullable)
             }));
           }
           line.appendChild(backupPill(c, plan));
@@ -7278,6 +7445,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       if (info && (c.serviceCount > 0 || trim(c.assigned))) {
         timing.appendChild(document.createTextNode('Resident busy ' + spanText(info.spans) +
           (info.estimated ? ' (estimated — set “Done by” to fix)' : '') +
+          (info.svcAssumed ? ' · service case time not given — assumed at the list start' : '') +
           (info.unknownStart ? ' · no start time, assumed 7:30' : '')));
         if (isToday() && trim(c.assigned) && info.spans.length) {
           var now = nowMinutes();
@@ -7335,7 +7503,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     svc.setAttribute('aria-label', 'Service cases');
     svc.title = 'Service cases — 0 means private, no resident';
     onTimingChange(svc);
-    [sur, cnt, st, svc].forEach(function (inp) { inp.addEventListener('keydown', lineKeydown(c)); });
+    // When the service case(s) start — for a list with private cases the
+    // resident is busy only then (chief, 9/28/2026). Shown for part-private
+    // lists (or once a time is set).
+    var svcT = textInput(c.serviceTimes, 'time', function (v) { c.serviceTimes = v; touch(); });
+    svcT.className = 's-svct';
+    svcT.setAttribute('aria-label', 'Service case time(s)');
+    svcT.title = 'When the service case(s) start, e.g. 1015 or 1030 & 1300 — the resident is busy only then';
+    onTimingChange(svcT);
+    [sur, cnt, st, svc, svcT].forEach(function (inp) { inp.addEventListener('keydown', lineKeydown(c)); });
 
     main.appendChild(el('span', { class: 's-sur-wrap' }, [
       sur,
@@ -7347,6 +7523,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     main.appendChild(cat);
     var svcWrap = el('label', { class: 's-svc-wrap' + (c.section === 'private' ? ' hidden' : ''), title: svc.title }, [svc, el('span', { class: 's-svc-label', text: 'svc' })]);
     main.appendChild(svcWrap);
+    main.appendChild(el('label', { class: 's-svct-wrap hidden', title: svcT.title }, [el('span', { class: 's-at', text: '@' }), svcT]));
     main.appendChild(el('span', { class: 's-arrow', text: '→', 'aria-hidden': 'true' }));
     main.appendChild(el('div', { class: 's-res' }));
     var more = el('button', {
@@ -7381,9 +7558,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     });
     grid.appendChild(el('div', { class: 's-d-pill' }, [pill]));
 
-    var svcT = textInput(c.serviceTimes, 'e.g. 1030 & 1300', function (v) { c.serviceTimes = v; touch(); });
-    onTimingChange(svcT);
-    grid.appendChild(miniField('Service case time(s)', svcT));
     var until = textInput(c.until, 'est.', function (v) { c.until = v; touch(); });
     until.classList.add('s-until');
     onTimingChange(until);
@@ -7504,6 +7678,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         sec.appendChild(el('div', { class: 'scols', 'aria-hidden': 'true' }, [
           el('span', { text: 'Surgeon' }), el('span'), el('span', { text: '#' }), el('span', { text: 'Start' }),
           el('span', { text: 'Category' }), el('span', { class: key === 'private' ? 'invisible' : '', text: 'Svc' }),
+          el('span', { class: key === 'private' ? 'invisible' : '', text: 'Svc time' }),
           el('span'), el('span', { text: 'Resident' }), el('span')
         ]));
         list.forEach(function (c) { sec.appendChild(surgeryLine(c)); });
@@ -8061,7 +8236,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
             onclick: function () { ov.cover = lc.primary.name; touch(); refreshEverything(); }
           }));
         }
-        if (ov && lc && !lc.primary) actions.appendChild(el('span', { class: 'field-hint', text: 'Nobody on the coverage chain is free — Surg 2’s call; ' + outsideText(lc.outside) }));
+        if (ov && lc && !lc.primary) actions.appendChild(el('span', { class: 'field-hint', text: 'Nobody on the coverage chain is free — Surg 2’s call; ' + outsideText(lc.outside, lc.pullable) }));
         if (ov) {
           actions.appendChild(el('button', {
             type: 'button', class: 'btn btn-small', text: 'NC — leave uncovered',
@@ -8086,7 +8261,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
             }
           }));
         }
-        if (target && plan && !plan.primary) actions.appendChild(el('span', { class: 'field-hint', text: 'Nobody on the coverage chain is free — Surg 2’s call; ' + outsideText(plan.outside) }));
+        if (target && plan && !plan.primary) actions.appendChild(el('span', { class: 'field-hint', text: 'Nobody on the coverage chain is free — Surg 2’s call; ' + outsideText(plan.outside, plan.pullable) }));
         if (target) {
           actions.appendChild(el('button', {
             type: 'button', class: 'btn btn-small', text: 'NC — leave uncovered',
@@ -8376,76 +8551,90 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     renderAvailStrip();
   }
 
-  var KIND_CLASS = { free: 'k-free', 'case': 'k-case', clinic: 'k-clinic', duty: 'k-duty', out: 'k-out', off: 'k-off' };
+  // Who can take something on, AM and PM (chief, 9/28/2026: "rather then by
+  // specific time, can just have a place to say available in AM and then
+  // another part that says available in PM … the goal is to be able to on
+  // the fly find assignments for people"). Free for all or part of the
+  // session, then the residents to pull first — Retina / Uveitis, no cover
+  // needed. Never anyone on Path.
+  function availCard() {
+    var b = App.board;
+    var card = el('div', { class: 'card avail-card' });
+    card.appendChild(el('h2', {}, ['Available ', el('span', {
+      class: 'h-note',
+      text: 'Free: PT, a Surg role or OR block with nothing booked, or done with their service case. Pull first: Retina / Uveitis — no cover needed. Never Path.'
+    })]));
+    var cols = el('div', { class: 'avail-cols' });
+    [['am', 'AM'], ['pm', 'PM']].forEach(function (p) {
+      var list = b.availableInSession(p[0]);
+      var col = el('div', { class: 'avail-col' });
+      col.appendChild(el('h3', { class: 'avail-h', text: 'Available ' + p[1] }));
+      var free = list.filter(function (x) { return x.group === 'free'; });
+      var seniors = free.filter(function (x) { return b.byName[x.name].year === 'pgy4'; });
+      var juniors = free.filter(function (x) { return b.byName[x.name].year !== 'pgy4'; });
+      var pull = list.filter(function (x) { return x.group === 'pull'; });
+      [['Seniors', seniors, 'nobody free'], ['Juniors', juniors, 'nobody free'], ['Pull first', pull, 'nobody in Retina / Uveitis']].forEach(function (g) {
+        var row = el('div', { class: 'free-row' }, [el('span', { class: 'free-label', text: g[0] })]);
+        if (!g[1].length) row.appendChild(el('span', { class: 'empty-note', text: g[2] }));
+        g[1].sort(function (x, y) { return (x.full ? 0 : 1) - (y.full ? 0 : 1); }).forEach(function (x) {
+          row.appendChild(el('span', { class: 'free-chip ' + yearOf(x.name) + (x.group === 'pull' ? ' pull' : '') + (x.full ? '' : ' partial') }, [
+            el('b', { text: x.name }),
+            el('span', { class: 'free-sub', text: availWhat(x) + (x.full ? '' : ' · ' + availWhen(x, p[0])) })
+          ]));
+        });
+        col.appendChild(row);
+      });
+      cols.appendChild(col);
+    });
+    card.appendChild(cols);
+    return card;
+  }
 
-  function timeBar(t) {
+  // 'Surg 2', 'PT', 'Wills OR', 'Retina Private — no cover needed'
+  function availWhat(x) {
+    var t = String(x.label || x.text || '').replace(/, no case$/, '');
+    return x.group === 'pull' ? t + ' — no cover needed' : t;
+  }
+
+  // 'from 10:45', 'until 10:15', 'except 10:15–10:45 (Henry x10)', '8:00–9:30'
+  function availWhen(x, s) {
     var S = window.Status;
-    var bar = el('div', { class: 'toolbar card-lite time-bar' });
-    bar.appendChild(el('span', { class: 'time-label', text: 'As of' }));
-    var inp = el('input', { type: 'time', value: S.fmtHHMM(t).replace(/^(\d\d)(\d\d)$/, '$1:$2'), step: '300' });
+    var b = App.board;
+    var from = s === 'am' ? b.dayStart : b.noon;
+    var to = s === 'am' ? b.noon : b.dayEnd;
+    var c = function (m) { return S.fmtClock(m).replace(/ [AP]M$/, ''); };
+    var r = x.ranges;
+    if (r.length === 1) {
+      if (r[0].start === from) return 'until ' + c(r[0].end);
+      if (r[0].end === to) return 'from ' + c(r[0].start);
+      return c(r[0].start) + '–' + c(r[0].end);
+    }
+    if (r.length === 2 && r[0].start === from && r[1].end === to) {
+      var gap = (x.gaps || []).filter(function (g) { return g.start < r[1].start && r[0].end < g.end; })[0];
+      return 'except ' + c(r[0].end) + '–' + c(r[1].start) + (gap && gap.label ? ' (' + gap.label + ')' : '');
+    }
+    return r.map(function (w) { return c(w.start) + '–' + c(w.end); }).join(', ');
+  }
+
+  // The add-on planner keeps a clock of its own: the how-to's "busy in a
+  // scheduled case at the time of the add-on" needs one.
+  function planTimeRow(t) {
+    var S = window.Status;
+    var row = el('div', { class: 'plan-time' });
+    row.appendChild(el('span', { class: 'time-label', text: 'At' }));
+    var inp = el('input', { type: 'time', value: S.fmtHHMM(t).replace(/^(\d\d)(\d\d)$/, '$1:$2'), step: '300', 'aria-label': 'When the add-on comes in' });
     inp.addEventListener('change', function () {
       var m = /^(\d{1,2}):(\d{2})/.exec(inp.value);
       if (m) setCoverageTime((+m[1]) * 60 + (+m[2]), false);
     });
-    bar.appendChild(inp);
+    row.appendChild(inp);
     if (isToday()) {
-      bar.appendChild(el('button', {
+      row.appendChild(el('button', {
         type: 'button', class: 'btn btn-small' + (coverageFollowNow ? ' btn-primary' : ''), text: 'Now',
         onclick: function () { setCoverageTime(null, true); }
       }));
     }
-    [[450, '7:30'], [600, '10:00'], [780, '1:00'], [900, '3:00']].forEach(function (p) {
-      bar.appendChild(el('button', {
-        type: 'button', class: 'btn btn-small' + (!coverageFollowNow && t === p[0] ? ' btn-primary' : ''), text: p[1],
-        onclick: function () { setCoverageTime(p[0], false); }
-      }));
-    });
-    bar.appendChild(el('span', {
-      class: 'toolbar-note',
-      text: isToday() ? 'Today — follows the clock unless you pick a time.' : 'Planning view — pick a time to test.'
-    }));
-    return bar;
-  }
-
-  function freeCard(t) {
-    var S = window.Status;
-    var b = App.board;
-    var card = el('div', { class: 'card' });
-    card.appendChild(el('h2', {}, ['Free at ' + S.fmtClock(t) + ' ', el('span', { class: 'h-note', text: 'No clinic, no case, not out — PT, or a Surg/OR block with nothing booked (CPEC counts as clinic)' })]));
-    var free = b.freeAt(t);
-    var seniors = free.filter(function (n) { return b.byName[n].year === 'pgy4'; });
-    var juniors = free.filter(function (n) { return b.byName[n].year !== 'pgy4'; });
-    [['Seniors', seniors], ['Juniors', juniors]].forEach(function (g) {
-      var row = el('div', { class: 'free-row' }, [el('span', { class: 'free-label', text: g[0] })]);
-      if (!g[1].length) row.appendChild(el('span', { class: 'empty-note', text: 'nobody free' }));
-      g[1].forEach(function (n) {
-        var st = b.statusAt(n, t);
-        var until = nextChange(n, t);
-        row.appendChild(el('span', { class: 'free-chip ' + yearOf(n) }, [
-          el('b', { text: n }),
-          el('span', { class: 'free-sub', text: st.label + (until ? ' · until ' + S.fmtClock(until) : '') })
-        ]));
-      });
-      card.appendChild(row);
-    });
-    var pull = b.order.filter(function (n) { return b.statusAt(n, t).kind === 'clinic'; });
-    if (pull.length) {
-      card.appendChild(el('p', { class: 'field-hint' }, [
-        el('b', { text: 'In clinic (can be pulled, then someone covers): ' }),
-        pull.map(function (n) { var st = b.statusAt(n, t); return n + ' (' + (st.clinic || st.label) + ')'; }).join(', ')
-      ]));
-    }
-    return card;
-  }
-
-  // When does this resident's status next change after t? (for "free until")
-  function nextChange(name, t) {
-    var b = App.board;
-    var segs = b.segments(name);
-    for (var i = 0; i < segs.length; i++) {
-      if (segs[i].start <= t && t < segs[i].end) return segs[i].end < b.dayEnd ? segs[i].end : null;
-    }
-    return null;
+    return row;
   }
 
   // One add-on case from a plan: named by its kind (the surgeon is rarely
@@ -8472,9 +8661,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return def;
   }
 
-  // Free, but not on the how-to chain — listed for Surg 2, never picked.
-  function outsideText(list) {
-    return (list || []).length ? 'free, but outside the how-to chain: ' + list.join(', ') : 'nobody else is free then either';
+  // Free, but not on the how-to chain — listed for Surg 2, never picked;
+  // then anyone in Retina / Uveitis (pull first, no cover needed).
+  function outsideText(list, pullable) {
+    return window.Assign.outsideWords(list, pullable);
   }
 
   // Who the plan passed over on the way to its pick, and why.
@@ -8491,7 +8681,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       ho.primary ? el('b', { text: ho.primary.name }) : el('b', { text: 'nobody on the coverage chain is free' }),
       ho.primary
         ? ' (' + ho.primary.source + ') covers ' + ho.clinic + ' ' + S.fmtClock(ho.window.start) + '–' + S.fmtClock(ho.window.end)
-        : ' — Surg 2’s call; ' + outsideText(ho.outside)
+        : ' — Surg 2’s call; ' + outsideText(ho.outside, ho.pullable)
     ]);
   }
 
@@ -8500,12 +8690,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var b = App.board;
     var many = planKinds.length > 1;
     var card = el('div', { class: 'card plan-card' });
-    card.appendChild(el('h2', {}, [(many ? 'If these come in together at ' : 'If something comes in at ') + S.fmtClock(t) + ' ', el('span', {
+    card.appendChild(el('h2', {}, [(many ? 'If these come in together ' : 'If something comes in '), el('span', {
       class: 'h-note',
       text: many
         ? 'In the how-to’s order: add-on glaucoma → Surg 4 and cornea → Surg 3 (Step 6), trauma then plastics (Step 9), then anything skipped down the remaining-cases chain (Step 10). Nobody takes two, and clinic cover (Step 12) never uses someone taking a case.'
         : 'Walks the how-to chain against who is busy right then. Pick more than one for simultaneous cases.'
     })]));
+    card.appendChild(planTimeRow(t));
     var kinds = el('div', { class: 'plan-kinds' });
     (window.Assign.ADDON_KINDS || []).forEach(function (k) {
       var on = planKinds.indexOf(k.key) !== -1;
@@ -8534,7 +8725,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
           skips ? el('span', { class: 'plan-why plan-skips', text: skips }) : null
         ] : [
           '⚠ nobody in the how-to chain is free — Surg 2’s call',
-          el('span', { class: 'plan-why plan-skips', text: outsideText(it.outside) + (skips ? '. ' + skips : '') })
+          el('span', { class: 'plan-why plan-skips', text: outsideText(it.outside, it.pullable) + (skips ? '. ' + skips : '') })
         ]));
         list.appendChild(row);
         if (it.pick && it.handoff) list.appendChild(handoffLine(it.pick.name, it.handoff));
@@ -8586,7 +8777,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     card.appendChild(ol);
 
     if (!plan.pick) {
-      card.appendChild(el('div', { class: 'warn-line bad', text: '⚠ Nobody in the how-to chain is free — Surg 2’s call: ' + outsideText(plan.outside) + '.' }));
+      card.appendChild(el('div', { class: 'warn-line bad', text: '⚠ Nobody in the how-to chain is free — Surg 2’s call: ' + outsideText(plan.outside, plan.pullable) + '.' }));
       return card;
     }
     var ho = plan.handoff;
@@ -8624,7 +8815,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     b.order.forEach(function (n) {
       var am = b.base[n].am;
       var pm = b.base[n].pm;
-      if (am.kind === 'out' || pm.kind !== 'clinic') return;
+      if (am.kind === 'out' || pm.kind !== 'clinic' || pm.pullFirst) return; // Retina / Uveitis: no cover needed
       var amCase = null;
       (App.state.cases || []).forEach(function (c) {
         if (amCase || trim(c.assigned) !== n) return;
@@ -8690,7 +8881,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         var lc = window.Assign.lateCover(r.name, r.clinic, b.pmClinicStart, S.parseClock(want), App.roster, data(), b);
         ctl.appendChild(el('span', { class: 'late-sugg' }, lc.primary ? [
           'If it runs past ' + S.fmtClock(b.pmClinicStart) + ': ', el('b', { text: lc.primary.name }), ' (' + lc.primary.source + ') covers ' + r.clinic
-        ] : ['If it runs past ' + S.fmtClock(b.pmClinicStart) + ': nobody on the coverage chain is free to cover ' + r.clinic + ' — Surg 2’s call; ' + outsideText(lc.outside)]));
+        ] : ['If it runs past ' + S.fmtClock(b.pmClinicStart) + ': nobody on the coverage chain is free to cover ' + r.clinic + ' — Surg 2’s call; ' + outsideText(lc.outside, lc.pullable)]));
         var tIn = el('input', { type: 'time', class: 'late-time', value: want, step: '900', 'aria-label': 'Running late until' });
         tIn.addEventListener('change', function () { lateUntil[r.name] = tIn.value; renderCoverageBody(); });
         ctl.appendChild(el('label', { class: 'late-until' }, ['until ', tIn]));
@@ -8716,68 +8907,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return card;
   }
 
-  function boardCard(t) {
-    var S = window.Status;
-    var b = App.board;
-    var card = el('div', { class: 'card' });
-    card.appendChild(el('h2', {}, ['Everyone’s day ', el('span', { class: 'h-note', text: 'The dark line is ' + S.fmtClock(t) })]));
-    var legend = el('div', { class: 'tl-legend' });
-    [['free', 'free'], ['case', 'in a case'], ['clinic', 'clinic'], ['duty', 'ER / consults / Day Float / off-site'], ['out', 'out']].forEach(function (k) {
-      legend.appendChild(el('span', { class: 'tl-key' }, [el('span', { class: 'tl-swatch ' + KIND_CLASS[k[0]] }), k[1]]));
-    });
-    card.appendChild(legend);
-    var span = b.dayEnd - b.dayStart;
-    var pct = function (m) { return ((Math.min(Math.max(m, b.dayStart), b.dayEnd) - b.dayStart) / span * 100).toFixed(2) + '%'; };
-    // hour axis over the bars: 7 AM, 9, 11, 1 PM, 3, 5 PM
-    var axis = el('div', { class: 'tl-track tl-axis-track', 'aria-hidden': 'true' });
-    for (var h = Math.ceil(b.dayStart / 60); h * 60 <= b.dayEnd; h += 2) {
-      var m = h * 60;
-      var lbl = (h > 12 ? h - 12 : h) + (h === 7 || h === 13 || h * 60 === b.dayEnd ? (h < 12 ? ' AM' : ' PM') : '');
-      axis.appendChild(el('span', {
-        class: 'tl-tick' + (m === b.dayStart ? ' first' : '') + (m === b.dayEnd ? ' last' : ''),
-        style: 'left:' + pct(m), text: lbl
-      }));
-    }
-    card.appendChild(el('div', { class: 'tl-row tl-axis' }, [el('div', { class: 'tl-name' }), axis, el('div', { class: 'tl-status' })]));
-    // Surg roles first (in order), then the rest by year
-    var order = [];
-    Object.keys(b.surgRole).forEach(function (n) { order.push(n); });
-    order.sort(function (x, y) { return (+b.surgRole[x]) - (+b.surgRole[y]); });
-    ['pgy4', 'pgy3', 'pgy2'].forEach(function (yk) {
-      b.order.forEach(function (n) { if (b.byName[n].year === yk && order.indexOf(n) === -1) order.push(n); });
-    });
-    var groupLabel = { pgy4: 'PGY-4', pgy3: 'PGY-3', pgy2: 'PGY-2' };
-    var lastGroup = '';
-    order.forEach(function (n) {
-      var g = b.surgRole[n] ? 'surg' : b.byName[n].year;
-      if (g !== lastGroup) {
-        card.appendChild(el('div', { class: 'tl-group', text: g === 'surg' ? 'Surg roles' : groupLabel[g] }));
-        lastGroup = g;
-      }
-      var st = b.statusAt(n, t);
-      var row = el('div', { class: 'tl-row' });
-      row.appendChild(el('div', { class: 'tl-name' }, [
-        el('span', { class: 'res-name ' + b.byName[n].year, text: n }),
-        b.surgRole[n] ? el('span', { class: 'tl-role', text: 'Surg ' + b.surgRole[n] }) : null
-      ]));
-      var track = el('div', { class: 'tl-track' });
-      b.segments(n).forEach(function (sg) {
-        if (sg.kind === 'off') return;
-        track.appendChild(el('span', {
-          class: 'tl-seg ' + KIND_CLASS[sg.kind],
-          style: 'left:' + pct(sg.start) + ';width:calc(' + pct(sg.end) + ' - ' + pct(sg.start) + ')',
-          title: S.fmtClock(sg.start) + '–' + S.fmtClock(sg.end) + ': ' + sg.label
-        }));
-      });
-      track.appendChild(el('span', { class: 'tl-now', style: 'left:' + pct(t) }));
-      track.appendChild(el('span', { class: 'tl-noon', style: 'left:' + pct(b.noon) }));
-      row.appendChild(track);
-      row.appendChild(el('div', { class: 'tl-status ' + KIND_CLASS[st.kind], text: statusShort(st) }));
-      card.appendChild(row);
-    });
-    return card;
-  }
-
   function renderCoverageTab() {
     renderCoverageBody();
     renderAddOnsCard();
@@ -8794,14 +8923,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     }
     var t = coverageNow();
     if (!(App.state.cases || []).length) host.appendChild(importCallout('No cases for this day in this browser. If someone else built it —'));
-    host.appendChild(timeBar(t));
     var needsHost = el('div');
     renderNeedsCard(needsHost, 'Needs coverage', 'Fix here, or on Clinics / Out today');
     host.appendChild(needsHost);
-    var grid = el('div', { class: 'cov-grid' }, [freeCard(t), planCard(t)]);
-    host.appendChild(grid);
+    host.appendChild(availCard());
+    host.appendChild(planCard(t));
     host.appendChild(lateCard());
-    host.appendChild(boardCard(t));
   }
 
   /* ------------------------------------------------------------------ */
@@ -8830,7 +8957,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       });
     }
     function sessionItems(s) {
-      return b.freeInSession(s).map(function (x) {
+      return b.availableInSession(s).filter(function (x) { return x.group === 'free'; }).map(function (x) {
         var partial = '';
         if (!x.full) {
           partial = x.ranges.map(function (r) {
@@ -9296,7 +9423,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   var CHAIN_TOKEN_LABELS = {
     COOPER: 'Cooper (PGY-4)',
     WILLS_OR: 'Wills OR',
-    RETINA: 'Retina',
+    RETINA: 'Retina / Uveitis',
     PEDS_OR_JUNIOR: 'junior on Peds OR',
     FREE_JUNIOR: 'free junior at Surg 2’s discretion',
     PLASTICS_OR_PGY2: 'PGY-2 on Plastics OR',

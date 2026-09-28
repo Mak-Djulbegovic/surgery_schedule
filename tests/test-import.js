@@ -251,6 +251,21 @@ var Status = require(path.join(__dirname, '..', 'js', 'status.js'));
 var ab = Status.caseSpans(d921.cases[0], DATA);
 eq(Status.fmtClock(ab.start) + '–' + Status.fmtClock(ab.end), '9:15 AM–11:15 AM', 'Cheng is busy for the 4 service cases from 9:15 (4 × 30 min), not from 7:30');
 
+// Hand-typed ways of giving the one service case's time (chief, 9/28: the
+// resident is only responsible for the service case — "it was 1015").
+[
+  ['Henry x 10 (7:30AM start, service x 1 start @ 10:15AM): Cheng', 1, '10:15AM', '7:30AM'],
+  ['Henry x10 (10:15 service): Cheng', 1, '10:15', ''],
+  ['Henry x 10 (7:30 start, 1015 service): Cheng', 1, '1015', '7:30'],
+  ['Henry x10 (1 service, 10:15AM): Cheng', 1, '10:15AM', ''],
+  ['Henry x 10 (7:30AM start, service case at 10:15AM): Cheng', 1, '10:15AM', '7:30AM'],
+  ['Henry x 10 (service @ 1030 & 1300): Cheng', 2, '1030 & 1300', ''],
+  ['Henry x 10 (4 service, 7:30AM start): Cheng', 4, '', '7:30AM']
+].forEach(function (t) {
+  var pc = ImportFmt.parse('Wills/ASC\n- ' + t[0], { names: names, clinics: roster.clinics }).cases[0] || {};
+  eq([pc.serviceCount, pc.serviceTimes, pc.start].join(' | '), [t[1], t[2], t[3]].join(' | '), 'service time read from "' + t[0] + '"');
+});
+
 if (failures) {
   console.error(failures + ' failure(s) of ' + checks);
   process.exit(1);

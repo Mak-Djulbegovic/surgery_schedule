@@ -262,12 +262,18 @@
       return { label: 'Wills OR', names: orBlockPeople(roster, 'Wills OR', sessions).map(function (p) { return p.name; }) };
     }
     if (token === 'RETINA') {
+      // The doc's "Retina", with Uveitis beside it: the clinics to pull from
+      // first, which need no cover (chief, 9/28/2026).
       var names = [];
       var seen = {};
-      orBlockPeople(roster, 'Retina OR', sessions).concat(clinicPeople(roster, 'Retina', sessions)).forEach(function (p) {
+      var d0 = getData();
+      var pf = (d0 && d0.availability && d0.availability.pullFirstTexts) || ['Retina', 'Retina Private', 'Uveitis'];
+      var people = orBlockPeople(roster, 'Retina OR', sessions);
+      pf.forEach(function (label) { people = people.concat(clinicPeople(roster, label, sessions)); });
+      people.forEach(function (p) {
         if (!seen[p.name]) { seen[p.name] = true; names.push(p.name); }
       });
-      return { label: 'Retina', names: names };
+      return { label: 'Retina / Uveitis', names: names };
     }
     return { label: token, names: [] };
   }
@@ -317,11 +323,29 @@
     years.forEach(function (y) {
       board.order.forEach(function (n) {
         if (boardYear(board, n) !== y) return;
-        if (board.statusDuringSpans(n, spans, { exclude: selfId }).kind === 'free') out.push(n);
+        var st = board.statusDuringSpans(n, spans, { exclude: selfId });
+        if (st.kind === 'free' && !st.neverPull) out.push(n);
       });
     });
     return out;
   }
+
+  // …and those in a pull-first clinic (Retina / Uveitis) for all of `spans`
+  // — pulled with no cover needed (chief, 9/28/2026: "the first to pull from
+  // often times is retina/uveitis").
+  function pullFirstNames(board, spans, selfId, years) {
+    var out = [];
+    years.forEach(function (y) {
+      board.order.forEach(function (n) {
+        if (boardYear(board, n) !== y) return;
+        var st = board.statusDuringSpans(n, spans, { exclude: selfId });
+        if (isPullFirst(st)) out.push({ name: n, clinic: st.clinic || st.text || '' });
+      });
+    });
+    return out;
+  }
+
+  function isPullFirst(st) { return !!(st && st.kind === 'clinic' && st.pullFirst && !st.neverPull); }
 
   // The OR-block tokens: the how-to's "1st year on Plastics OR", "1st or
   // 2nd year on Peds OR" … take a resident only while they are on that OR —
@@ -346,6 +370,9 @@
     (chain || []).forEach(function (token) {
       if (token === 'FREE_JUNIOR') {
         freeNames(board, spans, selfId, ['pgy2', 'pgy3']).forEach(function (n) { push(n, FREE_JUNIOR_LABEL, token); });
+        pullFirstNames(board, spans, selfId, ['pgy2', 'pgy3']).forEach(function (p) {
+          push(p.name, 'junior in ' + p.clinic + ' — no cover needed, Surg 2’s discretion', token);
+        });
         return;
       }
       var r = resolveToken(token, roster);
@@ -374,10 +401,12 @@
   }
 
   // One step of the how-to for one case: walk `chain` in order. A candidate
-  // is skipped when out, already in a case, off-site, already picked for
-  // another case then, not free when only a free resident qualifies, or in
-  // clinic when drawn from an OR block. `tried`: names already walked for
-  // this case at an earlier step — not repeated (nothing frees up between).
+  // is skipped when out, already in a case, on Path (never pulled), off-site,
+  // already picked for another case then, not free when only a free resident
+  // qualifies, or in clinic when drawn from an OR block — except a pull-first
+  // clinic (Retina / Uveitis), which counts as available and needs no cover.
+  // `tried`: names already walked for this case at an earlier step — not
+  // repeated (nothing frees up between).
   function walkStep(c, chain, step, roster, board, claims, spans, tried) {
     var cands = chainCandidates(chain, roster, board, spans, c.id, step);
     var steps = [];
@@ -391,10 +420,11 @@
       var why = null;
       if (st.kind === 'out') why = st.label;
       else if (st.kind === 'case') why = busyText(st);
+      else if (st.neverPull) why = (st.text || st.label) + ' — never pulled';
       else if (st.cls === 'offsite') why = st.label; // at Cooper — not pulled to Wills
       else if ((cl = claimAt(claims[cand.name], spans))) why = cl.what;
-      else if (cand.requireFree && st.kind !== 'free') why = st.label;
-      else if (cand.orBlock && st.kind === 'clinic') why = st.label + ' — stays in clinic';
+      else if (cand.requireFree && st.kind !== 'free' && !isPullFirst(st)) why = st.label;
+      else if (cand.orBlock && st.kind === 'clinic' && !isPullFirst(st)) why = st.label + ' — stays in clinic';
       var verdict = why ? 'skip' : (primary ? 'alt' : 'take');
       if (verdict === 'take') { primary = cand; primaryStatus = st; }
       else if (verdict === 'alt') alternates.push(cand.name);
@@ -408,17 +438,26 @@
 
   // Free for all of `spans`, in none of the chains walked and not already
   // picked: the how-to never reaches them, so they are listed for Surg 2 to
-  // decide — never suggested. Seniors first.
+  // decide — never suggested. Seniors first. `pullable`: the same for
+  // residents in a pull-first clinic (Retina / Uveitis, no cover needed).
   function outsideFree(board, spans, selfId, walked, claims) {
-    var out = [];
+    return outsideOf(board, spans, selfId, walked, claims).free;
+  }
+
+  function outsideOf(board, spans, selfId, walked, claims) {
+    var free = [];
+    var pullable = [];
     ['pgy4', 'pgy3', 'pgy2'].forEach(function (y) {
       board.order.forEach(function (n) {
         if (walked[n] || boardYear(board, n) !== y) return;
         if (claimAt((claims || {})[n], spans)) return;
-        if (board.statusDuringSpans(n, spans, { exclude: selfId }).kind === 'free') out.push(n);
+        var st = board.statusDuringSpans(n, spans, { exclude: selfId });
+        if (st.neverPull) return;
+        if (st.kind === 'free') free.push(n);
+        else if (isPullFirst(st)) pullable.push(n);
       });
     });
-    return out;
+    return { free: free, pullable: pullable };
   }
 
   function stepsOf(e) {
@@ -501,6 +540,15 @@
     return { caseId: c.id, name: '', reasons: ['private — no resident needed'], warnings: [], alternates: [] };
   }
 
+  // "free, but outside the how-to chain: A, B; or pull from Retina / Uveitis
+  // (no cover needed): C" — who else there is, never an automatic pick.
+  function outsideWords(free, pullable) {
+    var bits = [];
+    if ((free || []).length) bits.push('free, but outside the how-to chain: ' + free.join(', '));
+    if ((pullable || []).length) bits.push((bits.length ? 'or ' : '') + 'pull from Retina / Uveitis (no cover needed): ' + pullable.join(', '));
+    return bits.length ? bits.join('; ') : 'nobody else is free then either';
+  }
+
   // One settled case, availability-aware (the board path of suggest()).
   function boardResult(e, board, load, claims) {
     var c = e.c;
@@ -516,14 +564,13 @@
     if (!e.pick) {
       var walked = {};
       steps.forEach(function (s) { walked[s.name] = true; });
-      var outside = outsideFree(board, e.spans, c.id, walked, claims);
+      var os = outsideOf(board, e.spans, c.id, walked, claims);
       return {
-        caseId: c.id, name: '', status: null, skipped: skipped, alternates: [], outside: outside,
+        caseId: c.id, name: '', status: null, skipped: skipped, alternates: [],
+        outside: os.free, pullable: os.pullable,
         step: e.step, deferred: e.deferred,
         reasons: [hier.label + ' — nobody in the how-to chain is free then'],
-        warnings: ['Surg 2’s call — ' + (outside.length
-          ? 'free, but outside the how-to chain: ' + outside.join(', ')
-          : 'nobody else is free then either')]
+        warnings: ['Surg 2’s call — ' + outsideWords(os.free, os.pullable)]
       };
     }
     var p = e.pick;
@@ -531,10 +578,12 @@
     var reasons = [hier.label + ' → ' + p.via + (e.deferred ? ' (remaining-cases chain)' : '')];
     if (e.deferred) reasons.push('how-to Step ' + e.step + ': skipped for now → Step 10');
     var warnings = [];
-    if (p.via === FREE_JUNIOR_LABEL) {
-      warnings.push(p.name + ' is a free junior — confirm with Surg 2 (their discretion)');
+    if (p.token === 'FREE_JUNIOR') {
+      warnings.push(p.name + (isPullFirst(st) ? ' is a junior in ' + (st.clinic || 'clinic') : ' is a free junior') + ' — confirm with Surg 2 (their discretion)');
     }
-    if (st && st.kind === 'clinic') {
+    if (isPullFirst(st)) {
+      warnings.push(p.name + ' leaves ' + (st.clinic || 'clinic') + ' — no cover needed');
+    } else if (st && st.kind === 'clinic') {
       warnings.push(p.name + ' leaves ' + (st.clinic || 'clinic') + (st.covering && st.covering !== p.name ? ' (covering for ' + st.covering + ')' : '') + ' — needs a backup');
     } else if (st && st.kind === 'duty') {
       warnings.push(p.name + ' is on ' + st.label);
@@ -685,12 +734,13 @@
 
   // Where would `name` have been during `spans` — which clinic (theirs, or
   // one they are covering) this case pulls them out of, and for how long.
+  // A pull-first clinic (Retina / Uveitis) needs no cover, so it never counts.
   function pulledClinic(board, name, spans, excludeId) {
     var found = null;
     (spans || []).forEach(function (sp) {
       for (var t = sp.start; t < sp.end; t += 5) {
         var st = board.statusAt(name, t, { exclude: excludeId });
-        if (st.kind !== 'clinic') continue;
+        if (st.kind !== 'clinic' || isPullFirst(st)) continue; // Retina / Uveitis: no cover needed
         if (!found) found = { clinic: st.clinic, owner: st.covering || name, start: t, end: t + 5, session: st.session };
         else if (st.clinic === found.clinic) found.end = Math.max(found.end, t + 5);
       }
@@ -700,9 +750,11 @@
 
   // Who covers `pulled.clinic` over its window — Step 12, the clinic-
   // coverage chain only (Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 →
-  // Surg 5 → Wills OR → Retina). A coverer must be free — not out, in a
-  // case, in a clinic, on fixed duty or off-site. When nobody on the chain
-  // is, `outside` lists who else is free (Surg 2's call, never picked).
+  // Surg 5 → Wills OR → Retina, with Uveitis beside Retina). A coverer must
+  // be free — not out, in a case, in a clinic, on fixed duty, off-site or on
+  // Path — or in a pull-first clinic (Retina / Uveitis: leaving needs no
+  // cover). When nobody on the chain can, `outside` / `pullable` list who
+  // else could (Surg 2's call, never picked).
   function findClinicCover(pulled, roster, data, board, excludeNames, excludeId) {
     var hierarchy = (data && data.hierarchy) || {};
     var chain = (hierarchy.clinicCoverage && hierarchy.clinicCoverage.chain) || [];
@@ -722,15 +774,18 @@
     var ok = [];
     cands.forEach(function (cand) {
       var st = board.statusDuring(cand.name, pulled.start, pulled.end, { exclude: excludeId });
-      var fine = st.kind === 'free';
-      steps.push({ name: cand.name, source: cand.source, status: st, verdict: fine ? (ok.length ? 'alt' : 'take') : 'skip', why: fine ? null : busyText(st) });
+      var fine = (st.kind === 'free' && !st.neverPull) || isPullFirst(st);
+      var why = fine ? null : (st.neverPull ? (st.text || st.label) + ' — never pulled' : busyText(st));
+      steps.push({ name: cand.name, source: cand.source, status: st, verdict: fine ? (ok.length ? 'alt' : 'take') : 'skip', why: why });
       if (fine) ok.push(cand);
     });
+    var os = ok.length ? { free: [], pullable: [] } : outsideOf(board, [{ start: pulled.start, end: pulled.end }], excludeId, seen, null);
     return {
       primary: ok[0] ? { name: ok[0].name, source: ok[0].source } : null,
       second: ok[1] ? { name: ok[1].name, source: ok[1].source } : null,
       steps: steps,
-      outside: ok.length ? [] : outsideFree(board, [{ start: pulled.start, end: pulled.end }], excludeId, seen, null)
+      outside: os.free,
+      pullable: os.pullable
     };
   }
 
@@ -780,7 +835,7 @@
       var cover = findClinicCover(pulled, roster, data, board, [assigned], caseObj.id);
       return {
         clinic: pulled.clinic, owner: pulled.owner, window: pulled,
-        primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside
+        primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside, pullable: cover.pullable
       };
     }
     var res = findResident(roster, assigned);
@@ -864,7 +919,7 @@
       var cover = findClinicCover(pulled, roster, data, board, busy, null);
       e.handoff = {
         clinic: pulled.clinic, owner: pulled.owner, window: pulled,
-        primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside
+        primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside, pullable: cover.pullable
       };
       if (cover.primary) busy.push(cover.primary.name);
     });
@@ -889,6 +944,7 @@
         firstChoice: displaced ? displaced.name : null,
         displacedBy: displaced ? displaced.takenBy : null,
         outside: e.pick ? [] : outsideFree(board, e.spans, e.c.id, walked, run.claims),
+        pullable: e.pick ? [] : outsideOf(board, e.spans, e.c.id, walked, run.claims).pullable,
         handoff: e.handoff || null
       };
     });
@@ -909,7 +965,7 @@
       kind: it.kind, label: it.label, time: t, key: it.key, hierLabel: it.hierLabel,
       step: it.step, deferred: it.deferred, draft: it.draft, spans: it.spans,
       pick: it.pick, pickStatus: it.status, steps: it.steps, skipped: it.skipped,
-      alternates: it.alternates, outside: it.outside, handoff: it.handoff
+      alternates: it.alternates, outside: it.outside, pullable: it.pullable, handoff: it.handoff
     };
   }
 
@@ -938,6 +994,7 @@
     planAddOns: planAddOns,
     lateCover: lateCover,
     stepOf: stepOf,
+    outsideWords: outsideWords,
     ADDON_KINDS: ADDON_KINDS,
     FREE_JUNIOR_LABEL: FREE_JUNIOR_LABEL
   };

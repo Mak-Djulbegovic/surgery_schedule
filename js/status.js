@@ -22,6 +22,10 @@
  *            (chief's rule, 9/2026; CPEC is a clinic — chief, 9/28/2026)
  *   off    — nothing scheduled (weekend / outside the academic year)
  *
+ * Flags on a status: pullFirst — in a clinic to pull from first, that needs
+ * no cover when they leave (Retina / Uveitis, data.availability.
+ * pullFirstTexts); neverPull — never pulled for anything (Path).
+ *
  * Times are minutes after midnight. The board's working day is 07:00–17:00
  * in 5-minute slots; AM is before 12:00, PM from 12:00.
  */
@@ -46,6 +50,8 @@
   var DEFAULT_DUTY = ['ER', 'Jeff Consults', 'Cooper Consults'];
   var DEFAULT_OFFSITE = ['Cooper Clinic', 'Cooper OR'];
   var DEFAULT_NO_COVER = ['PT', 'Day Float'];
+  var DEFAULT_PULL_FIRST = ['Retina', 'Retina Private', 'Uveitis'];
+  var DEFAULT_NEVER_PULL = ['Path'];
 
   var RANK = { off: 0, free: 1, duty: 2, clinic: 3, 'case': 4, out: 5 };
 
@@ -133,10 +139,15 @@
   }
 
   // When the assigned resident is scrubbed for this case.
-  //   - Service-case times given (and only some cases are service): one
-  //     case-length block at each time; extra service cases stack on the last.
-  //   - Otherwise the whole list: start + count × minutes-per-case. That is
-  //     conservative for part-private lists, and flagged as an estimate.
+  //   - A list with private and service cases: the resident is needed only
+  //     for the service cases (chief, 9/28/2026: "he is only responsible for
+  //     his case when it is listed as a service case … available to leave
+  //     for an emergent add-on after that case or to go to clinic"). One
+  //     case-length block at each service time; extra service cases stack
+  //     on the last. No service time: the service cases are assumed to open
+  //     the list (flagged svcAssumed, so the row asks for the time).
+  //   - All service (or a private list someone was put on anyway): the
+  //     whole list, start + count × minutes-per-case, flagged as an estimate.
   //   - 'until' (typed end time, or 'Done' day-of) replaces the last end.
   //   - No start ('AM TF', blank): assume 7:30, flagged unknownStart.
   function caseSpans(c, data) {
@@ -149,11 +160,15 @@
     var start = unknownStart ? DAY_START + 30 : starts[0];
     var svcTimes = clockTokens(c.serviceTimes).sort(function (a, b) { return a - b; });
     var spans = [];
-    if (svcTimes.length && svc > 0 && svc < count) {
+    var svcAssumed = false;
+    if (svc > 0 && svc < count && svcTimes.length) {
       svcTimes.forEach(function (t, i) {
         var n = i === svcTimes.length - 1 ? Math.max(1, svc - (svcTimes.length - 1)) : 1;
         spans.push({ start: t, end: t + n * per });
       });
+    } else if (svc > 0 && svc < count) {
+      spans.push({ start: start, end: start + svc * per });
+      svcAssumed = true;
     } else {
       spans.push({ start: start, end: start + count * per });
     }
@@ -170,6 +185,7 @@
       end: spans[spans.length - 1].end,
       estimated: estimated,
       unknownStart: unknownStart,
+      svcAssumed: svcAssumed,
       perCase: per
     };
   }
@@ -235,7 +251,10 @@
     roster = roster || {};
     day = day || {};
     var av = data.availability || {};
-    var noCover = av.noCoverTexts || DEFAULT_NO_COVER;
+    var pullFirst = av.pullFirstTexts || DEFAULT_PULL_FIRST;
+    var neverPull = av.neverPullTexts || DEFAULT_NEVER_PULL;
+    // pull-first clinics need no cover by definition
+    var noCover = (av.noCoverTexts || DEFAULT_NO_COVER).concat(pullFirst);
 
     var byName = {};
     var order = [];
@@ -324,7 +343,18 @@
       (ov.removed || []).forEach(function (n) { removedFrom[label + '|' + sess + '|' + n] = true; });
     });
 
+    // pullFirst / neverPull ride on the status of whatever text they are on
+    function flagged(bd) {
+      if (bd.kind === 'clinic' && pullFirst.indexOf(bd.text) !== -1) bd.pullFirst = true;
+      if (bd.kind !== 'out' && neverPull.indexOf(bd.text) !== -1) bd.neverPull = true;
+      return bd;
+    }
+
     function baseDutyOf(name, s) {
+      return flagged(baseDutyRaw(name, s));
+    }
+
+    function baseDutyRaw(name, s) {
       var res = byName[name];
       var o = outBy[name] && outBy[name][s];
       if (o) {
@@ -390,7 +420,7 @@
       var a = trim(c.assigned);
       caseInfo[c.id] = {
         c: c, spans: cs.spans, start: cs.start, end: cs.end,
-        estimated: cs.estimated, unknownStart: cs.unknownStart,
+        estimated: cs.estimated, unknownStart: cs.unknownStart, svcAssumed: cs.svcAssumed,
         assigned: a, backup: trim(c.backup)
       };
       if (a && byName[a]) {
@@ -468,12 +498,14 @@
       if (cr && cr.caseId !== exclude) {
         return {
           kind: 'clinic', label: 'covering ' + cr.clinic + ' for ' + cr.for, clinic: cr.clinic,
-          covering: cr.for, caseId: cr.caseId, session: s, viaCase: true
+          covering: cr.for, caseId: cr.caseId, session: s, viaCase: true,
+          pullFirst: pullFirst.indexOf(cr.clinic) !== -1, neverPull: neverPull.indexOf(cr.clinic) !== -1
         };
       }
       return {
         kind: bd.kind, label: bd.label, text: bd.text, cls: bd.cls, covering: bd.covering || null,
-        clinic: bd.kind === 'clinic' ? bd.text : null, session: s, nfCover: !!bd.nfCover
+        clinic: bd.kind === 'clinic' ? bd.text : null, session: s, nfCover: !!bd.nfCover,
+        pullFirst: !!bd.pullFirst, neverPull: !!bd.neverPull
       };
     }
 
@@ -499,29 +531,42 @@
       return out;
     }
 
+    // Worst status over a set of statuses. neverPull if ANY part is on a
+    // never-pull duty; pullFirst only if EVERY clinic part is a pull-first
+    // clinic (half an hour in Retina and half in Cornea still needs cover).
+    function worstOf(list) {
+      var worst = null;
+      var anyNever = false;
+      var allPull = true;
+      list.forEach(function (st) {
+        if (st.neverPull) anyNever = true;
+        if (st.kind === 'clinic' && !st.pullFirst) allPull = false;
+        // name the clinic that does need cover when a window spans both
+        var coverFirst = worst && st.kind === 'clinic' && worst.kind === 'clinic' && worst.pullFirst && !st.pullFirst;
+        if (!worst || RANK[st.kind] > RANK[worst.kind] || coverFirst) worst = st;
+      });
+      if (!worst) return null;
+      var out = {};
+      for (var k in worst) out[k] = worst[k];
+      out.neverPull = anyNever;
+      out.pullFirst = out.kind === 'clinic' && allPull;
+      return out;
+    }
+
     // Worst status over [start, end) — the answer to "can X do this?".
     // Samples every slot plus the last minute, so short cases are caught.
     function statusDuring(name, start, end, opts) {
       if (!byName[name]) return { kind: 'off', label: '' };
-      var worst = null;
       var times = [];
       for (var t = start; t < end && times.length < 300; t += SLOT) times.push(t);
       if (end - 1 > start) times.push(end - 1);
       if (!times.length) times.push(start);
-      times.forEach(function (tt) {
-        var st = statusAt(name, tt, opts);
-        if (!worst || RANK[st.kind] > RANK[worst.kind]) worst = st;
-      });
-      return worst;
+      return worstOf(times.map(function (tt) { return statusAt(name, tt, opts); }));
     }
 
     function statusDuringSpans(name, spans, opts) {
-      var worst = null;
-      (spans || []).forEach(function (sp) {
-        var st = statusDuring(name, sp.start, sp.end, opts);
-        if (!worst || RANK[st.kind] > RANK[worst.kind]) worst = st;
-      });
-      return worst || { kind: 'off', label: '' };
+      var w = worstOf((spans || []).map(function (sp) { return statusDuring(name, sp.start, sp.end, opts); }));
+      return w || { kind: 'off', label: '' };
     }
 
     function freeAt(t) {
@@ -554,6 +599,53 @@
       return out;
     }
 
+    // Who can be given something to do in a session (chief, 9/28/2026: "a
+    // place to say available in AM and then another part that says
+    // available in PM … to be able to on the fly find assignments"): free
+    // for all or part of it (PT, a Surg role / OR block with nothing booked,
+    // done with their service case) → group 'free'; else in a pull-first
+    // clinic (Retina / Uveitis — no cover needed) → group 'pull'. Stretches
+    // shorter than minMinutes (default 30) are left out. Never anyone out,
+    // in a case, on a fixed duty, off-site, on Path, or in another clinic.
+    // `gaps`: what fills the rest of the session, for "except 10:15–10:45
+    // (Henry x10)".
+    function availableInSession(s, opts) {
+      var min = (opts && opts.minMinutes) || 30;
+      var from = s === 'am' ? DAY_START : NOON;
+      var to = s === 'am' ? NOON : DAY_END;
+      var out = [];
+      function add(list, t0, extra) {
+        var last = list[list.length - 1];
+        if (last && last.end === t0 && (!extra || last.label === extra)) last.end = t0 + SLOT;
+        else list.push(extra ? { start: t0, end: t0 + SLOT, label: extra } : { start: t0, end: t0 + SLOT });
+      }
+      order.forEach(function (n) {
+        var row = grid[n];
+        var free = [];
+        var pull = [];
+        var other = [];
+        for (var i = slotIdx(from); i < slotIdx(to); i++) {
+          var st = row[i];
+          var t0 = DAY_START + i * SLOT;
+          if (!st.neverPull && st.kind === 'free') add(free, t0);
+          else if (!st.neverPull && st.kind === 'clinic' && st.pullFirst) add(pull, t0);
+          else add(other, t0, st.label);
+        }
+        function keep(list) { return list.filter(function (r) { return r.end - r.start >= min; }); }
+        free = keep(free);
+        pull = keep(pull);
+        var ranges = free.length ? free : pull;
+        if (!ranges.length) return;
+        var st0 = base[n][s];
+        out.push({
+          name: n, group: free.length ? 'free' : 'pull', ranges: ranges,
+          full: ranges.length === 1 && ranges[0].start === from && ranges[0].end === to,
+          label: st0.label, text: st0.text, gaps: other
+        });
+      });
+      return out;
+    }
+
     /* what still needs covering */
     var needs = [];
     absences.forEach(function (a) {
@@ -576,6 +668,7 @@
     var expected = [];
     Object.keys(roster.clinics || {}).forEach(function (label) {
       if (classifyText(label, data) !== 'clinic') return;
+      if (noCover.indexOf(label) !== -1) return; // Retina / Uveitis: nobody backfills
       ['am', 'pm'].forEach(function (s) {
         var grp = (roster.clinics[label] || {})[s] || [];
         var names = grp.map(function (p) { return typeof p === 'string' ? p : p && p.name; });
@@ -589,14 +682,14 @@
     Object.keys(addedTo).forEach(function (n) {
       ['am', 'pm'].forEach(function (s) {
         var label = addedTo[n][s];
-        if (!label || (roster.clinics || {})[label]) return;
+        if (!label || (roster.clinics || {})[label] || noCover.indexOf(label) !== -1) return;
         expected.push({ holder: n, owner: n, clinic: label, session: s });
       });
     });
     order.forEach(function (n) {
       ['am', 'pm'].forEach(function (s) {
         var bd = base[n][s];
-        if (bd.kind === 'clinic' && bd.covering) expected.push({ holder: n, owner: bd.covering, clinic: bd.text, session: s });
+        if (bd.kind === 'clinic' && bd.covering && noCover.indexOf(bd.text) === -1) expected.push({ holder: n, owner: bd.covering, clinic: bd.text, session: s });
       });
     });
 
@@ -665,6 +758,9 @@
       segments: segments,
       freeAt: freeAt,
       freeInSession: freeInSession,
+      availableInSession: availableInSession,
+      pullFirstTexts: pullFirst,
+      neverPullTexts: neverPull,
       isOut: function (name, s) { return !!(outBy[name] && outBy[name][s]); },
       caseSpansFor: function (c) { return caseSpans(c, data); },
       dayStart: DAY_START,
