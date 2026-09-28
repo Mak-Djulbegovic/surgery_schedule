@@ -67,10 +67,10 @@ encodes — and the assumptions still to calibrate — are listed in
   resident on the line, and the Coverage tab answers "a globe comes in —
   who takes it, who covers their clinic". Every rule, and every assumption
   still to calibrate: [docs/UISPEC6.md](docs/UISPEC6.md).
-- **v1** — the original app, kept two ways: the git tag
-  [`v1`](https://github.com/Mak-Djulbegovic/surgery_schedule/tree/v1)
-  (exact source), and [`v1/index.html`](v1/index.html), the whole v1 app in
-  one file (on the hosted site at `/v1/`). See [v1/README.md](v1/README.md).
+- **v1** — the original app, kept two ways: its exact source at commit
+  [`29d8fa0`](https://github.com/Mak-Djulbegovic/surgery_schedule/tree/29d8fa0c5d68247da914be06cda35fbb9bb73b45) (main before v2), and
+  [`v1/index.html`](v1/index.html), the whole v1 app in one file (on the
+  hosted site at `/v1/`). See [v1/README.md](v1/README.md).
 
 Days saved in v1 open in v2 (same browser, same storage keys).
 

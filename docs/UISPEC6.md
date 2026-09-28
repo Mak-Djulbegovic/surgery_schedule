@@ -116,8 +116,10 @@ Unchanged without a board (old tests pass as before). With a board:
 - `d/s` is ignored; no "send to phone" link.
 - **Add-on call names are PGY-4s**: the add-on dropdowns list the seniors,
   with "Other…" opening every resident for the rare exception.
-- **v2**: the app shows "v2"; v1 is kept as git tag `v1` and as
-  `v1/index.html` (one file; its saved days use separate storage keys).
+- **v2**: the app shows "v2"; v1 is kept as `v1/index.html` (one file; its
+  saved days use separate storage keys) and its source is main @ `29d8fa0`
+  (a `v1` tag could not be pushed from the build session — create it on
+  GitHub at that commit).
 
 ## Still assumptions (say so if wrong)
 
