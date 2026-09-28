@@ -49,10 +49,11 @@ The six tabs follow the "How to Surgical Schedule" order:
    covers; anything left short is listed on top.
 5. **Coverage** — who is available AM and PM (free, or done with their
    service case; then Retina / Uveitis, the first to pull from — no cover
-   needed; never Path), what happens if a globe comes in (Surg 2 takes it;
-   the clinic they held passes down the coverage chain) or several add-ons
-   at once (the doc's step order), who covers a clinic if a morning OR runs
-   late, add-on call names.
+   needed; never Path), what happens if add-ons come in — one or several,
+   each at its own time, placed in the doc's step order and searched
+   exactly so none is left without a resident when some choice covers it
+   (docs/OPTIMIZATION.md) — who covers a clinic if a morning OR runs late
+   (free juniors first for a junior), add-on call names.
 6. **Preview & Copy** — the day in the standard document format, copied
    with formatting for Google Docs, Word, or email.
 

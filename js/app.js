@@ -53,7 +53,9 @@
   var caseSectionOpen = { wills: true, private: true, jhn: true, other: true };
   var coverageTime = null;   // minutes; null = default (now if today, else 1 PM)
   var coverageFollowNow = true;
-  var planKinds = ['globe']; // Coverage: what comes in (one, or several at once)
+  // Coverage: add-ons to place, each with its own time (null = the planner's
+  // default time: now if today, else 1 PM)
+  var planItems = [{ kind: 'globe', t: null }];
 
   // New-year setup (UISPEC5 §E): the built-in data object is captured at boot
   // so 'Remove imported configuration' can always revert to it; usingOverride
@@ -2691,13 +2693,6 @@
     return 13 * 60;
   }
 
-  function setCoverageTime(t, followNow) {
-    coverageTime = t;
-    coverageFollowNow = !!followNow;
-    renderCoverageBody();
-    renderAvailStrip();
-  }
-
   // Who can take something on, AM and PM (chief, 9/28/2026: "rather then by
   // specific time, can just have a place to say available in AM and then
   // another part that says available in PM … the goal is to be able to on
@@ -2747,8 +2742,8 @@
   function availWhen(x, s) {
     var S = window.Status;
     var b = App.board;
-    var from = s === 'am' ? b.dayStart : b.noon;
-    var to = s === 'am' ? b.noon : b.dayEnd;
+    var from = x.from != null ? x.from : (s === 'am' ? b.dayStart : b.noon);
+    var to = x.to != null ? x.to : (s === 'am' ? b.noon : b.dayEnd);
     var c = function (m) { return S.fmtClock(m).replace(/ [AP]M$/, ''); };
     var r = x.ranges;
     if (r.length === 1) {
@@ -2761,27 +2756,6 @@
       return 'except ' + c(r[0].end) + '–' + c(r[1].start) + (gap && gap.label ? ' (' + gap.label + ')' : '');
     }
     return r.map(function (w) { return c(w.start) + '–' + c(w.end); }).join(', ');
-  }
-
-  // The add-on planner keeps a clock of its own: the how-to's "busy in a
-  // scheduled case at the time of the add-on" needs one.
-  function planTimeRow(t) {
-    var S = window.Status;
-    var row = el('div', { class: 'plan-time' });
-    row.appendChild(el('span', { class: 'time-label', text: 'At' }));
-    var inp = el('input', { type: 'time', value: S.fmtHHMM(t).replace(/^(\d\d)(\d\d)$/, '$1:$2'), step: '300', 'aria-label': 'When the add-on comes in' });
-    inp.addEventListener('change', function () {
-      var m = /^(\d{1,2}):(\d{2})/.exec(inp.value);
-      if (m) setCoverageTime((+m[1]) * 60 + (+m[2]), false);
-    });
-    row.appendChild(inp);
-    if (isToday()) {
-      row.appendChild(el('button', {
-        type: 'button', class: 'btn btn-small' + (coverageFollowNow ? ' btn-primary' : ''), text: 'Now',
-        onclick: function () { setCoverageTime(null, true); }
-      }));
-    }
-    return row;
   }
 
   // One add-on case from a plan: named by its kind (the surgeon is rarely
@@ -2832,39 +2806,84 @@
     ]);
   }
 
+  function planTimeOf(item, t) { return item.t != null ? item.t : t; }
+
+  // One row per add-on: what it is, when it comes in, remove.
+  function planRow(item, idx, t) {
+    var S = window.Status;
+    var row = el('div', { class: 'plan-row' });
+    var sel = el('select', { class: 'sel plan-kind', 'aria-label': 'Kind of add-on' });
+    (window.Assign.ADDON_KINDS || []).forEach(function (k) { sel.appendChild(el('option', { value: k.key, text: k.label })); });
+    sel.value = item.kind;
+    sel.addEventListener('change', function () { item.kind = sel.value; renderCoverageBody(); });
+    var inp = el('input', {
+      type: 'time', class: 'plan-when', step: '300', 'aria-label': 'Comes in at',
+      value: S.fmtHHMM(planTimeOf(item, t)).replace(/^(\d\d)(\d\d)$/, '$1:$2')
+    });
+    inp.addEventListener('change', function () {
+      var m = /^(\d{1,2}):(\d{2})/.exec(inp.value);
+      if (m) { item.t = (+m[1]) * 60 + (+m[2]); renderCoverageBody(); }
+    });
+    row.appendChild(el('span', { class: 'plan-n', text: String(idx + 1) }));
+    row.appendChild(sel);
+    row.appendChild(el('label', { class: 'plan-at' }, ['at ', inp]));
+    if (planItems.length > 1) {
+      row.appendChild(el('button', {
+        type: 'button', class: 'btn-icon danger', title: 'Remove this add-on', text: '×',
+        onclick: function () { planItems.splice(idx, 1); renderCoverageBody(); }
+      }));
+    }
+    return row;
+  }
+
   function planCard(t) {
     var S = window.Status;
     var b = App.board;
-    var many = planKinds.length > 1;
+    var many = planItems.length > 1;
     var card = el('div', { class: 'card plan-card' });
-    card.appendChild(el('h2', {}, [(many ? 'If these come in together ' : 'If something comes in '), el('span', {
+    card.appendChild(el('h2', {}, ['If add-ons come in ', el('span', {
       class: 'h-note',
-      text: many
-        ? 'In the how-to’s order: add-on glaucoma → Surg 4 and cornea → Surg 3 (Step 6), trauma then plastics (Step 9), then anything skipped down the remaining-cases chain (Step 10). Nobody takes two, and clinic cover (Step 12) never uses someone taking a case.'
-        : 'Walks the how-to chain against who is busy right then. Pick more than one for simultaneous cases.'
+      text: 'Each at its own time. Assigned in the how-to’s order — add-on glaucoma → Surg 4 and cornea → Surg 3 (Step 6), trauma then plastics (Step 9), anything skipped down the remaining-cases chain in time order (Step 10) — nobody taking two at once. If that order would leave an add-on with nobody while another choice covers it, the plan takes that choice and says so.'
     })]));
-    card.appendChild(planTimeRow(t));
-    var kinds = el('div', { class: 'plan-kinds' });
-    (window.Assign.ADDON_KINDS || []).forEach(function (k) {
-      var on = planKinds.indexOf(k.key) !== -1;
-      kinds.appendChild(el('button', {
-        type: 'button', class: 'filter-chip' + (on ? ' active' : ''), 'aria-pressed': on ? 'true' : 'false',
-        text: (on && many ? '✓ ' : '') + k.label,
+    var rows = el('div', { class: 'plan-rows' });
+    planItems.forEach(function (item, idx) { rows.appendChild(planRow(item, idx, t)); });
+    card.appendChild(rows);
+    card.appendChild(el('div', { class: 'plan-add' }, [
+      el('button', {
+        type: 'button', class: 'btn btn-small', text: '+ Add another add-on',
         onclick: function () {
-          if (on && planKinds.length > 1) planKinds = planKinds.filter(function (x) { return x !== k.key; });
-          else if (!on) planKinds = planKinds.concat([k.key]);
+          var last = planItems[planItems.length - 1];
+          planItems.push({ kind: 'globe', t: last ? planTimeOf(last, t) : null });
           renderCoverageBody();
         }
-      }));
-    });
-    card.appendChild(kinds);
+      }),
+      isToday() ? el('button', {
+        type: 'button', class: 'btn btn-small', text: 'Times → now',
+        title: 'Set every add-on to the current time',
+        onclick: function () { planItems.forEach(function (it) { it.t = null; }); coverageFollowNow = true; coverageTime = null; renderCoverageBody(); }
+      }) : null
+    ]));
 
+    var list = planItems.map(function (it) { return { kind: it.kind, t: planTimeOf(it, t) }; });
     if (many) {
-      var joint = window.Assign.planAddOns(planKinds, t, App.roster, data(), b);
-      var list = el('div', { class: 'plan-joint' });
-      joint.items.forEach(function (it) {
+      var joint = window.Assign.planAddOns(list, t, App.roster, data(), b);
+      if (joint.unfilledByOrder > joint.unfilled) {
+        var moved = joint.items.filter(function (it) { return it.adjusted; });
+        card.appendChild(el('div', { class: 'warn-line plan-changed' }, [
+          el('b', { text: 'Changed from the how-to’s plain order: ' }),
+          'by the order alone ' + joint.unfilledByOrder + ' add-on' + (joint.unfilledByOrder === 1 ? '' : 's') +
+            ' would have nobody; this plan covers ' + (joint.unfilled ? 'more' : 'all') + '. ' +
+            moved.slice().sort(function (x, y) { return x.time - y.time; }).map(function (it) {
+              return it.label + ' at ' + S.fmtClock(it.time) + ': ' + (it.pick ? it.pick.name : 'nobody') + ' (the order alone: ' + (it.byOrder || 'nobody') + ')';
+            }).join('; ') + '.'
+        ]));
+      }
+      var box = el('div', { class: 'plan-joint' });
+      joint.items.slice().sort(function (x, y) { return x.time - y.time; }).forEach(function (it) {
         var row = el('div', { class: 'plan-joint-row' + (it.pick ? '' : ' bad') });
-        row.appendChild(el('span', { class: 'plan-joint-kind', text: it.label }));
+        row.appendChild(el('span', { class: 'plan-joint-kind' }, [
+          el('span', { class: 'plan-joint-time', text: S.fmtClock(it.time) }), ' ', it.label
+        ]));
         var skips = skipSummary(it);
         row.appendChild(el('span', { class: 'plan-joint-who' }, it.pick ? [
           '→ ', el('b', { text: it.pick.name }), el('span', { class: 'plan-via', text: ' ' + it.pick.via }),
@@ -2874,10 +2893,10 @@
           '⚠ nobody in the how-to chain is free — Surg 2’s call',
           el('span', { class: 'plan-why plan-skips', text: outsideText(it.outside, it.pullable) + (skips ? '. ' + skips : '') })
         ]));
-        list.appendChild(row);
-        if (it.pick && it.handoff) list.appendChild(handoffLine(it.pick.name, it.handoff));
+        box.appendChild(row);
+        if (it.pick && it.handoff) box.appendChild(handoffLine(it.pick.name, it.handoff));
       });
-      card.appendChild(list);
+      card.appendChild(box);
       var filled = joint.items.filter(function (it) { return it.pick; });
       if (filled.length) {
         card.appendChild(el('div', { class: 'plan-actions' }, [
@@ -2885,10 +2904,10 @@
             type: 'button', class: 'btn btn-primary',
             text: 'Add ' + (filled.length === 1 ? 'it' : 'all ' + filled.length) + ' as add-on cases',
             onclick: function () {
-              filled.forEach(function (it) { addPlannedCase(it.kind, t, it.pick.name, it.handoff); });
+              filled.forEach(function (it) { addPlannedCase(it.kind, it.time, it.pick.name, it.handoff); });
               touch();
               refreshEverything();
-              toast(filled.length + ' add-on case' + (filled.length === 1 ? '' : 's') + ' added at ' + S.fmtClock(t) + ' — fill in the surgeons on Surgery');
+              toast(filled.length + ' add-on case' + (filled.length === 1 ? '' : 's') + ' added — fill in the surgeons on Surgery');
             }
           }),
           el('span', { class: 'field-hint', text: 'Adds them to Surgery (Wills/ASC) so the board, clinics and the copied schedule all follow.' })
@@ -2897,7 +2916,8 @@
       return card;
     }
 
-    var plan = window.Assign.planAddOn(planKinds[0], t, App.roster, data(), b);
+    var one = list[0];
+    var plan = window.Assign.planAddOn(one.kind, one.t, App.roster, data(), b);
     card.appendChild(el('div', {
       class: 'field-hint plan-chain',
       text: 'How-to Step ' + plan.step + ': ' + plan.hierLabel +
@@ -2934,10 +2954,10 @@
         type: 'button', class: 'btn btn-primary',
         text: 'Add it as an add-on case → ' + plan.pick.name + (ho && ho.primary ? ' (backup ' + ho.primary.name + ')' : ''),
         onclick: function () {
-          var def = addPlannedCase(planKinds[0], t, plan.pick.name, ho);
+          var def = addPlannedCase(one.kind, one.t, plan.pick.name, ho);
           touch();
           refreshEverything();
-          toast(def.label + ' added at ' + S.fmtClock(t) + ' → ' + plan.pick.name + ' — fill in the surgeon on Surgery');
+          toast(def.label + ' added at ' + S.fmtClock(one.t) + ' → ' + plan.pick.name + ' — fill in the surgeon on Surgery');
         }
       }),
       el('span', { class: 'field-hint', text: 'Adds it to Surgery (Wills/ASC) so the board, clinics and the copied schedule all follow.' })
@@ -2993,6 +3013,7 @@
       card.appendChild(el('p', { class: 'empty-note', text: 'Nobody goes from a morning OR to an afternoon clinic today.' }));
       return card;
     }
+    var offered = []; // one coverer per late clinic — never the same person for two
     rows.forEach(function (r) {
       var o = (App.state.overruns || []).filter(function (x) { return x.name === r.name; })[0];
       var line = el('div', { class: 'late-row' + (o ? ' on' : '') });
@@ -3025,7 +3046,8 @@
         }));
       } else {
         var want = lateUntil[r.name] || S.fmtHHMM(Math.max(b.pmClinicStart + 60, r.amCase ? r.amCase.end : 0)).replace(/^(\d\d)(\d\d)$/, '$1:$2');
-        var lc = window.Assign.lateCover(r.name, r.clinic, b.pmClinicStart, S.parseClock(want), App.roster, data(), b);
+        var lc = window.Assign.lateCover(r.name, r.clinic, b.pmClinicStart, S.parseClock(want), App.roster, data(), b, offered);
+        if (lc.primary) offered.push(lc.primary.name);
         ctl.appendChild(el('span', { class: 'late-sugg' }, lc.primary ? [
           'If it runs past ' + S.fmtClock(b.pmClinicStart) + ': ', el('b', { text: lc.primary.name }), ' (' + lc.primary.source + ') covers ' + r.clinic
         ] : ['If it runs past ' + S.fmtClock(b.pmClinicStart) + ': nobody on the coverage chain is free to cover ' + r.clinic + ' — Surg 2’s call; ' + outsideText(lc.outside, lc.pullable)]));

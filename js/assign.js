@@ -11,8 +11,8 @@
  *                                   -> who covers the clinic the case pulls someone from
  * Assign.planAddOn(kind, t, roster, data, board)
  *                                   -> "a globe comes in at t": who takes it, who covers
- * Assign.planAddOns([kinds], t, roster, data, board)
- *                                   -> several at once, nobody taking two
+ * Assign.planAddOns([kinds | {kind, t}], t, roster, data, board)
+ *                                   -> several add-ons, each at its own time
  *
  * `board` (optional) is a Status board (js/status.js). Without it, suggest /
  * backupPlan go by chain order only (suggest still in the how-to's step
@@ -407,6 +407,17 @@
   // clinic (Retina / Uveitis), which counts as available and needs no cover.
   // `tried`: names already walked for this case at an earlier step — not
   // repeated (nothing frees up between).
+  // Why the board alone rules `cand` out for a case (null = they could).
+  function boardWhy(cand, st) {
+    if (st.kind === 'out') return st.label;
+    if (st.kind === 'case') return busyText(st);
+    if (st.neverPull) return (st.text || st.label) + ' — never pulled';
+    if (st.cls === 'offsite') return st.label; // at Cooper — not pulled to Wills
+    if (cand.requireFree && st.kind !== 'free' && !isPullFirst(st)) return st.label;
+    if (cand.orBlock && st.kind === 'clinic' && !isPullFirst(st)) return st.label + ' — stays in clinic';
+    return null;
+  }
+
   function walkStep(c, chain, step, roster, board, claims, spans, tried) {
     var cands = chainCandidates(chain, roster, board, spans, c.id, step);
     var steps = [];
@@ -417,14 +428,8 @@
       if (tried && tried[cand.name]) return;
       var st = board.statusDuringSpans(cand.name, spans, { exclude: c.id });
       var cl = null;
-      var why = null;
-      if (st.kind === 'out') why = st.label;
-      else if (st.kind === 'case') why = busyText(st);
-      else if (st.neverPull) why = (st.text || st.label) + ' — never pulled';
-      else if (st.cls === 'offsite') why = st.label; // at Cooper — not pulled to Wills
-      else if ((cl = claimAt(claims[cand.name], spans))) why = cl.what;
-      else if (cand.requireFree && st.kind !== 'free' && !isPullFirst(st)) why = st.label;
-      else if (cand.orBlock && st.kind === 'clinic' && !isPullFirst(st)) why = st.label + ' — stays in clinic';
+      var why = boardWhy(cand, st);
+      if (!why && (cl = claimAt(claims[cand.name], spans))) why = cl.what;
       var verdict = why ? 'skip' : (primary ? 'alt' : 'take');
       if (verdict === 'take') { primary = cand; primaryStatus = st; }
       else if (verdict === 'alt') alternates.push(cand.name);
@@ -755,12 +760,18 @@
   // Path — or in a pull-first clinic (Retina / Uveitis: leaving needs no
   // cover). When nobody on the chain can, `outside` / `pullable` list who
   // else could (Surg 2's call, never picked).
-  function findClinicCover(pulled, roster, data, board, excludeNames, excludeId) {
+  // `lead` (optional): [{ name, source }] tried before the chain.
+  function findClinicCover(pulled, roster, data, board, excludeNames, excludeId, lead) {
     var hierarchy = (data && data.hierarchy) || {};
     var chain = (hierarchy.clinicCoverage && hierarchy.clinicCoverage.chain) || [];
     var seen = {};
     (excludeNames || []).forEach(function (n) { seen[n] = true; });
     var cands = [];
+    (lead || []).forEach(function (c) {
+      if (!c.name || seen[c.name]) return;
+      seen[c.name] = true;
+      cands.push({ name: c.name, source: c.source, token: '' });
+    });
     chain.forEach(function (token) {
       if (token === 'FREE_JUNIOR') return;
       var r = resolveToken(token, roster, [pulled.session || 'pm']);
@@ -880,78 +891,247 @@
     return def;
   }
 
-  // Add-ons coming in at time t, assigned exactly as the how-to orders it:
-  // Step 6 (add-on glaucoma → Surg 4, add-on cornea → Surg 3 — skip for now
-  // if they are in a case), Step 9 (trauma, then plastics, down their
-  // chain), then Step 10 for anything skipped or left (Surg 2 → Surg 3 →
-  // Surg 4 → Cooper → Surg 1 → Surg 5). Nobody takes two at once. Then
-  // Step 12: everyone pulled out of a clinic hands it down the clinic-
-  // coverage chain — never to someone taking one of these cases, and never
-  // one coverer for two clinics. Nobody in the chains free → no pick, and
-  // `outside` lists who else is free (Surg 2's call).
-  function planAddOns(kinds, t, roster, data, board) {
+  // One stage of one add-on's walk against the board alone — who is out, in
+  // a case, on Path, off-site, not free when only a free resident
+  // qualifies, or in clinic when drawn from an OR block. Picks for the other
+  // add-ons are applied by the solver.
+  function stageOptions(c, chain, step, roster, board, spans, tried) {
+    return chainCandidates(chain, roster, board, spans, c.id, step).filter(function (cand) {
+      return !(tried && tried[cand.name]);
+    }).map(function (cand) {
+      var st = board.statusDuringSpans(cand.name, spans, { exclude: c.id });
+      return { cand: cand, status: st, why: boardWhy(cand, st) };
+    });
+  }
+
+  // The how-to's order, searched exactly (entries: the add-ons, each with
+  // stage1 = its own chain for Steps 6–9, stage2 = Step 10's chain).
+  // Phase 1 walks the Step 6–9 add-ons in step order; each takes a free
+  // person from its chain or is skipped for now. Phase 2 walks everything
+  // skipped plus the Step 10 add-ons in time order. Nobody takes two add-ons
+  // whose times overlap. Choices are tried in the doc's preference order, so
+  // the first complete answer is exactly the doc's own; the search goes on
+  // only while some add-on is left without anyone, and keeps the first
+  // answer (in that same order) that leaves the fewest uncovered —
+  // lexicographic: coverage first, then the doc's order. A depth-first
+  // branch and bound; the node cap is a safety net, far above what a day of
+  // add-ons needs.
+  function solvePlan(entries) {
+    var LIMIT = 50000;
+    var nodes = 0;
+    var claims = {};
+    var pick = {};
+    var best = null;
+    var greedy = null; // the first complete answer = the doc's own order
+    function chrono(a, b) { return a.time - b.time || a.step - b.step || a.sub - b.sub || a.i - b.i; }
+    var p1 = entries.filter(function (e) { return e.step < 10; }).sort(function (a, b) {
+      return a.step - b.step || a.sub - b.sub || a.time - b.time || a.i - b.i;
+    });
+    var native10 = entries.filter(function (e) { return e.step >= 10; });
+    function free(name, e) { return !claimAt(claims[name], e.spans); }
+    function claim(name, e) {
+      claims[name] = (claims[name] || []).concat(e.spans.map(function (sp) { return { start: sp.start, end: sp.end, entry: e }; }));
+    }
+    function unclaim(name, e) {
+      claims[name] = (claims[name] || []).filter(function (x) { return x.entry !== e; });
+    }
+    function copyPick() {
+      var o = {};
+      for (var k in pick) o[k] = pick[k];
+      return o;
+    }
+    function done() { return best && best.uncovered === 0; }
+    function phase2(list, k, uncovered) {
+      if (done() || nodes > LIMIT) return;
+      if (best && uncovered >= best.uncovered) return; // cannot beat the best so far
+      nodes++;
+      if (k === list.length) {
+        best = { uncovered: uncovered, pick: copyPick() };
+        if (!greedy) greedy = best;
+        return;
+      }
+      var e = list[k];
+      for (var r = 0; r < e.stage2.length; r++) {
+        var o = e.stage2[r];
+        if (o.why || !free(o.cand.name, e)) continue;
+        claim(o.cand.name, e);
+        pick[e.i] = { opt: o, stage: 2 };
+        phase2(list, k + 1, uncovered);
+        unclaim(o.cand.name, e);
+        delete pick[e.i];
+        if (done()) return;
+      }
+      pick[e.i] = null; // nobody on the chain can take it
+      phase2(list, k + 1, uncovered + 1);
+      delete pick[e.i];
+    }
+    function phase1(k, deferred) {
+      if (done() || nodes > LIMIT) return;
+      nodes++;
+      if (k === p1.length) {
+        phase2(deferred.concat(native10).sort(chrono), 0, 0);
+        return;
+      }
+      var e = p1[k];
+      for (var r = 0; r < e.stage1.length; r++) {
+        var o = e.stage1[r];
+        if (o.why || !free(o.cand.name, e)) continue;
+        claim(o.cand.name, e);
+        pick[e.i] = { opt: o, stage: 1 };
+        phase1(k + 1, deferred);
+        unclaim(o.cand.name, e);
+        delete pick[e.i];
+        if (done()) return;
+      }
+      phase1(k + 1, deferred.concat([e])); // skip for now
+    }
+    phase1(0, []);
+    return {
+      pick: best ? best.pick : {}, uncovered: best ? best.uncovered : entries.length,
+      greedy: greedy ? greedy.pick : {}, greedyUncovered: greedy ? greedy.uncovered : entries.length,
+      nodes: nodes, capped: nodes > LIMIT
+    };
+  }
+
+  // Add-ons coming in during the day, each at its own time (chief,
+  // 9/28/2026: "we need to be able to put in multiple surgeries that all may
+  // have different times"). `items`: kind strings (all at `t`) or
+  // { kind, t } objects. Assigned as the how-to orders it — Step 6 (add-on
+  // glaucoma → Surg 4, add-on cornea → Surg 3, skip for now if they are in a
+  // case), Step 9 (trauma, then plastics, down their chain), Step 10 for
+  // anything skipped or left (Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 →
+  // Surg 5), in time order — with one change the doc cannot make by hand:
+  // if following it leaves an add-on with nobody while another choice would
+  // cover it, the plan takes the first such choice (solvePlan). Then Step
+  // 12: everyone pulled out of a clinic hands it down the clinic-coverage
+  // chain, never to someone taking an add-on at that time. Nobody in the
+  // chains free → no pick, and `outside` / `pullable` list who else could
+  // (Surg 2's call).
+  function planAddOns(items, t, roster, data, board) {
     data = getData(data);
     var S = getStatus();
     var hierarchy = (data && data.hierarchy) || {};
-    var entries = (kinds || []).map(function (kind, i) {
+    var remChain = (hierarchy.remaining && hierarchy.remaining.chain) || [];
+    var entries = (items || []).map(function (item, i) {
+      var kind = typeof item === 'string' ? item : item && item.kind;
+      var at = (item && typeof item === 'object' && item.t != null) ? item.t : t;
       var def = kindDef(kind);
       var draft = {
         id: '__plan' + i + '__', section: 'wills', surgeon: '', category: def.category, addOn: true,
-        count: 1, serviceCount: 1, start: S ? S.fmtHHMM(t) : '', assigned: '', backup: ''
+        count: 1, serviceCount: 1, start: S ? S.fmtHHMM(at) : '', assigned: '', backup: ''
       };
       var key = classify(draft, data);
       var hier = hierarchy[key] || { label: key, chain: [] };
-      return {
+      var e = {
         c: draft, i: i, def: def, key: key, hier: hier, chain: chainFor(key, draft, hier),
-        step: stepOf(key, hier), sub: subRank(draft), private: false,
+        step: stepOf(key, hier), sub: subRank(draft), time: at,
         spans: board.caseSpansFor(draft).spans
       };
+      var tried = {};
+      if (e.step < 10) {
+        e.stage1 = stageOptions(draft, e.chain, e.step, roster, board, e.spans, null);
+        e.stage1.forEach(function (o) { tried[o.cand.name] = true; });
+      } else {
+        e.stage1 = [];
+      }
+      e.stage2 = stageOptions(draft, e.step < 10 ? remChain : e.chain, 10, roster, board, e.spans, tried);
+      return e;
     });
-    var run = runSteps(entries, roster, data, board, function (e) {
-      return { what: 'taking the ' + e.def.label.toLowerCase(), by: e.def.label };
+    var sol = solvePlan(entries);
+    entries.forEach(function (e) {
+      var p = sol.pick[e.i];
+      var g = sol.greedy[e.i];
+      e.pick = p ? p.opt.cand : null;
+      e.pickStatus = p ? p.opt.status : null;
+      e.pickStage = p ? p.stage : 0;
+      e.deferred = e.step < 10 && e.pickStage !== 1;
+      e.byOrder = g ? g.opt.cand.name : null; // who the doc's order alone gives it to
+      e.changed = (e.byOrder || '') !== (e.pick ? e.pick.name : '');
     });
+    function overlapsE(a, b) { return spansOverlap(a.spans, b.spans); }
+    function takerOf(name, e) {
+      return entries.filter(function (f) { return f !== e && f.pick && f.pick.name === name && overlapsE(e, f); })[0] || null;
+    }
 
-    var busy = entries.filter(function (e) { return e.pick; }).map(function (e) { return e.pick.name; });
-    run.settled.forEach(function (e) {
+    // Step 12, earliest first: cover for everyone pulled out of a clinic —
+    // never someone taking an add-on then, never one coverer for two
+    // clinics at once.
+    var covers = [];
+    entries.slice().sort(function (a, b) { return a.time - b.time || a.i - b.i; }).forEach(function (e) {
       if (!e.pick || !e.pickStatus || e.pickStatus.kind !== 'clinic') return;
       var pulled = pulledClinic(board, e.pick.name, e.spans, null);
       if (!pulled) return;
+      var win = [{ start: pulled.start, end: pulled.end }];
+      var busy = [e.pick.name];
+      entries.forEach(function (f) { if (f.pick && spansOverlap(f.spans, win)) busy.push(f.pick.name); });
+      covers.forEach(function (cv) { if (spansOverlap(cv.win, win)) busy.push(cv.name); });
       var cover = findClinicCover(pulled, roster, data, board, busy, null);
       e.handoff = {
         clinic: pulled.clinic, owner: pulled.owner, window: pulled,
         primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside, pullable: cover.pullable
       };
-      if (cover.primary) busy.push(cover.primary.name);
+      if (cover.primary) covers.push({ name: cover.primary.name, win: win });
     });
 
-    var items = entries.map(function (e) {
-      var steps = stepsOf(e);
+    var claimsFinal = {};
+    entries.forEach(function (e) {
+      if (!e.pick) return;
+      claimsFinal[e.pick.name] = (claimsFinal[e.pick.name] || []).concat(e.spans.map(function (sp) { return { start: sp.start, end: sp.end }; }));
+    });
+
+    var out = entries.map(function (e) {
+      // the walk as it played out: who was passed over, and why
+      var steps = [];
+      var adjusted = false;
+      var stages = e.step < 10 ? [[e.stage1, e.step]] : [];
+      if (e.step >= 10 || e.pickStage !== 1) stages.push([e.stage2, 10]);
+      var seenPick = false;
+      stages.forEach(function (sg) {
+        sg[0].forEach(function (o) {
+          var isPick = e.pick && o.cand === e.pick;
+          var taker = !o.why ? takerOf(o.cand.name, e) : null;
+          var why = o.why || (taker ? 'taking the ' + taker.def.label.toLowerCase() + (taker.time !== e.time && S ? ' at ' + S.fmtClock(taker.time) : '') : null);
+          var verdict;
+          if (isPick) { verdict = 'take'; seenPick = true; }
+          else if (why) verdict = 'skip';
+          else if (!seenPick) { verdict = 'skip'; why = 'kept for another add-on, so none is left without a resident'; adjusted = true; }
+          else verdict = 'alt';
+          steps.push({
+            name: o.cand.name, via: o.cand.via, step: sg[1], token: o.cand.token, status: o.status,
+            verdict: verdict, why: why, takenBy: taker ? taker.def.label : null
+          });
+        });
+      });
       var takeIdx = -1;
       steps.forEach(function (s, i) { if (takeIdx === -1 && s.verdict === 'take') takeIdx = i; });
       var skipped = steps.filter(function (s, i) { return s.verdict === 'skip' && (takeIdx === -1 || i < takeIdx); });
       var displaced = skipped.filter(function (s) { return s.takenBy; })[0] || null;
       var walked = {};
       steps.forEach(function (s) { walked[s.name] = true; });
-      var last = e.stages[e.stages.length - 1];
+      var os = e.pick ? { free: [], pullable: [] } : outsideOf(board, e.spans, e.c.id, walked, claimsFinal);
       return {
-        kind: e.def.key, label: e.def.label, key: e.key, hierLabel: e.hier.label,
-        step: e.step, deferred: e.deferred, draft: e.c, spans: e.spans,
+        kind: e.def.key, label: e.def.label, key: e.key, hierLabel: e.hier.label, time: e.time,
+        step: e.step, deferred: e.deferred, adjusted: adjusted || e.changed, byOrder: e.byOrder, draft: e.c, spans: e.spans,
         pick: e.pick ? { name: e.pick.name, via: e.pick.via } : null,
         status: e.pickStatus || null,
         steps: steps,
         skipped: skipped.map(function (s) { return { name: s.name, via: s.via, why: s.why, step: s.step }; }),
-        alternates: (last && last.alternates) || [],
+        alternates: steps.filter(function (s) { return s.verdict === 'alt'; }).map(function (s) { return s.name; }),
         firstChoice: displaced ? displaced.name : null,
         displacedBy: displaced ? displaced.takenBy : null,
-        outside: e.pick ? [] : outsideFree(board, e.spans, e.c.id, walked, run.claims),
-        pullable: e.pick ? [] : outsideOf(board, e.spans, e.c.id, walked, run.claims).pullable,
+        outside: os.free,
+        pullable: os.pullable,
         handoff: e.handoff || null
       };
     });
     return {
       time: t,
-      items: items,
-      unfilled: items.filter(function (it) { return !it.pick; }).length
+      items: out,
+      unfilled: out.filter(function (it) { return !it.pick; }).length,
+      // the doc's order alone would leave this many with nobody
+      unfilledByOrder: sol.greedyUncovered,
+      searched: sol.nodes,
+      capped: sol.capped
     };
   }
 
@@ -960,7 +1140,7 @@
   // even from clinic (chief's rule, 9/2026: Surg 2 takes the globe) — and
   // whatever clinic they leave passes down the clinic-coverage chain.
   function planAddOn(kind, t, roster, data, board) {
-    var it = planAddOns([kind], t, roster, data, board).items[0];
+    var it = planAddOns([{ kind: kind, t: t }], t, roster, data, board).items[0];
     return {
       kind: it.kind, label: it.label, time: t, key: it.key, hierLabel: it.hierLabel,
       step: it.step, deferred: it.deferred, draft: it.draft, spans: it.spans,
@@ -973,14 +1153,27 @@
   /* lateCover — "the morning OR runs past 12:30: who covers their PM    */
   /* clinic until they are out?"                                         */
   /* ------------------------------------------------------------------ */
-  // The clinic-coverage chain (how-to Step 12; Surg 2 first — the AY legend:
-  // "Surg 2 … Cover Cornea/Glaucoma if Surg 3/4 has PM cases") over
-  // [start, end); the coverer must be free the whole time. `exclude`: names
-  // to skip (the late resident is always skipped).
+  // A junior running late: free juniors first (chief, 9/28/2026: "if there
+  // are free juniors (PGY2 and 3), they can be the default to help take
+  // over if the PGY2 is running later in the OR with Carrasco … will have
+  // Parekh cover if Patel goes past 12:30"), PGY-3s before PGY-2s
+  // (assumption). Then — and for a senior running late — the clinic-
+  // coverage chain (how-to Step 12; Surg 2 first — the AY legend: "Surg 2
+  // … Cover Cornea/Glaucoma if Surg 3/4 has PM cases"). The coverer must be
+  // free the whole of [start, end). `exclude`: names to skip (the late
+  // resident is always skipped).
   function lateCover(name, clinic, start, end, roster, data, board, exclude, excludeId) {
     data = getData(data);
     var pulled = { clinic: clinic, owner: name, start: start, end: end, session: 'pm' };
-    return findClinicCover(pulled, roster, data, board, [name].concat(exclude || []), excludeId || null);
+    var skip = [name].concat(exclude || []);
+    var lead = [];
+    var y = boardYear(board, name);
+    if (y === 'pgy2' || y === 'pgy3') {
+      freeNames(board, [{ start: start, end: end }], excludeId || null, ['pgy3', 'pgy2']).forEach(function (n) {
+        if (skip.indexOf(n) === -1) lead.push({ name: n, source: 'free junior' });
+      });
+    }
+    return findClinicCover(pulled, roster, data, board, skip, excludeId || null, lead);
   }
 
   /* ------------------------------------------------------------------ */

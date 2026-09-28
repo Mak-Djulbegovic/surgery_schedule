@@ -66,6 +66,44 @@ automatic save in case they X out of the tab."
   Shared workroom computers on one browser profile still share drafts —
   documented, not solved (would need sign-in or per-person keys).
 
+## Several add-ons at different times; cataract lists; late juniors (9/28/2026, evening)
+
+- **Cataract lists keep the resident** (chief: "when anyone is in cataract
+  cases, they are part of that OR until they are done (both service and
+  private cases)"). A cataract list takes the whole list, start + count ×
+  30 min, whatever the service count; the service-only rule below is for
+  every other list.
+- **Add-ons at their own times** (chief: "we need to be able to put in
+  multiple surgeries that all may have different times"). Coverage → "If
+  add-ons come in": one row per add-on (kind, time, remove; "+ Add another
+  add-on"). `Assign.planAddOns([{ kind, t }], …)`. Two add-ons conflict only
+  if their times overlap, so one resident can take a 9 AM globe and a 2 PM
+  TAB. Clinic cover (Step 12) likewise only excludes someone taking an
+  add-on at that time.
+- **Exact planning** (chief: "refer to online resources to see how we may be
+  able to best optimize this scheduling problem" — see docs/OPTIMIZATION.md).
+  The how-to's steps are a greedy order: taken literally, a Step 6 add-on
+  can take the one person a later Step 9 add-on needed. The planner now
+  searches the same choices exactly (depth-first, in the doc's preference
+  order, with branch and bound): the first complete answer is the doc's own;
+  it keeps looking only while some add-on has nobody, and takes the first
+  answer that covers more — coverage first, then the doc's order
+  (lexicographic). When the answer differs from the plain order the card
+  says so, e.g. "Globe 1:00 PM: Calotti (the order alone: nobody); Glaucoma
+  add-on 1:30 PM: Cheng (the order alone: Calotti)". The Surgery tab still
+  uses the plain order (it is the doc's procedure for the whole list).
+- **A junior running late: free juniors first** (chief: "if there are free
+  juniors (PGY2 and 3), they can be the default to help take over if the
+  PGY2 is running later in the OR with Carrasco … will have Parekh cover if
+  Patel goes past 12:30"). `Assign.lateCover`: for a PGY-2/3, free juniors
+  (PGY-3s first — assumption) before the clinic-coverage chain; a senior
+  running late still gets the chain. Each late row offers a different
+  coverer. In the block schedule it is Ransone on Plastics OR this Tuesday
+  (9/29, Parekh on Wills OR — free); Patel from 10/13, when Parekh is on ER
+  all day, so the app offers another free junior (Cotton on 10/13).
+- **Available AM counts from 7:30**, the OR start — the half hour before a
+  7:30 list is not listed as free time.
+
 ## Finding people on the fly (9/28/2026, later)
 
 - **Busy only for the service case** (chief: "if Henry has 10 cases, he is
@@ -73,7 +111,7 @@ automatic save in case they X out of the tab."
   this case it was 1015, so he is theoretically available to leave for an
   emergent add-on after that case or to go to clinic"). For a list with
   private and service cases the resident is busy only for the service cases:
-  at the service time(s), one case length each; with no service time given,
+  (not cataracts — see above) at the service time(s), one case length each; with no service time given,
   at the list start (`svcAssumed`, and the Surgery row asks "When is the
   service case?"). All-service lists still take the whole list. The Surgery
   row now has the service time right after Svc (it used to be under ⋯).
@@ -319,9 +357,9 @@ Mechanics, with a board:
 - `data.caseMinutes` (turnover included): cataract 30, cornea 90,
   glaucoma 90, plastics 60, peds 60, retina 90, trauma 120, other 60 —
   **estimates, not measured**.
-- A list with private and service cases but no service time: the service
-  cases are assumed to open the list (the row asks for the time). Before
-  9/28 the resident was counted busy for the whole list.
+- A non-cataract list with private and service cases but no service time:
+  the service cases are assumed to open the list (the row asks for the
+  time). Cataract lists always take the whole list.
 - Sessions: AM before 12:00, PM from 12:00; the board runs 7:00–17:00.
 
 ## Decided by the chief (9/27/2026)

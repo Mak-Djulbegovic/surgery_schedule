@@ -1170,10 +1170,19 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 /* ---------------- Coverage ---------------- */
 
 .time-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
-.plan-time { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 10px; }
-.plan-time input[type="time"] {
-  border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13.5px;
+/* add-ons to place, each at its own time */
+.plan-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.plan-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.plan-n {
+  flex: none; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 700; color: var(--accent); background: var(--accent-soft);
 }
+.plan-kind { width: auto; min-width: 0; max-width: 260px; }
+.plan-at { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.plan-when { border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13.5px; }
+.plan-add { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.plan-joint-time { font-weight: 600; color: var(--muted); font-size: 12px; }
+.plan-changed { margin-bottom: 8px; }
 /* available AM | PM */
 .avail-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 24px; }
 .avail-h { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--text); }
@@ -1191,7 +1200,6 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .free-chip.pgy3 b { color: var(--pgy3); }
 .free-chip.pgy4 b { color: var(--pgy4); }
 .free-sub { font-size: 11px; color: var(--muted); }
-.plan-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .plan-chain { margin-bottom: 6px; }
 .plan-steps { list-style: none; margin: 0 0 8px; padding: 0; }
 .plan-step { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; padding: 4px 0; font-size: 13px; border-bottom: 1px solid var(--border-soft); }
