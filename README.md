@@ -85,6 +85,24 @@ Days saved in v1 open in v2 (same browser, same storage keys).
 Because state lives in each browser's localStorage, sharing a link shares the
 app — never your entered data.
 
+### Saving, and working at the same time as someone else
+
+- **Autosave**: every edit is saved within 0.3 s, and again the moment the tab
+  is hidden or closed (phones included). The header shows "✓ Saved 12:41 PM",
+  or "⚠ Not saved" if the browser blocks storage (some private modes).
+- **Closing the tab loses nothing**: the landing page offers "Pick up where
+  you left off" (day + step), and the URL carries the day
+  (`#/surgery/2026-09-28`), so a reloaded or restored tab reopens it.
+- **Other people are never affected**: there is no server — each person's
+  drafts live only in their own browser, so two residents building the same
+  day on their own phones or computers never see or overwrite each other.
+- **Same browser, two tabs** (or a shared workroom computer on one browser
+  profile): these share storage. When one tab saves the day another tab has
+  open, the other tab takes that version instead of later writing an old
+  copy over it; if both have unsaved edits, it asks which to keep. On a
+  shared computer, use your own browser profile (or your phone) so your
+  drafts stay yours.
+
 ## Project structure
 
 ```
