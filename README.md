@@ -103,8 +103,12 @@ app — never your entered data.
   Night Float, clinic counts and edits, add-on names — checks that it
   rebuilds the same schedule line for line, and saves it, so Coverage runs
   live in your browser and *Start from yesterday* can build tomorrow from
-  it. Case types are not in the text, so they are guessed (shown; fix any
-  on Surgery).
+  it. It reads the hand-typed format in use (`- Reza x 7 (7:30AM start,
+  service x 2 start @ 10:45AM): Calotti`, `c/b Patel AM (Uveitis)/NC d/s PM`,
+  `Cornea PM (Meghpara, 28 x 2): …`) as well as the app's own. The case type
+  isn't in the text, so you set it per case on the paste screen (pre-filled
+  only from firm signals; the app remembers the type you set for each
+  attending).
 - **Same browser, two tabs** (or a shared workroom computer on one browser
   profile): these share storage. When one tab saves the day another tab has
   open, the other tab takes that version instead of later writing an old

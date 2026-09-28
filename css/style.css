@@ -1257,6 +1257,26 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .import-when .mini-label { margin: 0; }
 .import-when input[type="date"] { padding: 5px 8px; }
 .import-note { margin: 0 0 6px; }
+.imp-block { border-top: 1px solid var(--border-soft); padding: 10px 0 8px; }
+.imp-block-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-bottom: 6px; }
+.imp-block-head b { font-size: 13.5px; }
+.imp-case {
+  display: grid; grid-template-columns: 128px minmax(0, 1fr) 118px;
+  align-items: center; gap: 4px 10px; padding: 5px 0;
+  border-bottom: 1px dashed var(--border-soft);
+  font-size: 13px;
+}
+.imp-case:last-child { border-bottom: none; }
+.imp-sec { font-size: 11px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.imp-main { min-width: 0; }
+.imp-meta { color: var(--muted); }
+.imp-who { color: var(--accent); font-weight: 600; }
+.imp-who.open { color: var(--amber-text); }
+.imp-note { color: var(--muted); font-style: italic; }
+select.imp-type { width: 100%; font-size: 12.5px; padding: 4px 6px; }
+select.imp-type.unset { border-color: var(--amber-border); background: var(--amber-bg); color: var(--amber-text); font-weight: 700; }
+.imp-line { font-size: 13px; padding: 2px 0; }
+.imp-line.muted { color: var(--muted); }
 .import-check {
   margin-top: 10px; padding: 10px 12px; border-radius: 10px;
   background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text);
@@ -1468,6 +1488,8 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 
   .document { padding: 20px 16px; }
   .howto-cols { grid-template-columns: 1fr; }
+  .imp-case { grid-template-columns: minmax(0, 1fr) 110px; }
+  .imp-sec { grid-column: 1 / -1; }
 }
 
 /* Surgery lines on narrow screens: three short lines per attending —
