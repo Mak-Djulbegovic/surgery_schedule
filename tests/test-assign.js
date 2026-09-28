@@ -7,6 +7,7 @@
  * Surg 1 Cheng, Surg 2 Calotti, Surg 3 Aguwa (AM only, Cornea PM),
  * Surg 4 Bair (AM only, Glaucoma PM), Surg 5 Wibbelsman,
  * cooperConsults [Illiano], Plastics OR pm Camacho, Peds OR empty.
+ * "Cooper" in the chains = the PGY-4 on the Cooper block (block 7: Shields).
  */
 'use strict';
 
@@ -125,7 +126,8 @@ eq(Assign.classify({ category: 'cornea', addOn: true }), 'addOnCornea', 'cornea 
 eq(Assign.classify({ category: 'glaucoma', addOn: true }), 'addOnGlaucoma', 'glaucoma add-on -> addOnGlaucoma');
 eq(Assign.classify({ category: 'trauma' }), 'traumaPlasticsAddOn', 'trauma -> traumaPlasticsAddOn');
 eq(Assign.classify({ category: 'trauma', addOn: true }), 'traumaPlasticsAddOn', 'trauma add-on -> traumaPlasticsAddOn');
-eq(Assign.classify({ category: 'plastics', addOn: true }), 'traumaPlasticsAddOn', 'plastics add-on -> traumaPlasticsAddOn');
+eq(Assign.classify({ category: 'plastics', addOn: true }), 'plasticsAddOn', 'plastics add-on -> plasticsAddOn (juniors-first chain, 9/2026)');
+eq(Assign.classify({ category: 'plastics', addOn: true }, { hierarchy: {} }), 'traumaPlasticsAddOn', 'plastics add-on falls back to the combined chain when the data has no plasticsAddOn');
 eq(Assign.classify({ category: 'plastics' }), 'scheduledPlastics', 'plastics -> scheduledPlastics');
 eq(Assign.classify({ category: 'cornea' }), 'scheduledCornea', 'cornea -> scheduledCornea');
 eq(Assign.classify({ category: 'glaucoma' }), 'scheduledGlaucoma', 'glaucoma -> scheduledGlaucoma');
@@ -189,7 +191,7 @@ res = Assign.suggest([
 ], ROSTER);
 eq(res[0].name, 'Calotti', 'trauma add-on suggests Calotti');
 ok(/→ Surg 2/.test(res[0].reasons.join(' ')), 'reason cites Surg 2');
-deepEq(res[0].alternates, ['Aguwa', 'Bair', 'Illiano', 'Cheng', 'Wibbelsman'],
+deepEq(res[0].alternates, ['Aguwa', 'Bair', 'Shields', 'Cheng', 'Wibbelsman'],
   'alternates follow Surg 3 -> Surg 4 -> Cooper -> Surg 1 -> Surg 5');
 eq(res[0].warnings.length, 0, 'Calotti is Surg 2 PM: no clinic conflict');
 
@@ -206,7 +208,7 @@ deepEq(res.map(function (r) { return r.caseId; }), ['r2', 'r3', 'r1'],
   'remaining cases processed in chronological start order');
 deepEq(res.map(function (r) { return r.name; }), ['Calotti', 'Calotti', 'Calotti'],
   'chain first choice (Surg 2 / Calotti) suggested each time');
-deepEq(res[0].alternates, ['Aguwa', 'Bair', 'Illiano', 'Cheng', 'Wibbelsman'],
+deepEq(res[0].alternates, ['Aguwa', 'Bair', 'Shields', 'Cheng', 'Wibbelsman'],
   'remaining chain alternates: Surg 3 -> Surg 4 -> Cooper -> Surg 1 -> Surg 5');
 eq(res[0].warnings.length, 0, '1st case: no load warning (0 vs 0)');
 eq(res[1].warnings.length, 0, '2nd case: no load warning (1 vs 0)');
@@ -257,10 +259,10 @@ section('clinicCoverage()');
 
 var cov = Assign.clinicCoverage(ROSTER);
 deepEq(cov.map(function (e) { return e.name; }),
-  ['Calotti', 'Aguwa', 'Bair', 'Illiano', 'Cheng', 'Wibbelsman', 'Samuel'],
+  ['Calotti', 'Aguwa', 'Bair', 'Shields', 'Cheng', 'Wibbelsman', 'Samuel'],
   'coverage order: Surg 2,3,4, Cooper, Surg 1,5, then Retina (no Wills OR today)');
 deepEq(cov.map(function (e) { return e.source; }),
-  ['Surg 2', 'Surg 3', 'Surg 4', 'Cooper Consults', 'Surg 1', 'Surg 5', 'Retina'],
+  ['Surg 2', 'Surg 3', 'Surg 4', 'Cooper (PGY-4)', 'Surg 1', 'Surg 5', 'Retina'],
   'each entry labels its chain source');
 ok(cov.map(function (e) { return e.name; }).indexOf('Ransone') === -1 ||
    cov.filter(function (e) { return e.name === 'Ransone'; }).length <= 1,

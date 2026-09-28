@@ -93,9 +93,29 @@
       orBlocks: {},
       specialClinicsToday: [],
       cooperBuddies: { am: null, pm: null, templateAM: null, templatePM: null },
+      cooperSenior: null,
       nightFloat: null,
       dayFloatCoverage: null
     };
+  }
+
+  // The pgy4 block whose resident is the how-to chains' "Cooper":
+  // years.pgy4.cooperBlock, else the pgy4 block whose grid has Cooper
+  // Clinic / Cooper OR (imported configurations may predate the key).
+  function cooperBlockOf(data) {
+    var y = data && data.years && data.years.pgy4;
+    if (!y) return null;
+    if (y.cooperBlock != null) return y.cooperBlock;
+    var blocks = Object.keys(y.grid || {});
+    for (var i = 0; i < blocks.length; i++) {
+      var row = y.grid[blocks[i]] || {};
+      var days = Object.keys(row);
+      for (var j = 0; j < days.length; j++) {
+        var cell = row[days[j]] || {};
+        if (/^Cooper (Clinic|OR)$/.test(cell.am || '') || /^Cooper (Clinic|OR)$/.test(cell.pm || '')) return +blocks[i];
+      }
+    }
+    return null;
   }
 
   function pushUnique(arr, v) {
@@ -190,6 +210,22 @@
           var cl = day.clinics[text] || (day.clinics[text] = { am: [], pm: [] });
           cl[session].push({ name: name, year: yearKey });
         }
+      }
+    }
+
+    // How-to Step 2: Surg 3 and 4 are all day even when the grid shows a
+    // clinic for one session (data.allDaySurg; defaults to ['3', '4']).
+    var allDaySurg = data.allDaySurg || ['3', '4'];
+    Object.keys(day.surg).forEach(function (n) {
+      if (allDaySurg.indexOf(n) !== -1) day.surg[n].allDay = true;
+    });
+
+    // "Cooper" in the chains = the PGY-4 on the Cooper block today.
+    var cb = cooperBlockOf(data);
+    if (cb != null) {
+      for (var ci = 0; ci < day.residents.length; ci++) {
+        var cr = day.residents[ci];
+        if (cr.year === 'pgy4' && cr.block === cb) { day.cooperSenior = cr.name; break; }
       }
     }
 
@@ -351,6 +387,7 @@
     findBlockRange: findBlockRange,
     resolveCell: resolveCell,
     resolveDay: resolveDay,
+    cooperBlockOf: cooperBlockOf,
     cpecForDate: cpecForDate,
     cpecCoverName: cpecCoverName
   };

@@ -80,6 +80,121 @@
     return t;
   }
 
+  /* ---------------- who is out (Out today tab) ---------------- */
+
+  var REASON_SUFFIX = { sick: 'sick', conference: 'conference', other: 'out' };
+
+  function residentMap(roster) {
+    var m = {};
+    ((roster && roster.residents) || []).forEach(function (r) { if (r && r.name) m[r.name] = r; });
+    return m;
+  }
+
+  function cellText(res, s) {
+    return trim(res && res[s] && res[s].text);
+  }
+
+  function uniq(list) {
+    var out = [];
+    list.forEach(function (x) { if (x && out.indexOf(x) === -1) out.push(x); });
+    return out;
+  }
+
+  // The chief's format:
+  //   'Ransone (CPEC/Plastics) c/b Patel AM (Uveitis) | Hamou PM (CPEC)'
+  //   'Ransone (CPEC/Plastics) c/b Patel (Uveitis/Glaucoma)'   one coverer
+  //   'Ransone (CPEC/Plastics) c/b Patel AM (Uveitis) | NC PM' not covered
+  //   'Ransone AM (CPEC) c/b Patel (Uveitis)'                  half day
+  // Parentheses hold the block assignment(s): the absent resident's, then
+  // each coverer's own (what they leave to cover).
+  function absenceLine(a, byName) {
+    var name = trim(a && a.name);
+    var res = byName[name];
+    var sess = [];
+    if (a.am) sess.push('am');
+    if (a.pm) sess.push('pm');
+    var duties = uniq(sess.map(function (s) { return cellText(res, s); }));
+    var head = name + (sess.length === 1 ? ' ' + sess[0].toUpperCase() : '') +
+      (duties.length ? ' (' + duties.join('/') + ')' : '');
+    var reason = REASON_SUFFIX[a.reason];
+    if (reason) head += ' — ' + reason;
+
+    var parts = sess.map(function (s) {
+      return { s: s, who: trim(s === 'am' ? a.coverAM : a.coverPM) };
+    });
+    function coverParen(who, sessions) {
+      var own = uniq(sessions.map(function (s) { return cellText(byName[who], s); }));
+      return own.length ? ' (' + own.join('/') + ')' : '';
+    }
+    if (parts.length === 2 && parts[0].who === parts[1].who) {
+      var w = parts[0].who;
+      if (w === 'NC') return head + ' NC';
+      if (!w) return head + ' — coverage TBD';
+      return head + ' c/b ' + w + coverParen(w, sess);
+    }
+    if (parts.length === 1) {
+      var w1 = parts[0].who;
+      if (w1 === 'NC') return head + ' NC';
+      if (!w1) return head + ' — coverage TBD';
+      return head + ' c/b ' + w1 + coverParen(w1, sess);
+    }
+    return head + ' ' + parts.map(function (p, i) {
+      var S = p.s.toUpperCase();
+      if (p.who === 'NC') return 'NC ' + S;
+      if (!p.who) return S + ' coverage TBD';
+      var prev = parts[i - 1];
+      var prefix = (!prev || !prev.who || prev.who === 'NC') ? 'c/b ' : '';
+      return prefix + p.who + ' ' + S + coverParen(p.who, [p.s]);
+    }).join(' | ');
+  }
+
+  // Vacation section: one line per absence; with nobody out, the free-text
+  // note if any, else 'N strong' (N = residents on today's roster).
+  function vacationLines(day, roster) {
+    var byName = residentMap(roster);
+    var lines = [];
+    var abs = (day.absences || []).filter(function (a) {
+      return a && trim(a.name) && (a.am || a.pm);
+    });
+    abs.forEach(function (a) { lines.push(absenceLine(a, byName)); });
+    var note = trim(day.vacation);
+    var isStrength = /^\d+\s+strong$/i.test(note);
+    if (note && !(abs.length && isStrength)) {
+      note.split(/\r?\n/).forEach(function (ln) { lines.push(ln); });
+    }
+    var n = ((roster && roster.residents) || []).length;
+    if (!lines.length && n) lines.push(n + ' strong');
+    return lines;
+  }
+
+  // Who stands in for whom, per session: explicit absences plus the Night
+  // Float resident (out for the day, covered by Day Float).
+  // -> { out: { 'name|am': coverer|'' }, covering: { 'coverer|am': name } }
+  function standIns(day, roster) {
+    var byName = residentMap(roster);
+    var out = {};
+    var covering = {};
+    var explicit = {};
+    function add(name, s, who) {
+      out[name + '|' + s] = (who && who !== 'NC' && byName[who]) ? who : '';
+      if (out[name + '|' + s]) covering[who + '|' + s] = name;
+    }
+    (day.absences || []).forEach(function (a) {
+      var name = trim(a && a.name);
+      if (!name || !byName[name] || explicit[name]) return;
+      explicit[name] = true;
+      if (a.am) add(name, 'am', trim(a.coverAM));
+      if (a.pm) add(name, 'pm', trim(a.coverPM));
+    });
+    var nf = trim(day.nightFloat);
+    if (nf && byName[nf] && !explicit[nf]) {
+      var df = ((roster && roster.dayFloat) || []).filter(function (n) { return n !== nf; })[0] || '';
+      add(nf, 'am', df);
+      add(nf, 'pm', df);
+    }
+    return { out: out, covering: covering };
+  }
+
   // '-Marous x7 (730 start), x1 service - **Momenaei** (no Peds OR)'
   // With service times: '…, x2 service - 1030 & 1300 - **Momenaei**'.
   // The times belong to the ', x{svc} service' clause (UISPEC3 §B) — when that
@@ -97,6 +212,7 @@
     var line = [seg(t)];
     var assigned = trim(c.assigned);
     var backup = trim(c.backup);
+    if (backup === 'NC') backup = ''; // clinic knowingly left uncovered
     var backupNote = trim(c.backupNote);
     if (assigned) {
       // '- **Bair; Calotti** to cover glaucoma clinic during case if after 1 PM, …'
@@ -115,7 +231,10 @@
     return line;
   }
 
-  // Roster clinic staff for label+session with manual add/remove overrides.
+  // Roster clinic staff for label+session with manual add/remove overrides,
+  // then who is out: an absent resident's coverer stands in
+  // ('Hamou (for Ransone)'); with no coverer (NC / not set) the name drops;
+  // and a coverer drops out of their own clinic (they are elsewhere).
   function clinicStaff(day, roster, label, session) {
     var grp = (roster.clinics || {})[label];
     var base = ((grp && grp[session]) || []).map(function (p) {
@@ -128,7 +247,20 @@
     added.forEach(function (n) {
       if (n && out.indexOf(n) === -1) out.push(n);
     });
-    return out;
+    if (session !== 'am' && session !== 'pm') return out;
+    var si = standIns(day, roster);
+    var final = [];
+    out.forEach(function (n) {
+      var key = n + '|' + session;
+      if (Object.prototype.hasOwnProperty.call(si.out, key)) {
+        var who = si.out[key];
+        if (who) final.push(who + ' (for ' + n + ')');
+        return;
+      }
+      if (si.covering[key] && added.indexOf(n) === -1) return;
+      final.push(n);
+    });
+    return final;
   }
 
   // 'Cornea PM (29x3): **Momenaei, Williamson, Aguwa**'
@@ -189,7 +321,8 @@
       surgKeys.forEach(function (n) {
         var s = surg[n] || {};
         var line = [seg('Surg ' + n + ' - ')];
-        if (s.am && s.pm) {
+        // allDay (Surg 3/4 — how-to Step 2): all day even with a clinic
+        if ((s.am && s.pm) || (s.allDay && (s.am || s.pm))) {
           line.push(seg(s.name, true));
         } else if (s.am) {
           line.push(seg(s.name + ' AM', true));
@@ -240,12 +373,8 @@
     if (clLines.length) sections.push(['Clinics'].concat(clLines));
 
     // Vacation
-    var vac = trim(day.vacation);
-    if (vac) {
-      var vLines = ['Vacation'];
-      vac.split(/\r?\n/).forEach(function (ln) { vLines.push(ln); });
-      sections.push(vLines);
-    }
+    var vLines = vacationLines(day, roster);
+    if (vLines.length) sections.push(['Vacation'].concat(vLines));
 
     // Add-ons
     var addLines = addOnLines(day);
@@ -438,6 +567,9 @@
   /* ------------------------------------------------------------------ */
 
   var ExportFmt = {
+    absenceLine: function (a, roster) { return absenceLine(a || {}, residentMap(roster)); },
+    vacationLines: vacationLines,
+    clinicStaff: clinicStaff,
     buildSections: buildSections,
     buildText: buildText,
     buildHTML: buildHTML,
