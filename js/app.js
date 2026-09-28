@@ -730,8 +730,9 @@
   // Page head on every tab: the step's icon (same as the landing cards),
   // "Step n of 6", the title and the weekday + date. Library pages get a
   // book icon and "Library".
-  var LIB_TITLES = { howto: 'How-to', cpec: 'CPEC block schedule', reference: 'Block schedules & rules', setup: 'Setup / new year' };
+  var LIB_TITLES = { howto: 'How-to', cpec: 'CPEC block schedule', reference: 'Block schedules & rules', setup: 'Setup / new year', 'import': 'Paste a sent schedule' };
   var LIB_ICON = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>';
+  var IMPORT_ICON = '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><line x1="12" y1="10" x2="12" y2="17"/><polyline points="9 14 12 17 15 14"/>';
 
   function iconSvg(inner, size) {
     return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
@@ -741,12 +742,12 @@
     var i = WORKFLOW_TABS.indexOf(tab);
     var step = i !== -1 ? HOME_STEPS[i] : null;
     var icon = el('span', { class: 'ph-icon', 'aria-hidden': 'true' });
-    icon.innerHTML = iconSvg(step ? step.icon : LIB_ICON, 20);
+    icon.innerHTML = iconSvg(step ? step.icon : (tab === 'import' ? IMPORT_ICON : LIB_ICON), 20);
     var d = App.state ? parseISO(App.state.date) : null;
     var head = el('div', { class: 'page-head' }, [
       icon,
       el('div', { class: 'ph-text' }, [
-        el('span', { class: 'ph-eyebrow', text: step ? 'Step ' + (i + 1) + ' of ' + WORKFLOW_TABS.length : 'Library' }),
+        el('span', { class: 'ph-eyebrow', text: step ? 'Step ' + (i + 1) + ' of ' + WORKFLOW_TABS.length : (tab === 'import' ? 'Hand-off' : 'Library') }),
         el('h1', { class: 'ph-title' }, [
           TAB_TITLES[tab] || LIB_TITLES[tab] || '',
           step && d ? el('span', { class: 'ph-date', text: weekdayName(d) + ' ' + fmtMDYY(d) }) : null
@@ -2513,6 +2514,7 @@
     var r = App.roster || {};
     var n = strengthCount();
 
+    if (dayIsBlank()) host.appendChild(importCallout('Running a day someone else built?'));
     var card = el('div', { class: 'card' });
     card.appendChild(el('h2', {}, [
       'Who’s out ',
@@ -2829,6 +2831,7 @@
       return;
     }
     var t = coverageNow();
+    if (!(App.state.cases || []).length) host.appendChild(importCallout('No cases for this day in this browser. If someone else built it —'));
     host.appendChild(timeBar(t));
     var needsHost = el('div');
     renderNeedsCard(needsHost, 'Needs coverage', 'Fix here, or on Clinics / Out today');
@@ -3009,6 +3012,226 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* Paste a sent schedule — the hand-off to the next Surg 2              */
+  /* ------------------------------------------------------------------ */
+  // The Surg 2 who builds tomorrow is often not tomorrow's Surg 2, and each
+  // browser keeps its own drafts. Pasting the schedule that was sent gives
+  // this browser the day, so Coverage works live here too; the day is saved,
+  // so "Start from yesterday" can build the next one from it.
+
+  var importText = '';   // what is in the paste box (not saved)
+  var importDate = '';   // the day it will be loaded into ('' = guess)
+  var importTimer = null;
+
+  function todayISO() { return isoOf(new Date()); }
+
+  function importNames(iso) {
+    var r = null;
+    try { r = window.Engine.resolveDay(iso, data()); } catch (e) { r = null; }
+    var names = ((r && r.residents) || []).map(function (x) { return x.name; });
+    return { roster: r, names: names };
+  }
+
+  // Which day is this? The add-ons name it ("Monday daytime (9/28/26)");
+  // otherwise the day whose Surg 1–5 match the paste, preferring today.
+  function guessImportDate(parsed) {
+    var cands = [];
+    if (parsed.addOnDates.length) cands.push(parsed.addOnDates.slice().sort()[0]);
+    [todayISO(), tomorrowISO()].forEach(function (d) { if (cands.indexOf(d) === -1) cands.push(d); });
+    var keys = Object.keys(parsed.surg);
+    if (!keys.length) return cands[0];
+    var best = cands[0], bestScore = -1;
+    cands.forEach(function (iso) {
+      var r = importNames(iso).roster;
+      var surg = (r && r.surg) || {};
+      var score = keys.filter(function (k) { return surg[k] && surg[k].name === parsed.surg[k]; }).length;
+      if (score > bestScore) { best = iso; bestScore = score; }
+    });
+    return best;
+  }
+
+  // parse → a day for `iso`, rebuilt text, and how it compares to the paste
+  function readImport(text, iso) {
+    var info = importNames(iso);
+    var roster = info.roster || emptyRoster(iso);
+    var parsed = window.ImportFmt.parse(text, { names: info.names });
+    var base = defaultState(iso);
+    base.addOns.forEach(function (r) { r.label = addOnLabel(r); });
+    var cb = roster.cooperBuddies; // as computeRoster would pre-fill them
+    if (cb && cb.am) base.cooperBuddyAM = { name: String(cb.am), note: String(cb.templateAM || '').toLowerCase() };
+    if (cb && cb.pm) base.cooperBuddyPM = { name: String(cb.pm), note: String(cb.templatePM || '').toLowerCase() };
+    var cpec = [];
+    try { cpec = window.Engine.cpecForDate(iso, data()).entries.map(function (e) { return e.attending; }); } catch (e) { cpec = []; }
+    var surg = roster.surg || {};
+    var day = window.ImportFmt.toDay(parsed, base, roster, data(), window.ExportFmt, {
+      addOnLabel: addOnLabel,
+      cpecSurgeons: cpec,
+      surgRoleOf: function (n) { for (var k in surg) if (surg[k] && surg[k].name === n) return k; return ''; }
+    });
+    var probe = {};
+    for (var k in day) probe[k] = day[k];
+    probe.roster = roster;
+    var rebuilt = window.ExportFmt.buildText(probe);
+    var skipped = {};
+    parsed.unknown.forEach(function (l) { skipped[window.ImportFmt.clean(l)] = true; });
+    var kept = String(text).split(/\r\n|\r|\n/).filter(function (l) { return !skipped[window.ImportFmt.clean(l)]; }).join('\n');
+    return { parsed: parsed, day: day, roster: roster, rebuilt: rebuilt, diff: window.ImportFmt.diffLines(kept, rebuilt) };
+  }
+
+  function renderImportTab() {
+    var host = $('importBody');
+    if (!host) return;
+    clearNode(host);
+    var card = el('div', { class: 'card import-card' });
+    card.appendChild(el('h2', {}, ['Paste the schedule you were sent ', el('span', {
+      class: 'h-note',
+      text: 'The whole message — from email, a text or GroupMe. The app reads it into that day so Coverage works here; nothing is sent anywhere.'
+    })]));
+    var ta = el('textarea', {
+      class: 'import-text', rows: '12', spellcheck: 'false',
+      placeholder: 'Assignments\nSurg 1 - …\n\nWills/ASC\n-Hark x1 (1300 start) - Bair; Djulbegovic to cover cornea clinic during case\n…\n\nClinics\n…\n\nVacation\n…'
+    });
+    ta.value = importText;
+    ta.addEventListener('input', function () {
+      importText = ta.value;
+      if (importTimer) clearTimeout(importTimer);
+      importTimer = setTimeout(renderImportPreview, 250);
+    });
+    card.appendChild(ta);
+    host.appendChild(card);
+    host.appendChild(el('div', { id: 'importPreview' }));
+    renderImportPreview();
+  }
+
+  function importSummaryBits(day, parsed) {
+    var cases = day.cases || [];
+    var staffed = cases.filter(function (c) { return trim(c.assigned); }).length;
+    var open = cases.filter(needsResident).length;
+    var bits = [];
+    bits.push(cases.length + ' case' + (cases.length === 1 ? '' : 's') + (cases.length ? ' (' + staffed + ' with a resident' + (open ? ', ' + open + ' open' : '') + ')' : ''));
+    bits.push(day.absences.length ? day.absences.length + ' out' : (day.outConfirmed ? 'no one out' : 'no Vacation section'));
+    if (day.nightFloat) bits.push('Night Float ' + day.nightFloat);
+    if (parsed.clinics.length) bits.push(parsed.clinics.length + ' clinic line' + (parsed.clinics.length === 1 ? '' : 's'));
+    var named = parsed.addOns.length;
+    if (named) bits.push(named + ' add-on name' + (named === 1 ? '' : 's'));
+    return bits;
+  }
+
+  function renderImportPreview() {
+    var host = $('importPreview');
+    if (!host) return;
+    clearNode(host);
+    if (!trim(importText) || !window.ImportFmt) return;
+    var first = window.ImportFmt.parse(importText, { names: importNames(todayISO()).names });
+    if (!first.read) {
+      host.appendChild(el('div', { class: 'card needs-card' }, [el('p', { class: 'ref-para', text: 'This does not look like a surgery schedule — no Assignments, case or Vacation lines were found.' })]));
+      return;
+    }
+    var guess = guessImportDate(first);
+    var iso = importDate || guess;
+    var res = readImport(importText, iso);
+    var day = res.day, parsed = res.parsed;
+    var d = parseISO(iso);
+    var card = el('div', { class: 'card import-result' });
+    card.appendChild(el('h2', {}, ['What the app read ', el('span', { class: 'h-note', text: importSummaryBits(day, parsed).join(' · ') })]));
+
+    // which day
+    var when = el('div', { class: 'import-when' });
+    when.appendChild(el('span', { class: 'mini-label', text: 'This is the schedule for' }));
+    var dIn = el('input', { type: 'date', value: iso });
+    dIn.addEventListener('change', function () { if (dIn.value) { importDate = dIn.value; renderImportPreview(); } });
+    when.appendChild(dIn);
+    when.appendChild(el('b', { text: weekdayName(d) + ' ' + fmtMDYY(d) }));
+    if (iso === todayISO()) when.appendChild(chipEl('Today', 'chip-day'));
+    else if (iso === tomorrowISO()) when.appendChild(chipEl('Tomorrow', 'chip-day'));
+    if (guess !== iso) {
+      when.appendChild(el('button', {
+        type: 'button', class: 'btn-link', text: 'The schedule points to ' + weekdayName(parseISO(guess)) + ' ' + fmtMDYY(parseISO(guess)) + ' — use it',
+        onclick: function () { importDate = guess; renderImportPreview(); }
+      }));
+    }
+    card.appendChild(when);
+
+    // things to check
+    var notes = [];
+    var surg = res.roster.surg || {};
+    Object.keys(parsed.surg).forEach(function (k) {
+      var want = (surg[k] && surg[k].name) || '';
+      if (parsed.surg[k] && want && parsed.surg[k] !== want) {
+        notes.push({ bad: true, text: 'Surg ' + k + ' is ' + parsed.surg[k] + ' in the paste but ' + want + ' on the block schedule for this day — check the date (the app always uses the block schedule).' });
+      }
+    });
+    if (parsed.unknownNames.length) notes.push({ bad: true, text: 'Not on this year’s roster, kept as typed: ' + parsed.unknownNames.join(', ') + '.' });
+    parsed.notedNotOut.forEach(function (l) { notes.push({ text: 'Read as a Vacation note, not as someone out: “' + l + '”.' }); });
+    var guessed = day.cases.filter(function (c) { return c.section !== 'private'; });
+    if (guessed.length) notes.push({ text: 'Case types are not in the text, so they are guessed (for case lengths): ' + guessed.map(function (c) { return (c.surgeon || '?') + ' ' + c.category; }).join(', ') + '. Fix any on Surgery.' });
+    if (parsed.unknown.length) notes.push({ text: 'Skipped ' + parsed.unknown.length + ' line' + (parsed.unknown.length === 1 ? '' : 's') + ' that are not part of the schedule: ' + parsed.unknown.slice(0, 4).map(function (l) { return '“' + l + '”'; }).join(', ') + (parsed.unknown.length > 4 ? '…' : '') + '.' });
+    notes.forEach(function (n) { card.appendChild(el('div', { class: 'warn-line' + (n.bad ? ' bad' : '') + ' import-note', text: n.text })); });
+
+    // round-trip check
+    var check = el('div', { class: 'import-check' + (res.diff.same ? ' ok' : '') });
+    if (res.diff.same) {
+      check.appendChild(document.createTextNode('✓ Rebuilt from what was read, the schedule matches your paste line for line.'));
+    } else {
+      check.appendChild(el('div', { class: 'import-check-head', text: 'Rebuilt from what was read, ' + (res.diff.missing.length + res.diff.extra.length) + ' line' + ((res.diff.missing.length + res.diff.extra.length) === 1 ? '' : 's') + ' come out differently — check them after loading:' }));
+      res.diff.missing.slice(0, 8).forEach(function (l) { check.appendChild(el('div', { class: 'import-diff minus', text: '− ' + l })); });
+      res.diff.extra.slice(0, 8).forEach(function (l) { check.appendChild(el('div', { class: 'import-diff plus', text: '+ ' + l })); });
+    }
+    card.appendChild(check);
+
+    // load
+    var existing = lsGet(LS_PREFIX + iso);
+    var foot = el('div', { class: 'import-foot' });
+    if (existing) {
+      foot.appendChild(el('span', { class: 'field-hint', text: 'Replaces the saved draft for ' + weekdayName(d) + ' ' + fmtMDYY(d) + ' in this browser (' + (draftText(draftSummary(iso)) || 'saved') + ').' }));
+    }
+    foot.appendChild(el('button', {
+      type: 'button', class: 'btn btn-primary', text: 'Load into ' + weekdayName(d) + ' ' + fmtMDYY(d) + ' →',
+      onclick: function () {
+        if (existing && !window.confirm('Replace the saved draft for ' + weekdayName(d) + ' ' + fmtMDYY(d) + ' with the pasted schedule?')) return;
+        loadImported(res, iso);
+      }
+    }));
+    card.appendChild(foot);
+    host.appendChild(card);
+  }
+
+  function loadImported(res, iso) {
+    saveNow(); // flush whatever day is open
+    var day = res.day;
+    day.date = iso;
+    day.savedAt = Date.now();
+    if (!lsSet(LS_PREFIX + iso, JSON.stringify(day))) {
+      toast('Could not save — this browser is blocking storage', false);
+      return;
+    }
+    importText = '';
+    importDate = '';
+    var n = day.cases.length;
+    setDate(iso);
+    var live = iso === todayISO();
+    setTab(live ? 'coverage' : 'surgery');
+    window.scrollTo(0, 0);
+    toast('Loaded ' + n + ' case' + (n === 1 ? '' : 's') + (day.absences.length ? ', ' + day.absences.length + ' out' : '') +
+      (live ? ' — live coverage is ready' : ''));
+  }
+
+  function importCallout(text) {
+    return el('div', { class: 'import-callout' }, [
+      el('span', { text: text + ' ' }),
+      el('button', {
+        type: 'button', class: 'btn-link', text: 'Paste the schedule they sent →',
+        onclick: function () { setTab('import'); window.scrollTo(0, 0); }
+      })
+    ]);
+  }
+
+  function dayIsBlank() {
+    var st = App.state;
+    return !!st && !(st.cases || []).length && !(st.absences || []).length && !st.outConfirmed;
+  }
+
+  /* ------------------------------------------------------------------ */
   /* How-to view — friendly onboarding cards (static)                    */
   /* ------------------------------------------------------------------ */
 
@@ -3122,7 +3345,8 @@
       { tab: 'surgery', num: '3', title: 'Surgery', text: 'Add the CPEC-sheet cataracts, then copy the rest of the case list out of Cerner/NextGen. Each case shows the suggested resident — one click to accept — and the dropdowns show who is free at that time.' },
       { tab: 'clinics', num: '4', title: 'Clinics', text: 'Patient counts from the EMRs. Each clinic shows who is out or pulled into a case and who covers; anything left short is listed at the top.' },
       { tab: 'coverage', num: '5', title: 'Coverage', text: 'Who is free right now (or at any time you pick), what happens if a globe comes in, every resident’s day on one screen, and the add-on call names.' },
-      { tab: 'preview', num: '6', title: 'Preview & Copy', text: 'The document, exactly in the usual format — Copy formatted and paste.' }
+      { tab: 'preview', num: '6', title: 'Preview & Copy', text: 'The document, exactly in the usual format — Copy formatted and paste.' },
+      { tab: 'import', num: '↩', title: 'Taking over a day someone else built', text: 'The Surg 2 who builds a day is often not that day’s Surg 2. Paste the schedule you were sent (Library → Paste a sent schedule): the app reads it into that day, so Coverage runs live for you — sick calls, residents pulled into the OR, add-ons — and Start from yesterday can build tomorrow from it.' }
     ].forEach(function (s) {
       flow.appendChild(el('div', { class: 'howto-step' }, [
         el('span', { class: 'howto-num', text: s.num }),
@@ -4174,7 +4398,7 @@
   /* button walks Home ↔ tabs instead of leaving the site               */
   /* ------------------------------------------------------------------ */
 
-  var VALID_ROUTES = ['home', 'out', 'roster', 'surgery', 'clinics', 'coverage', 'preview', 'howto', 'cpec', 'reference', 'setup'];
+  var VALID_ROUTES = ['home', 'out', 'roster', 'surgery', 'clinics', 'coverage', 'preview', 'import', 'howto', 'cpec', 'reference', 'setup'];
   // Links saved before the Surgery/Clinics split keep working.
   var ROUTE_ALIASES = { cases: 'surgery', assign: 'surgery' };
 
@@ -4264,6 +4488,7 @@
     if (tab === 'preview') renderPreview();
     if (tab === 'cpec') renderCpecReference(); // re-render so the selected date's cell is highlighted
     if (tab === 'setup') renderSetup(); // status line + saved-day count stay fresh
+    if (tab === 'import') renderImportTab();
     // 'howto' and 'reference' are static — rendered once at boot.
     renderAvailStrip();
     renderBadges();
@@ -4393,6 +4618,12 @@
         var last = lastPlace();
         // a saved draft reopens on the step it was left on
         enterApp(v, last && last.date === v && lsGet(LS_PREFIX + v) ? last.tab : undefined);
+      });
+    }
+    var btnHomePaste = $('btnHomePaste');
+    if (btnHomePaste) {
+      btnHomePaste.addEventListener('click', function () {
+        enterApp((homeDate && homeDate.value) || tomorrowISO(), 'import');
       });
     }
     var btnHomeHowto = $('btnHomeHowto');
