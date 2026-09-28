@@ -28,6 +28,17 @@ date; recent days with their progress.
 A **Free AM / Free PM** strip (and **Free now** on today's date) sits under
 the tabs on every workflow tab; tab badges count what is still open.
 
+**Look (9/28/2026)**: the workspace carries the landing page's gradient — an
+app bar and folder tabs (the active tab runs into the page), a page head on
+every tab (step icon, "Step n of 6", title, weekday + date), card titles
+with their note on a second line, and quiet grey fields in the Surgery and
+Clinics rows that turn white when edited. The brand mark is the landing
+page's iris in miniature on a white tile (also the favicon). On phones the
+app bar is two short rows, the free lists fold into one line ("Free AM 13 ·
+PM 9 ▾"), clinic count and note sit side by side, and each timeline bar
+runs full width under its name. Preview & Copy lists what is still open
+(cases without a resident, gaps) with links to fix them.
+
 ## The status model (js/status.js — pure, Node-tested)
 
 Every resident, every 5 minutes from 7:00 to 17:00, is one of:
