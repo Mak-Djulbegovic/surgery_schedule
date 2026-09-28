@@ -427,7 +427,6 @@
     }
     return residentYearMap[name] || '';
   }
-  function isResidentName(name) { return !!yearOf(name); }
 
   function residentSelect(value, onChange, emptyLabel) {
     var sel = el('select', { class: 'sel' });
@@ -747,13 +746,6 @@
     });
     tbl.appendChild(tbody);
     host.appendChild(el('div', { class: 'table-scroll' }, [tbl]));
-  }
-
-  function summaryItem(key, valNode) {
-    return el('div', { class: 'summary-item' }, [
-      el('span', { class: 'summary-key', text: key }),
-      el('span', { class: 'summary-val' }, [valNode])
-    ]);
   }
 
   function collapseWerLocal(wer) {

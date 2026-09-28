@@ -130,7 +130,6 @@ input[type="date"] {
   white-space: nowrap;
 }
 .chip-day { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
-.chip-task { background: var(--pgy2-bg); border-color: var(--pgy2-border); color: var(--pgy2); }
 .chip-special { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-text); }
 /* dress-code reminder chip — may carry a long text, so it wraps */
 .chip-dress { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-text); white-space: normal; text-align: left; }
@@ -175,7 +174,6 @@ body.home-active .home-view { display: block; min-height: 100vh; }
 .home-brand-title { font-weight: 700; font-size: 15px; }
 .home-brand-sub { font-size: 12px; opacity: 0.78; }
 .home-greeting { font-size: 36px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.15; margin: 32px 0 10px; max-width: 780px; text-wrap: balance; }
-.home-tagline { font-size: 16px; line-height: 1.5; max-width: 600px; opacity: 0.92; text-wrap: pretty; }
 
 .home-body { position: relative; max-width: 1040px; margin: -88px auto 0; padding: 0 24px 44px; }
 
@@ -301,7 +299,6 @@ body.home-active .home-view { display: block; min-height: 100vh; }
   .home-hero { padding: 22px 12px 92px; }
   .home-hero-inner { padding: 0 4px; }
   .home-greeting { font-size: 27px; margin-top: 22px; }
-  .home-tagline { font-size: 14.5px; }
   .home-iris { width: 280px; height: 280px; right: -96px; top: -40px; opacity: 0.6; }
   .home-body { padding: 0 12px 34px; margin-top: -74px; }
   .home-start { padding: 20px 18px; }
@@ -363,7 +360,6 @@ body.home-active .home-view { display: block; min-height: 100vh; }
   scrollbar-width: none;
 }
 .tabbar::-webkit-scrollbar { display: none; }
-.tabbar-spacer { flex: 1 0 8px; }
 
 .tab {
   border: none;
@@ -411,14 +407,6 @@ body.home-active .home-view { display: block; min-height: 100vh; }
 }
 .h-note { font-size: 12px; font-weight: 500; color: var(--faint); margin-left: 6px; }
 
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.card-head h2 { margin-bottom: 0; }
 
 .toolbar {
   display: flex;
@@ -463,7 +451,6 @@ textarea { width: 100%; resize: vertical; }
 
 .field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 12px; }
 .field:last-child { margin-bottom: 0; }
-.field-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .field-hint { font-size: 12px; color: var(--faint); }
 
 /* ---------------- badges & chips ---------------- */
@@ -481,7 +468,6 @@ textarea { width: 100%; resize: vertical; }
 .badge-pm { background: #efe9f8; color: var(--pgy4); }
 .badge-addon { background: var(--amber-bg); color: var(--amber-text); border: 1px solid var(--amber-border); }
 .badge-tm { background: var(--pgy2-bg); color: var(--pgy2); border: 1px solid var(--pgy2-border); }
-.badge-cat { background: var(--border-soft); color: var(--muted); }
 
 .name-chip {
   display: inline-flex;
@@ -500,16 +486,6 @@ textarea { width: 100%; resize: vertical; }
 .name-chip.pgy4 { background: var(--pgy4-bg); border-color: var(--pgy4-border); color: var(--pgy4); }
 .name-chip .btn-icon { font-size: 12px; padding: 1px 4px; }
 
-.case-chip {
-  display: inline-block;
-  background: var(--border-soft);
-  color: var(--muted);
-  border-radius: 5px;
-  padding: 1px 7px;
-  font-size: 12px;
-  font-weight: 600;
-  margin: 2px 3px 2px 0;
-}
 
 /* ---------------- tables ---------------- */
 
@@ -600,9 +576,6 @@ table.tbl { border-collapse: collapse; width: 100%; }
 .pill-check input { margin: 0; accent-color: var(--amber-text); }
 .pill-check.on { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-text); }
 
-/* ---------------- summary list ---------------- */
-
-.summary-list { display: flex; flex-direction: column; gap: 7px; }
 /* --- Today at a glance ------------------------------------------------ */
 .glance-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .glance-head h2 { margin-right: auto; }
@@ -695,18 +668,6 @@ table.tbl { border-collapse: collapse; width: 100%; }
 }
 .tab.active .tab-num { background: var(--accent); color: #fff; }
 
-.summary-item { display: flex; gap: 8px; align-items: baseline; }
-.summary-key {
-  flex: none;
-  width: 118px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--faint);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.summary-val { font-weight: 600; min-width: 0; }
-.summary-val .sub { font-weight: 500; color: var(--faint); font-size: 12px; }
 
 /* ---------------- add-ons & buddies ---------------- */
 
@@ -747,7 +708,6 @@ table.tbl { border-collapse: collapse; width: 100%; }
   padding-bottom: 3px;
   border-bottom: 1px solid var(--border);
 }
-.cpec-card h2 + .cpec-group-title { margin-top: 0; }
 .cpec-cover {
   margin-left: 8px;
   color: var(--accent);
@@ -831,8 +791,6 @@ table.tbl { border-collapse: collapse; width: 100%; }
 }
 .warn-line.bad { color: var(--red-text); background: var(--red-bg); border-color: var(--red-border); }
 .unassigned-text { color: var(--red-text); font-weight: 700; font-size: 12.5px; }
-.covnote { display: block; width: 100%; margin-top: 6px; font-size: 13px; }
-.sugg-reason { font-size: 12.5px; color: var(--muted); }
 /* availability-grouped dropdowns: option text carries the status */
 select.picker { max-width: 280px; min-width: 150px; }
 
@@ -1278,7 +1236,6 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
   .avail-strip { position: static; }
   .app-main { padding: 14px 12px 60px; }
   .clinic-row { grid-template-columns: 1fr; gap: 6px; }
-  .summary-key { width: 96px; }
   .document { padding: 18px 16px; }
   .howto-cols { grid-template-columns: 1fr; }
 }

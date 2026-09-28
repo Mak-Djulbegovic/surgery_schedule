@@ -2,7 +2,7 @@
 
 Read docs/SPEC.md and UISPEC2/3/5 first. This iteration adds a time model
 (who is doing what at any minute of the day) and rebuilds the UI around the
-how-to's order. Status: **prototype on a branch — not deployed.**
+how-to's order. Status: **released as v2 (9/2026)**; v1 is archived in `v1/`.
 
 ## Flow (tabs follow "How to Surgical Schedule")
 
