@@ -118,7 +118,7 @@ ok(corneaPM.every(function (e) { return e.name && e.year; }), 'clinic entries ar
 eq(corneaPM.filter(function (e) { return e.name === 'Momenaei'; })[0].year, 'pgy2', 'Momenaei is pgy2 in Cornea PM');
 
 // Exclusions from clinics
-ok(!day.clinics['CPEC'], 'clinics excludes CPEC');
+ok(!!day.clinics['CPEC'], 'clinics include CPEC (a clinic — chief, 9/28/2026)');
 ok(!day.clinics['ER'], 'clinics excludes ER');
 ok(!day.clinics['Jeff Consults'], 'clinics excludes Jeff Consults');
 ok(!day.clinics['Cooper Consults'], 'clinics excludes Cooper Consults');

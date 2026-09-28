@@ -18,8 +18,8 @@
  *   clinic — in a clinic (their own, or covering someone else's); can be
  *            pulled for a case, but then somebody has to cover the clinic
  *   duty   — fixed duty that is not pulled for cases (ER, consults, Day Float)
- *   free   — CPEC, PT, or a Surg role / OR block with nothing booked
- *            (chief's rule, 9/2026: those count as available)
+ *   free   — PT, or a Surg role / OR block with nothing booked
+ *            (chief's rule, 9/2026; CPEC is a clinic — chief, 9/28/2026)
  *   off    — nothing scheduled (weekend / outside the academic year)
  *
  * Times are minutes after midnight. The board's working day is 07:00–17:00
@@ -42,7 +42,7 @@
   };
   // Block-assignment texts that count as available / fixed duty / needing no
   // coverage when the resident is out. Override in data.availability.
-  var DEFAULT_FREE = ['CPEC', 'PT'];
+  var DEFAULT_FREE = ['PT'];
   var DEFAULT_DUTY = ['ER', 'Jeff Consults', 'Cooper Consults'];
   var DEFAULT_OFFSITE = ['Cooper Clinic', 'Cooper OR'];
   var DEFAULT_NO_COVER = ['PT', 'Day Float'];
@@ -221,6 +221,7 @@
   function reasonLabel(r) { return REASON_LABELS[r] || REASON_LABELS.other; }
 
   function caseLabel(c) {
+    if (c && c.late) return trim(c.surgeon);
     var who = trim(c && c.surgeon) || (c && c.category) || 'case';
     return who + ' x' + (Math.max(1, parseInt(c && c.count, 10) || 1));
   }
@@ -334,7 +335,7 @@
         var ccls = classifyText(cd.text, data);
         var ck = kindOfClass(ccls);
         // Day Float stands in for the Night Float resident and is never
-        // treated as available, even when that duty is CPEC.
+        // treated as available, even when that duty is PT.
         if (cd.nf && ck === 'free') ck = 'duty';
         return {
           kind: ck, cls: ccls, text: cd.text, covering: cd.for, nfCover: cd.nf,
@@ -359,10 +360,31 @@
     var base = {};
     order.forEach(function (n) { base[n] = { am: baseDutyOf(n, 'am'), pm: baseDutyOf(n, 'pm') }; });
 
+    /* A morning OR running late (live board only — never in the copied
+       schedule): the resident stays in the OR from PM clinic start
+       (data.pmClinicStart, 12:30) until `until`, and `cover` stands in at
+       their clinic meanwhile. Modelled as a case whose backup is the cover,
+       so gaps, cover and 'NC' work exactly as for any case. */
+    var pmClinicStart = parseClock(data.pmClinicStart);
+    if (pmClinicStart == null) pmClinicStart = NOON + 30;
+    var lateCases = [];
+    (day.overruns || []).forEach(function (o, idx) {
+      var who = trim(o && o.name);
+      var until = parseClock(o && o.until);
+      if (!who || !byName[who] || until == null || until <= pmClinicStart) return;
+      lateCases.push({
+        id: 'late:' + String((o && o.id) || idx), late: true, overrunId: String((o && o.id) || idx),
+        surgeon: (trim(o && o.label) || 'OR') + ' running late', count: 1, serviceCount: 1,
+        start: fmtHHMM(pmClinicStart), until: fmtHHMM(until), category: 'other',
+        assigned: who, backup: trim(o && o.cover)
+      });
+    });
+    var allCases = (day.cases || []).concat(lateCases);
+
     /* cases → busy spans for the assigned resident */
     var caseInfo = {};
     var casesBy = {};
-    (day.cases || []).forEach(function (c) {
+    allCases.forEach(function (c) {
       if (!c || !c.id) return;
       var cs = caseSpans(c, data);
       var a = trim(c.assigned);
@@ -399,7 +421,7 @@
     var guard = 0;
     while (changed && guard++ < 12) {
       changed = false;
-      (day.cases || []).forEach(function (c) {
+      allCases.forEach(function (c) {
         var info = c && caseInfo[c.id];
         if (!info) return;
         var R = info.assigned;
@@ -647,7 +669,9 @@
       caseSpansFor: function (c) { return caseSpans(c, data); },
       dayStart: DAY_START,
       noon: NOON,
-      dayEnd: DAY_END
+      dayEnd: DAY_END,
+      pmClinicStart: pmClinicStart,
+      lateCases: lateCases
     };
   }
 

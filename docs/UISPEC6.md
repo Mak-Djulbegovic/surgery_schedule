@@ -66,6 +66,38 @@ automatic save in case they X out of the tab."
   Shared workroom computers on one browser profile still share drafts —
   documented, not solved (would need sign-in or per-person keys).
 
+## Coverage, dynamic (9/28/2026)
+
+- **Add-ons: daytime = that day's Surg 2** (chief: "based on the AY schedule,
+  should be able to determine who is on during the day for Add-ons, which is
+  Surg 2"; AY legend: Surg 2 is block 5 Mon/Tue and block 8 Wed–Fri). Empty
+  daytime rows are filled from the block schedule for the row's date; never
+  a name someone chose, never a row they emptied (`row.cleared`), never
+  someone out all day. Nights stay manual. Tagged "Surg 2".
+- **Several emergencies at once** (chief: "what if we have a globe come in
+  while there is an emergent glaucoma AND cornea case — very rare, but just
+  need algorithmic help"). `Assign.planAddOns(kinds, t, …)`: each kind walks
+  its own chain exactly as a single add-on does; then the residents are
+  chosen jointly — the assignment with the lowest total chain position,
+  searched exhaustively (≤ 8 candidates per kind), a case nobody can take
+  costing more than any pick; ties go to the more urgent kind keeping its
+  earlier pick (globe → cornea → glaucoma → plastics → cataract → other, so
+  Surg 2 keeps the globe). Everyone pulled from a clinic gets a coverer from
+  the clinic-coverage chain — free, not already covering, never someone
+  taking a case. Coverage tab: pick several kinds; "Add all as add-on cases".
+- **A morning OR running late** (chief: "if the morning plastics OR goes past
+  12:30, who will cover the person until they get to glaucoma? … surg 2
+  would cover in glaucoma clinic until the PGY2 is done in the OR"). Coverage
+  lists everyone in an OR this morning (an OR block, or a case they are on)
+  with a clinic this afternoon — e.g. Mon 9/28 Nahar: Glaucoma OR / Plastics
+  OR → Glaucoma PM — with the suggested cover (clinic-coverage chain, Surg 2
+  first; `Assign.lateCover`). "Running late until 1:30" stores
+  `day.overruns = [{ name, until, cover }]`: the board keeps the resident in
+  the OR from `data.pmClinicStart` (12:30) until then and the cover in their
+  clinic meanwhile (modelled as a case whose backup is the cover, so gaps /
+  NC / Needs coverage work as for any case; Needs coverage offers the fix).
+  Live board only — never in the copied schedule. "Out now" ends it.
+
 ## Hand-off: paste a sent schedule (9/28/2026)
 
 The chief: "if the person who is Surg 2 on a Wednesday is not the person on
@@ -128,17 +160,24 @@ Every resident, every 5 minutes from 7:00 to 17:00, is one of:
 |---|---|
 | out | typed absence; the Night Float resident (post-call, out all day) |
 | case | assigned to a case whose busy span covers that minute |
-| clinic | own block clinic, a clinic they were added to, an absent resident's clinic they cover, or a clinic they cover as a case backup |
+| clinic | own block clinic (CPEC included), a clinic they were added to, an absent resident's clinic they cover, a clinic they cover as a case backup or for a morning OR running late |
 | duty | ER, Jeff/Cooper consults, Day Float, off-site (Cooper Clinic / Cooper OR) |
-| free | CPEC, PT, or a Surg role / OR block with nothing booked |
+| free | PT, or a Surg role / OR block with nothing booked |
 
 Rules and where they come from:
 
-- **Available = CPEC, PT, idle OR block, idle Surg role** — chief, 9/2026.
-  Configurable: `data.availability.freeTexts / dutyTexts / noCoverTexts`.
+- **Available = PT, idle OR block, idle Surg role** — chief, 9/2026.
+  **CPEC is a clinic, app-wide** — chief, 9/28/2026 ("if people are assigned
+  CPEC, assume that they are in clinic — this goes for the whole app"): CPEC
+  residents are not free, CPEC has AM/PM rows on Clinics and lines in the
+  copied schedule (`CPEC AM: … Patel (for Ransone) …`), and pulling someone
+  out of CPEC is a gap to cover (as the sent schedules do: "Patel (AM,
+  covering Ransone)"). The engine's CPEC clinic for 9/21 matches the sent
+  9/21 CPEC line exactly. Configurable: `data.availability.freeTexts /
+  dutyTexts / noCoverTexts`.
 - **Day Float covers only the Night Float resident** — chief, 9/2026. The NF
   resident is an automatic all-day absence covered by Day Float; Day Float
-  is never listed as free, even when standing in for a CPEC session.
+  is never listed as free, whatever session they stand in for.
 - **Surg 3 and 4 are all day even with clinic** — how-to Step 2. Their
   clinic is where they are when they have no case.
 - **A case's busy span**: service-case times if given (one case-length each),

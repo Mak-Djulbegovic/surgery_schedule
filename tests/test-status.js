@@ -76,8 +76,8 @@ eq(sp.start, 450, "'AM TF' assumed 7:30");
 sp = Status.caseSpans({ category: 'cataract', count: 3, serviceCount: 3, start: '1:00' }, DATA);
 same(sp.spans, [{ start: 780, end: 870 }], "CPEC sheet '1:00' x3 -> 1:00–2:30 PM");
 
-/* ---------- classification (chief's rule: CPEC, PT, idle OR/Surg = free) ---------- */
-eq(Status.kindOfClass(Status.classifyText('CPEC', DATA)), 'free', 'CPEC counts as available');
+/* ---------- classification (chief's rule: PT, idle OR/Surg = free; CPEC = clinic, 9/28) ---------- */
+eq(Status.kindOfClass(Status.classifyText('CPEC', DATA)), 'clinic', 'CPEC is a clinic (chief, 9/28/2026)');
 eq(Status.kindOfClass(Status.classifyText('PT', DATA)), 'free', 'PT counts as available');
 eq(Status.kindOfClass(Status.classifyText('Wills OR', DATA)), 'free', 'OR block with no case is available');
 eq(Status.kindOfClass(Status.classifyText('Surg 4', DATA)), 'free', 'Surg role with no case is available');
@@ -105,7 +105,7 @@ var b = Status.build(roster, day({}), DATA);
 var k1330 = kinds(b, 810);
 eq(k1330.Bair, 'clinic', 'Bair (Surg 3, no case) is in Cornea clinic PM');
 eq(k1330.Calotti, 'free', 'Calotti (Surg 4 all day) is free PM with no case');
-eq(k1330.Aguwa, 'free', 'Aguwa in CPEC is free');
+eq(k1330.Aguwa, 'clinic', 'Aguwa in CPEC is in clinic');
 eq(k1330.Samuel, 'free', 'Samuel on Wills OR with no case is free');
 eq(k1330.Teng, 'duty', 'Teng in ER is on duty');
 eq(k1330.Perez, 'out', 'Perez on Night Float is out for the day');
@@ -170,7 +170,7 @@ eq(b.statusAt('Ransone', 540).kind, 'out', 'Ransone out AM');
 var pa = b.statusAt('Patel', 540);
 eq(pa.covering, 'Ransone', 'Patel covers Ransone AM');
 eq(pa.text, 'CPEC', "Patel takes Ransone's CPEC");
-eq(pa.kind, 'free', 'covering CPEC still counts as available');
+eq(pa.kind, 'clinic', 'covering CPEC = in clinic');
 var ha = b.statusAt('Hamou', 810);
 eq(ha.kind, 'clinic', "Hamou takes Ransone's Plastics clinic PM");
 eq(b.statusAt('Hamou', 540).kind, 'clinic', 'Hamou keeps their own AM (Peds)');
@@ -181,7 +181,8 @@ b = Status.build(roster, day({
   absences: [{ id: 'a1', name: 'Ransone', am: true, pm: true, reason: 'vacation', coverAM: 'Patel', coverPM: 'Hamou' }],
   clinicStaffOverrides: { 'Uveitis|am': { removed: ['Patel'], added: [] } }
 }), DATA);
-eq(b.needs.length, 0, 'removing Patel from Uveitis AM acknowledges it');
+eq(b.needs.length, 1, 'removing Patel from Uveitis AM acknowledges it — one gap left:');
+eq(b.needs[0] && (b.needs[0].clinic + ' ' + b.needs[0].session), 'CPEC pm', '…CPEC PM, which Hamou leaves to cover Ransone’s Plastics (CPEC is a clinic)');
 
 // NC and unset coverage
 b = Status.build(roster, day({ absences: [
@@ -203,7 +204,7 @@ b = Status.build(r105, day({ nightFloat: 'Camacho' }), DATA);
 var pz = b.statusAt('Perez', 540);
 eq(b.statusAt('Camacho', 540).kind, 'out', 'NF resident out for the day');
 eq(pz.covering, 'Camacho', 'Day Float stands in for the NF resident');
-eq(pz.kind, 'duty', 'Day Float covering CPEC is still not "available"');
+ok(pz.kind !== 'free', 'Day Float covering the NF resident’s CPEC is not "available" (in clinic: ' + pz.kind + ')');
 ok(b.freeAt(540).indexOf('Perez') === -1, 'Day Float never listed as free');
 
 /* ---------- clinic staffing edits drive status ---------- */
@@ -223,7 +224,7 @@ eq(ch && ch.full, false, 'not the whole AM');
 eq(ch && ch.ranges[0].start, 420, 'free from 7:00…');
 eq(ch && ch.ranges[0].end, 450, '…until the 7:30 list');
 eq(ch && ch.ranges[1] && ch.ranges[1].start, 510, 'free again at 8:30 (x2 est. 30 min each)');
-ok(am.some(function (x) { return x.name === 'Aguwa' && x.full; }), 'Aguwa free the whole AM');
+ok(!am.some(function (x) { return x.name === 'Aguwa'; }), 'Aguwa (CPEC) is in clinic, not on the free list');
 
 /* ---------- weekend ---------- */
 b = Status.build(Engine.resolveDay('2026-09-26', DATA), day({}), DATA);

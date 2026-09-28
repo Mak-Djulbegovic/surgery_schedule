@@ -16,7 +16,9 @@
   var ISO_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
   var SURG_RE = /^Surg (\d+)$/;
   var OR_RE = /\bOR\b/; // case-sensitive word 'OR' → OR-type block
-  var NON_CLINIC = { 'CPEC': true, 'ER': true, 'PT': true, 'Jeff Consults': true, 'Cooper Consults': true, 'Day Float': true };
+  // CPEC is a clinic like any other (chief, 9/28/2026) — it gets clinic rows,
+  // stand-ins and coverage.
+  var NON_CLINIC = { 'ER': true, 'PT': true, 'Jeff Consults': true, 'Cooper Consults': true, 'Day Float': true };
 
   function getData(data) {
     if (data) return data;
@@ -206,7 +208,7 @@
             ob[session].push({ name: name, year: yearKey });
             continue;
           }
-          if (NON_CLINIC[text]) continue; // CPEC / PT (ER etc. handled above)
+          if (NON_CLINIC[text]) continue; // PT (ER etc. handled above)
           var cl = day.clinics[text] || (day.clinics[text] = { am: [], pm: [] });
           cl[session].push({ name: name, year: yearKey });
         }

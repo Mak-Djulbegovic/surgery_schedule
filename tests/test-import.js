@@ -229,7 +229,9 @@ eq(JSON.stringify(p921.absences.map(function (a) { return [a.name, a.am && a.pm,
   JSON.stringify([['Samuel', true, 'NC', 'NC'], ['Ransone', true, 'Patel', 'NC']]), 'c/b n/c, and "Patel AM (Uveitis)/NC d/s PM"');
 var cl921 = {};
 p921.clinics.forEach(function (c) { cl921[c.label + '|' + c.session] = c; });
-eq(Object.keys(cl921).sort().join(), 'CPEC PO|day,Cornea|pm,Glaucoma|pm,Neuro|am,Neuro|pm,Peds|am,Plastics|pm', 'clinic lines (CPEC is assignments, not a clinic; Neuro AM/PM = both)');
+eq(Object.keys(cl921).sort().join(), 'CPEC PO|day,CPEC|am,CPEC|pm,Cornea|pm,Glaucoma|pm,Neuro|am,Neuro|pm,Peds|am,Plastics|pm', 'clinic lines (CPEC is a clinic; Neuro AM/PM = both)');
+eq(cl921['CPEC|am'].staff.join(), 'Illiano,Patel,Camacho,Parekh,Aguwa,Shields', 'CPEC AM: untagged names + "Patel (AM, covering Ransone)" + "Parekh (AM)"');
+eq(cl921['CPEC|pm'].staff.join(), 'Illiano,Hamou,Camacho,Aguwa,Shields', 'CPEC PM: untagged names + "Hamou (PM)"');
 eq(cl921['Cornea|pm'].count + ' / ' + cl921['Cornea|pm'].extra + ' / ' + cl921['Cornea|pm'].staff.join(), '28 x 2 / Meghpara; +1 procedure @ 12:30 (Bair) / Parekh,Bair', 'attending + count, and a note after a name');
 eq(cl921['Plastics|pm'].staff.length, 0, 'Plastics PM: None');
 eq(p921.nightFloat + '|' + p921.surg['3'] + '|' + p921.addOnDates[0], 'Perez|Bair|2026-09-21', 'Night Float, Surg 3, and the day from the add-ons');
@@ -243,6 +245,8 @@ var d921b = ImportFmt.toDay(p921, base921, R921, DATA, ExportFmt, { surgRoleOf: 
 eq(d921b.cases[5].category, 'retina', 'a type set before for an attending is remembered');
 ok(!d921.clinicStaffOverrides['Uveitis|am'] && !d921.clinicStaffOverrides['Oncology|am'] && !d921.clinicStaffOverrides['Retina Private|pm'],
   'clinics the paste does not list keep the block schedule’s staff');
+ok(!d921.clinicStaffOverrides['CPEC|am'] && !d921.clinicStaffOverrides['CPEC|pm'],
+  'the sent CPEC line matches the block schedule + who is out exactly (Patel for Ransone AM) — no edits needed');
 var Status = require(path.join(__dirname, '..', 'js', 'status.js'));
 var ab = Status.caseSpans(d921.cases[0], DATA);
 eq(Status.fmtClock(ab.start) + '–' + Status.fmtClock(ab.end), '9:15 AM–11:15 AM', 'Cheng is busy for the 4 service cases from 9:15 (4 × 30 min), not from 7:30');
