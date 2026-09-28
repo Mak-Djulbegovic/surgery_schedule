@@ -59,6 +59,21 @@ encodes — and the assumptions still to calibrate — are listed in
 ![Surgery](docs/screenshots/surgery.png)
 ![Coverage](docs/screenshots/coverage.png)
 
+## Versions
+
+- **v2** (this version, 9/2026) — the flow follows the how-to (Out today →
+  Roster → Surgery → Clinics → Coverage → Preview), the app knows who is
+  free at any minute, the Surgery tab is one line per attending with the
+  resident on the line, and the Coverage tab answers "a globe comes in —
+  who takes it, who covers their clinic". Every rule, and every assumption
+  still to calibrate: [docs/UISPEC6.md](docs/UISPEC6.md).
+- **v1** — the original app, kept two ways: the git tag
+  [`v1`](https://github.com/Mak-Djulbegovic/surgery_schedule/tree/v1)
+  (exact source), and [`v1/index.html`](v1/index.html), the whole v1 app in
+  one file (on the hosted site at `/v1/`). See [v1/README.md](v1/README.md).
+
+Days saved in v1 open in v2 (same browser, same storage keys).
+
 ## Quick start
 
 - **Hosted**: open the GitHub Pages site (once enabled — see below).
@@ -83,6 +98,7 @@ js/export.js          document formatting + clipboard
 js/app.js             UI controller and per-date persistence
 tests/                plain-Node test suites (no dependencies)
 tools/bundle.js       builds the single-file dist/surg-schedule.html
+v1/                   the archived v1 app (one file) — see v1/README.md
 docs/                 architecture & UI specs, screenshots
 .github/workflows/    GitHub Pages deployment
 ```

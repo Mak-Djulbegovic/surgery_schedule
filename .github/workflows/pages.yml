@@ -31,6 +31,8 @@ jobs:
           mkdir -p site
           cp index.html site/
           cp -r css js site/
+          # v1, archived as one self-contained file → served at /v1/
+          cp -r v1 site/
       - uses: actions/configure-pages@v5
         with:
           enablement: true

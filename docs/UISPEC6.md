@@ -10,14 +10,15 @@ how-to's order. Status: **prototype on a branch — not deployed.**
 |---|---|---|
 | 1 Out today | Step 1 — vacation coverage | "No one out — 24 strong", or add who is out (all day / AM / PM, reason) and pick who covers each session, or **NC** |
 | 2 Roster | Step 2 — Surg 1–5 | as before; Surg 3/4 shown as **all day** ("Cornea PM if no case") |
-| 3 Surgery | Steps 3–10 — cases | CPEC-sheet cataracts (+ Add all), then the case list; the resident is picked **on each case** (one-click suggestion + availability-grouped dropdown); the old Assign tab is gone |
+| 3 Surgery | Steps 3–10 — cases | **one line per attending**, reading like the sent schedule: `Surgeon × # · start · category · svc → resident`. The suggested resident is a dashed pill (one click); an assigned one gets a status dot (green free, amber leaves a clinic, red out/double-booked); the backup line appears under the line only when the case pulls someone out of clinic. Service times / done by / notes / add-on / move / delete sit behind **⋯**. **Enter** adds the next line. The CPEC sheet is a prefill banner (Add all / Choose…) that shrinks to one line once added. The old Assign tab is gone |
 | 4 Clinics | Steps 11–12 — clinics | counts as before; each clinic shows who is out / pulled into a case and who covers; "Needs coverage" list on top |
 | 5 Coverage | the new backup view | time control (Now / any time), who is free, "if a globe comes in at t", everyone's day on one timeline, add-on call names |
 | 6 Preview & Copy | — | the document |
 
 How-to, CPEC sheet, block schedules and Setup moved to a **Library** menu.
 
-**Landing page**: a plain statement of purpose (no greeting) over a blue
+**Landing page**: a short title only (no greeting, no tagline — the chief:
+"unnecessary for people who have made the schedule before") over a blue
 hero (inline-SVG iris, no external assets); date picker with Today / Tomorrow (/ next weekday)
 chips; a live preview of the chosen day straight from the block schedule —
 Surg 1–5 (all-day tags, anyone out flagged), Night Float, Day Float, the
@@ -113,6 +114,10 @@ Unchanged without a board (old tests pass as before). With a board:
   junior, plastics add-ons fall to the seniors (Surg 2 first). This is what
   the chains already do — pinned by tests.
 - `d/s` is ignored; no "send to phone" link.
+- **Add-on call names are PGY-4s**: the add-on dropdowns list the seniors,
+  with "Other…" opening every resident for the rare exception.
+- **v2**: the app shows "v2"; v1 is kept as git tag `v1` and as
+  `v1/index.html` (one file; its saved days use separate storage keys).
 
 ## Still assumptions (say so if wrong)
 
