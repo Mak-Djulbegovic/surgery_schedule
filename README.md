@@ -36,17 +36,22 @@ The six tabs follow the "How to Surgical Schedule" order:
 2. **Roster** — Surg 1–5 (Surg 3 and 4 all day), WER, consults, Night Float
    and the Day Float covering them.
 3. **Surgery** — the CPEC-sheet cataracts, then the case list, with the
-   resident picked on each case: a one-click suggestion from the how-to
-   chains (scheduled cornea → Surg 3, …, trauma → Surg 2, remaining cases
-   Surg 2 → 3 → 4 → Cooper → 1 → 5) that skips anyone out or already in a case
-   then, and a dropdown grouped by who is free / in clinic / busy. When a
-   case pulls someone out of clinic, the backup who covers it is suggested
-   too. Nothing is assigned until you click.
+   resident picked on each case: a one-click suggestion that follows the
+   how-to doc step by step (scheduled cornea → Surg 3, add-on glaucoma →
+   Surg 4, …, trauma → Surg 2; anything skipped waits for Step 10, the
+   remaining cases Surg 2 → 3 → 4 → Cooper → 1 → 5, in time order). It skips
+   anyone out or already in a case then, never suggests anyone off the doc's
+   chains (past the end it's Surg 2's call, and it shows who else is free),
+   and the dropdown groups residents by free / in clinic / busy. When a case
+   pulls someone out of clinic, the backup who covers it is suggested too.
+   Nothing is assigned until you click.
 4. **Clinics** — counts, plus who is out or pulled into a case and who
    covers; anything left short is listed on top.
 5. **Coverage** — who is free now (or at any time you pick), what happens if
    a globe comes in (Surg 2 takes it; the clinic they held passes down the
-   coverage chain), everyone's day on one timeline, add-on call names.
+   coverage chain) or several add-ons at once (the doc's step order), who
+   covers a clinic if a morning OR runs late, everyone's day on one
+   timeline, add-on call names.
 6. **Preview & Copy** — the day in the standard document format, copied
    with formatting for Google Docs, Word, or email.
 

@@ -76,15 +76,16 @@ automatic save in case they X out of the tab."
   someone out all day. Nights stay manual. Tagged "Surg 2".
 - **Several emergencies at once** (chief: "what if we have a globe come in
   while there is an emergent glaucoma AND cornea case — very rare, but just
-  need algorithmic help"). `Assign.planAddOns(kinds, t, …)`: each kind walks
-  its own chain exactly as a single add-on does; then the residents are
-  chosen jointly — the assignment with the lowest total chain position,
-  searched exhaustively (≤ 8 candidates per kind), a case nobody can take
-  costing more than any pick; ties go to the more urgent kind keeping its
-  earlier pick (globe → cornea → glaucoma → plastics → cataract → other, so
-  Surg 2 keeps the globe). Everyone pulled from a clinic gets a coverer from
-  the clinic-coverage chain — free, not already covering, never someone
-  taking a case. Coverage tab: pick several kinds; "Add all as add-on cases".
+  need algorithmic help"). `Assign.planAddOns(kinds, t, …)` runs the how-to's
+  own steps (below): Step 6 add-on glaucoma → Surg 4 and add-on cornea →
+  Surg 3, skipped for now if they are in a case; Step 9 trauma, then plastics,
+  down their chain; Step 10 anything skipped or left (Surg 2 → Surg 3 →
+  Surg 4 → Cooper → Surg 1 → Surg 5). Nobody takes two at once. Then Step 12:
+  everyone pulled from a clinic gets a coverer from the clinic-coverage chain
+  — free, not already covering, never someone taking a case. Each row says
+  who was passed over and why. Coverage tab: pick several kinds; "Add all as
+  add-on cases". (The first version, 9/28, chose jointly by lowest total chain
+  position with an urgency tie-break I made up — replaced by the doc's order.)
 - **A morning OR running late** (chief: "if the morning plastics OR goes past
   12:30, who will cover the person until they get to glaucoma? … surg 2
   would cover in glaucoma clinic until the PGY2 is done in the OR"). Coverage
@@ -191,25 +192,76 @@ Rules and where they come from:
   `1:00`; the old parser read it as 1 AM — fixed). Zero-padded 24-h times
   (`0600`) are literal.
 
-## Assignment with availability (js/assign.js)
+## Who covers: the how-to doc is the authority (chief, 9/28/2026)
 
-Unchanged without a board (old tests pass as before). With a board:
+"Defer to this for the rules of who to cover" — *How to Surgical Schedule*
+(full version). `data.hierarchy[key].step` carries the doc's step number and
+`Assign.suggest` / `Assign.planAddOns` assign in that order:
 
-- A chain member is **skipped only if out or already in a case** then
-  (how-to Step 6: "skip for now"). Being in clinic does not skip them — they
-  are pulled and someone covers.
-- Skipped cases fall through to the **remaining-cases chain** (Step 10), then
-  **any free senior**, then **any free junior** ("the next available senior
-  or resident").
+| Step | Cases | Chain |
+|---|---|---|
+| 3–4 | Scheduled cataracts | the doc: per the master cataract schedule (lounge wall); the app suggests Surg 1 → Surg 5 → Wills OR (Wills OR from the slide deck) |
+| 5 | Scheduled cornea / glaucoma | Surg 3 / Surg 4 |
+| 6 | Add-on glaucoma / cornea (incl. trauma needing tissue) | Surg 4 / Surg 3 — "if the respective resident is busy in a scheduled case at the time of the add on, skip for now" |
+| 7 | Scheduled plastics (incl. Gibbon/JHN) | 1st year on Plastics OR → free and willing 1st/2nd year (Surg 2's discretion) → Surg 4; "if all … are in the OR, skip for now" |
+| 8 | Peds | 1st/2nd year on Peds OR → free and willing 1st/2nd year → Surg 4 → Surg 3; skip for now |
+| 9 | Add-on trauma and add-on plastics | 1st/2nd year on plastics (TABs and add-on outpatient plastics only) → Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 |
+| 10 | Everything still unassigned, chronological | Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 |
+| 12 | PM clinic coverage | Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 → Wills OR → Retina |
+
+What changed to follow it (before → after):
+
+- **Order.** Before: peds and all scheduled cases first, then every add-on in
+  the order typed, then the rest. After: the doc's step order, so e.g. an
+  add-on glaucoma gets Surg 4 before scheduled plastics can (Step 6 before 7),
+  and a globe gets Surg 2 before a skipped add-on falls back to Surg 2
+  (Step 9 before 10).
+- **Skip for now.** Before: a skipped case walked the remaining chain at once.
+  After: it waits for Step 10 and goes in chronological order with the rest.
+- **Past the end of a chain.** Before: any free senior, then any free junior
+  was suggested. After: no suggestion — "Surg 2's call" — and the free
+  residents outside the chain are listed (`outside`), never picked. Same for
+  clinic cover.
+- **Plastics add-ons.** Before: an extra free-junior step (from the 9/27
+  answer "PGY2 and PGY3 will be the ones to go first to plastics cases").
+  After: the doc's Step 9 — only the junior on Plastics OR, then Surg 2.
+  Scheduled plastics keep the doc's free-junior step.
+- **Add-on cataracts.** Before: Surg 2 → Surg 1 → Surg 5 → Wills OR. After:
+  a remaining case (Step 10). Surg 2 is still first.
+- **Add-on cornea / glaucoma / scheduled plastics.** Before: Surg 2 written
+  into each chain. After: the doc's chain; Surg 2 comes first at Step 10.
+- **JHN/Gibbon/JSC add-ons.** Before: Surg 2 first whatever the case (slide
+  deck). After: typed by kind like any add-on (the doc has no location rule):
+  a plastics add-on there offers the junior on Plastics OR first, a cornea
+  add-on goes to Surg 3.
+- **Deck notes that contradicted the doc** were reworded: peds ("all peds
+  cases should be covered by a resident"), enucleations/TABs to free juniors
+  (scheduled plastics only). "JP Dunn cases are service at the START of the
+  year" is left as the deck has it — not a who-covers rule; the doc just says
+  "JP Dunn cases are service".
+
+Mechanics, with a board:
+
+- A chain member is **skipped only if out, already in a case, or off-site**
+  then (Step 6's "skip for now"), or already picked for another case at that
+  time. Surg roles and the Cooper senior in clinic are **not** skipped —
+  pulled, and someone covers (Surg 3/4 "are all day even if they have
+  clinic"; Surg 2 takes the globe).
+- **OR-block tokens** ("1st year on Plastics OR", "on Peds OR", Wills OR)
+  take a resident only while they are on that OR: one in clinic at the time
+  stays there (chief, 9/27: "if the plastics resident is in clinic then they
+  will stay in clinic as default"). This fixes Tue 9/29: Ransone (Plastics OR
+  AM, Plastics clinic PM) was being pulled for a 2 PM TAB.
 - **free junior** resolves to actual free PGY-2/3s, with a "confirm with
   Surg 2" note (willingness can't be computed).
+- Within a step, the doc's listing order (glaucoma before cornea at Step 6,
+  trauma before plastics at Step 9), then the order typed. Same-time ties at
+  Step 10 keep the step order. The doc does not rank these — assumption.
 - **Globe**: Surg 2 takes it even from a clinic they were covering; that
   clinic passes down the clinic-coverage chain (chief, 9/2026). Coverers must
   be free (not out / in a case / in a clinic / on duty / off-site).
 - **Off-site** residents (Cooper Clinic, Cooper OR) are skipped by every
   chain, with the reason shown.
-- **Plastics add-ons**: new chain `plasticsAddOn` — junior on Plastics OR →
-  free junior → Surg 2 → … (chief: "PGY-2 and PGY-3 go first to plastics").
 
 ## Copied schedule changes (js/export.js)
 
@@ -241,9 +293,10 @@ Unchanged without a board (old tests pass as before). With a board:
 - **"Cooper" in the chains = the PGY-4 on the Cooper block** (block 7,
   `data.years.pgy4.cooperBlock`; engine `roster.cooperSenior`) — no longer
   the PGY-2 on Cooper consults.
-- **Plastics junior in Plastics clinic stays in clinic**; with no free
-  junior, plastics add-ons fall to the seniors (Surg 2 first). This is what
-  the chains already do — pinned by tests.
+- **Plastics junior in Plastics clinic stays in clinic**; plastics add-ons
+  then fall to the seniors (Surg 2 first). (Said on 9/27 to be what the chains
+  already did — true on Mondays, not on Tuesday afternoons; fixed 9/28, see
+  "OR-block tokens" above.)
 - `d/s` is ignored; no "send to phone" link.
 - **Add-on call names are PGY-4s**: the add-on dropdowns list the seniors,
   with "Other…" opening every resident for the rare exception.
