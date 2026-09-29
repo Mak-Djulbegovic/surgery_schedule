@@ -47,9 +47,10 @@ The six tabs follow the "How to Surgical Schedule" order:
    Nothing is assigned until you click.
 4. **Clinics** — counts, plus who is out or pulled into a case and who
    covers; anything left short is listed on top.
-5. **Coverage** — who is available AM and PM (free, or done with their
-   service case; then Retina / Uveitis, the first to pull from — no cover
-   needed; never Path), what happens if add-ons come in — one or several,
+5. **Coverage** — the day's cases to check off as they finish, then who is
+   available AM and PM (free, or done with their cases; then Retina /
+   Uveitis, the first to pull from — no cover needed; never ER, consults or
+   Path), what happens if add-ons come in — one or several,
    each at its own time, placed in the doc's step order and searched
    exactly so none is left without a resident when some choice covers it
    (docs/OPTIMIZATION.md) — who covers a clinic if a morning OR runs late

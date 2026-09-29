@@ -51,7 +51,7 @@
   var DEFAULT_OFFSITE = ['Cooper Clinic', 'Cooper OR'];
   var DEFAULT_NO_COVER = ['PT', 'Day Float'];
   var DEFAULT_PULL_FIRST = ['Retina', 'Retina Private', 'Uveitis'];
-  var DEFAULT_NEVER_PULL = ['Path'];
+  var DEFAULT_NEVER_PULL = ['Path', 'ER', 'Jeff Consults', 'Cooper Consults'];
 
   var RANK = { off: 0, free: 1, duty: 2, clinic: 3, 'case': 4, out: 5 };
 
@@ -184,6 +184,17 @@
       if (until > last.start) { last.end = until; estimated = false; }
     }
     spans = mergeSpans(spans);
+    // Checked off as done at doneAt (chief, 9/29/2026: "check off when the
+    // cases are done and who clears up"): the case is over then and the
+    // resident is free from that minute, whatever the estimate said. Done
+    // before it began (cancelled): no busy time at all.
+    var doneAt = c.done ? parseClock(c.doneAt) : null;
+    if (doneAt != null) {
+      var kept = spans.filter(function (sp) { return sp.start < doneAt; });
+      if (kept.length) kept[kept.length - 1].end = doneAt;
+      spans = kept.length ? kept : [{ start: doneAt, end: doneAt }];
+      estimated = false;
+    }
     return {
       spans: spans,
       start: spans[0].start,
@@ -191,6 +202,7 @@
       estimated: estimated,
       unknownStart: unknownStart,
       svcAssumed: svcAssumed,
+      done: doneAt != null,
       perCase: per
     };
   }
@@ -426,7 +438,7 @@
       caseInfo[c.id] = {
         c: c, spans: cs.spans, start: cs.start, end: cs.end,
         estimated: cs.estimated, unknownStart: cs.unknownStart, svcAssumed: cs.svcAssumed,
-        assigned: a, backup: trim(c.backup)
+        done: cs.done, assigned: a, backup: trim(c.backup)
       };
       if (a && byName[a]) {
         cs.spans.forEach(function (sp) {
@@ -746,6 +758,12 @@
         needs.push(open);
       }
     });
+
+    // ER first (chief, 9/29/2026: "the ER is sacred, it is the first thing
+    // that needs to be staffed by residents"); the order is otherwise kept.
+    needs.forEach(function (n, i) { n.erFirst = n.type === 'absence' && n.duty === 'ER'; n._i = i; });
+    needs.sort(function (a, b) { return (b.erFirst ? 1 : 0) - (a.erFirst ? 1 : 0) || a._i - b._i; });
+    needs.forEach(function (n) { delete n._i; });
 
     return {
       date: roster.date,

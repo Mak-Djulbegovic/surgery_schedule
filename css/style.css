@@ -1164,6 +1164,23 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .need-row:last-of-type { border-bottom: none; }
 .need-text { flex: 1 1 320px; font-size: 13.5px; min-width: 0; }
 .need-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.need-row.er-first .need-text b { color: var(--red-text); }
+.er-flag { font-weight: 700; color: var(--red-text); }
+
+/* cases to check off when done */
+.done-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;
+  padding: 7px 0; border-bottom: 1px solid var(--border-soft); font-size: 13.5px;
+}
+.done-row:last-child { border-bottom: none; }
+.done-check { display: inline-flex; align-items: center; }
+.done-check input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+.done-who { flex: 1 1 240px; min-width: 0; }
+.done-when { color: var(--muted); font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.done-row.done .done-who { color: var(--faint); }
+.done-row.done .done-who .plan-via { text-decoration: line-through; }
+.done-time { border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12.5px; }
+.avail-now { padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px dashed var(--border); }
 .ok-card { color: var(--green-text); font-weight: 600; background: var(--green-bg); border-color: var(--green-border); }
 .ok-mark { font-weight: 800; }
 
