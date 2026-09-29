@@ -234,7 +234,11 @@
       assigned: String(c.assigned || ''),
       backup: String(c.backup || ''),
       backupNote: String(c.backupNote || ''),
-      until: String(c.until || '')   // typed end time, or set by "Done" day-of
+      until: String(c.until || ''),   // typed end time, or set by "Done" day-of
+      // checked off on Coverage: the case is over at doneAt ('HHMM') and the
+      // resident is free from then (chief, 9/29/2026)
+      done: !!c.done,
+      doneAt: String(c.doneAt || '')
     };
   }
 
@@ -512,9 +516,9 @@
     { kind: 'free', label: 'Free' },
     { kind: 'pull', label: 'Pull first — Retina / Uveitis, no cover needed' },
     { kind: 'clinic', label: 'In clinic — would need a backup' },
-    { kind: 'duty', label: 'On duty (ER / consults / Day Float)' },
+    { kind: 'duty', label: 'Day Float or off-site (Cooper)' },
     { kind: 'case', label: 'Already in a case then' },
-    { kind: 'never', label: 'Never pulled (Path)' },
+    { kind: 'never', label: 'Never pulled (ER, consults, Path)' },
     { kind: 'out', label: 'Out' },
     { kind: 'off', label: 'Residents' }
   ];
@@ -2357,9 +2361,11 @@
     var row = el('div', { class: 'need-row' });
     var actions = el('div', { class: 'need-actions' });
     if (n.type === 'absence') {
+      if (n.erFirst) row.classList.add('er-first');
       row.appendChild(el('div', { class: 'need-text' }, [
         el('b', { text: n.name + ' out ' + n.session.toUpperCase() }),
-        ' — ' + n.duty + ': nobody covering yet' + (n.auto ? ' (Night Float — no Day Float to cover)' : '')
+        ' — ' + n.duty + ': nobody covering yet' + (n.auto ? ' (Night Float — no Day Float to cover)' : ''),
+        n.erFirst ? el('span', { class: 'er-flag', text: ' ER is staffed first' }) : null
       ]));
       if (!n.auto) {
         actions.appendChild(el('button', {
@@ -2704,8 +2710,29 @@
     var card = el('div', { class: 'card avail-card' });
     card.appendChild(el('h2', {}, ['Available ', el('span', {
       class: 'h-note',
-      text: 'Free: PT, a Surg role or OR block with nothing booked, or done with their service case. Pull first: Retina / Uveitis — no cover needed. Never Path.'
+      text: 'Free: PT, a Surg role or OR block with nothing booked, or done with their cases. Pull first: Retina / Uveitis — no cover needed. Never ER, consults or Path.'
     })]));
+    // today: who could go right now
+    if (isToday()) {
+      var now = nowMinutes();
+      if (now >= b.dayStart && now < b.dayEnd) {
+        var nowList = b.order.filter(function (n) {
+          var st = b.statusAt(n, now);
+          return !st.neverPull && (st.kind === 'free' || (st.kind === 'clinic' && st.pullFirst));
+        });
+        var nowRow = el('div', { class: 'free-row avail-now' }, [el('span', { class: 'free-label', text: 'Now ' + shortClock(now) })]);
+        if (!nowList.length) nowRow.appendChild(el('span', { class: 'empty-note', text: 'nobody free right now' }));
+        nowList.forEach(function (n) {
+          var st = b.statusAt(n, now);
+          var pull = st.kind === 'clinic';
+          nowRow.appendChild(el('span', { class: 'free-chip ' + yearOf(n) + (pull ? ' pull' : '') }, [
+            el('b', { text: n }),
+            el('span', { class: 'free-sub', text: String(st.label || '').replace(/, no case$/, '') + (pull ? ' — no cover needed' : '') })
+          ]));
+        });
+        card.appendChild(nowRow);
+      }
+    }
     var cols = el('div', { class: 'avail-cols' });
     [['am', 'AM'], ['pm', 'PM']].forEach(function (p) {
       var list = b.availableInSession(p[0]);
@@ -3095,9 +3122,84 @@
     var needsHost = el('div');
     renderNeedsCard(needsHost, 'Needs coverage', 'Fix here, or on Clinics / Out today');
     host.appendChild(needsHost);
+    host.appendChild(casesCard());
     host.appendChild(availCard());
     host.appendChild(planCard(t));
     host.appendChild(lateCard());
+  }
+
+  // Every case with a resident, in time order, to check off when it is done
+  // (chief, 9/29/2026: "check off when the cases are done and who clears up
+  // … the goal is to have a list of who is available"). Checking one off
+  // ends the case then — now, today; the estimated end on another day — and
+  // the time can be corrected; the resident is free from that minute and
+  // Available follows. Unchecking puts the case back as it was.
+  function casesCard() {
+    var S = window.Status;
+    var b = App.board;
+    var list = (App.state.cases || []).filter(function (c) {
+      var a = trim(c.assigned);
+      return a && a !== 'NC' && b.byName[a] && b.caseInfo[c.id];
+    }).sort(function (x, y) { return b.caseInfo[x.id].start - b.caseInfo[y.id].start; });
+    var left = list.filter(function (c) { return !c.done; }).length;
+    var card = el('div', { class: 'card done-card' });
+    card.appendChild(el('h2', {}, ['Cases — check off when done ', el('span', {
+      class: 'h-note',
+      text: !list.length ? 'Nothing to check off yet'
+        : left ? left + ' of ' + list.length + ' not done · checking one off frees the resident from then, and Available below follows'
+          : 'All ' + list.length + ' done'
+    })]));
+    if (!list.length) {
+      card.appendChild(el('p', { class: 'empty-note', text: 'No case has a resident yet — assign them on Surgery.' }));
+      return card;
+    }
+    list.forEach(function (c) {
+      var info = b.caseInfo[c.id];
+      var who = trim(c.assigned);
+      var row = el('div', { class: 'done-row' + (c.done ? ' done' : '') });
+      var box = el('input', { type: 'checkbox', 'aria-label': 'Done: ' + caseLabelOf(c) + ' (' + who + ')' });
+      box.checked = !!c.done;
+      box.addEventListener('change', function () {
+        if (box.checked) {
+          var at = info.end;
+          if (isToday()) at = Math.min(Math.max(nowMinutes(), b.dayStart), b.dayEnd);
+          at = Math.round(at / 5) * 5;
+          c.done = true;
+          c.doneAt = S.fmtHHMM(at);
+          toast(who + ' is free from ' + S.fmtClock(at));
+        } else {
+          c.done = false;
+          c.doneAt = '';
+        }
+        touch();
+        refreshEverything();
+      });
+      row.appendChild(el('label', { class: 'done-check' }, [box]));
+      row.appendChild(el('span', { class: 'done-who' }, [
+        el('b', { class: 'res-name ' + yearOf(who), text: who }), ' ',
+        el('span', { class: 'plan-via', text: caseLabelOf(c) + (c.addOn ? ' · add-on' : '') })
+      ]));
+      if (c.done) {
+        var tin = el('input', {
+          type: 'time', class: 'done-time', step: '300', 'aria-label': 'Done at',
+          value: String(c.doneAt || '').replace(/^(\d\d)(\d\d)$/, '$1:$2')
+        });
+        tin.addEventListener('change', function () {
+          var m = /^(\d{1,2}):(\d{2})/.exec(tin.value);
+          if (!m) return;
+          c.doneAt = ('0' + m[1]).slice(-2) + m[2];
+          touch();
+          refreshEverything();
+        });
+        row.appendChild(el('span', { class: 'done-when' }, ['done at ', tin, ' — ' + who + ' free from then']));
+      } else {
+        row.appendChild(el('span', { class: 'done-when' }, [
+          spanText(info.spans) + (info.estimated ? ' (est.)' : '') + ' · clears ' + S.fmtClock(info.end)
+        ]));
+      }
+      card.appendChild(row);
+    });
+    return card;
   }
 
   /* ------------------------------------------------------------------ */

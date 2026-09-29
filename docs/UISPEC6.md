@@ -66,6 +66,28 @@ automatic save in case they X out of the tab."
   Shared workroom computers on one browser profile still share drafts —
   documented, not solved (would need sign-in or per-person keys).
 
+## Check off when done; ER and consults never pulled (9/29/2026)
+
+- **Check off cases when done** (chief: "i do like the idea of being able to
+  check off when the cases are done and who clears up. again, the goal is to
+  have a list of who is available"). Coverage → "Cases — check off when
+  done": every case with a resident, in time order, with when the resident
+  clears. Checking one sets `case.done` / `case.doneAt` — now, today; the
+  estimated end on another day — and the time can be corrected. The case is
+  over at that minute (earlier or later than the estimate), so the resident
+  is free from then and Available updates. Unchecking puts the case back as
+  it was. On today's date Available also shows who is free right now.
+  Nothing about it goes into the copied schedule.
+- **ER is sacred; consults never pulled** (chief: "the ER is sacred, it is
+  the first thing that needs to be staffed by residents. consult residents
+  (PGY2 Cooper and PGY3 Jeff) can never be pulled unless they are …" — the
+  exception was cut off; until it is known they are never pulled).
+  `neverPullTexts` = Path, ER, Jeff Consults, Cooper Consults: skipped by
+  every chain and cover, never listed as available, greyed out in the
+  dropdown. That holds for whoever is covering an ER or consult session for
+  someone who is out. An uncovered ER session is listed first in Needs
+  coverage, flagged "ER is staffed first".
+
 ## Several add-ons at different times; cataract lists; late juniors (9/28/2026, evening)
 
 - **Cataract lists keep the resident** (chief: "when anyone is in cataract

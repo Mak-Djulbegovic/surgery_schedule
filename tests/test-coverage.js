@@ -322,5 +322,17 @@ ok(jt.searched < 100, 'the search is tiny (' + jt.searched + ' nodes)');
 jt = Assign.planAddOns([{ kind: 'globe', t: 600 }, { kind: 'glaucoma', t: 600 }, { kind: 'cornea', t: 600 }], null, roster, DATA, board({}).b);
 ok(jt.items.every(function (it) { return !it.adjusted; }) && jt.unfilledByOrder === 0, 'no conflict: nothing changed from the doc’s order');
 
+/* ---------- ER is sacred; consults never pulled (chief, 9/29/2026) ---------- */
+x = board({ absences: [{ id: 't', name: 'Teng', am: true, pm: true, reason: 'sick', coverAM: '', coverPM: 'Djulbegovic' }] });
+plan = Assign.planAddOn('globe', 840, roster, DATA, x.b);
+var dj = plan.steps.filter(function (s) { return s.name === 'Djulbegovic'; })[0];
+ok(dj && dj.verdict === 'skip' && /ER — never pulled/.test(dj.why), 'Surg 2 covering the ER is skipped for a 2 PM globe — got ' + (dj && dj.why));
+eq(plan.pick && plan.pick.name, 'Bair', '…Surg 3 takes it');
+x = board({});
+var avAll = x.b.availableInSession('am').concat(x.b.availableInSession('pm')).map(function (a) { return a.name; });
+ok(['Teng', 'Williamson', 'Alvarez', 'DeSimone'].every(function (n) { return avAll.indexOf(n) === -1; }), 'ER and consult residents are never listed as available');
+var lcEr = Assign.lateCover('Nahar', 'Glaucoma', 750, 810, roster, DATA, x.b, [], null);
+ok(lcEr.steps.every(function (s) { return ['Teng', 'Williamson', 'Alvarez', 'DeSimone'].indexOf(s.name) === -1 || s.verdict === 'skip'; }), 'late-OR cover never uses ER or consults');
+
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures) process.exitCode = 1; else console.log('OK');

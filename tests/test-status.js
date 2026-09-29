@@ -248,7 +248,10 @@ eq(b.statusAt('Tang', 540).pullFirst, true, 'Tang in Retina Private: pull first'
 eq(b.statusAt('Patel', 540).pullFirst, true, 'Patel in Uveitis AM: pull first');
 eq(b.statusAt('Patel', 840).pullFirst, false, 'Patel in Glaucoma PM: not pull first');
 eq(b.statusAt('Momenaei', 540).neverPull, true, 'Momenaei on Path AM: never pulled');
-eq(b.statusAt('Momenaei', 840).neverPull, false, '…ER PM is not Path');
+eq(b.statusAt('Momenaei', 840).neverPull, true, '…and ER PM is never pulled either (chief 9/29: "the ER is sacred")');
+eq(b.statusAt('Alvarez', 540).neverPull, true, 'Cooper Consults (PGY-2) is never pulled');
+eq(b.statusAt('DeSimone', 840).neverPull, true, 'Jeff Consults (PGY-3) is never pulled');
+eq(b.statusAt('Teng', 540).neverPull, true, 'ER (Teng) is never pulled');
 b = Status.build(roster, day({ cases: [{ id: 't1', section: 'wills', surgeon: 'X', count: 1, serviceCount: 1, start: '1300', category: 'other', assigned: 'Tang', backup: '' }] }), DATA);
 eq(b.needs.length, 0, 'Tang pulled out of Retina Private into a case: no coverage needed');
 b = Status.build(roster, day({ cases: [{ id: 'p1', section: 'wills', surgeon: 'X', count: 1, serviceCount: 1, start: '1300', category: 'other', assigned: 'Patel', backup: '' }] }), DATA);
@@ -263,6 +266,31 @@ D2.availability.freeTexts = ['PT', 'Path'];
 var b2 = Status.build(roster, day({}), D2);
 eq(b2.statusAt('Momenaei', 540).neverPull, true, 'Path is never pulled, whatever else says so');
 ok(!b2.availableInSession('am').some(function (x) { return x.name === 'Momenaei'; }), '…and never listed as available');
+
+/* ---------- ER first; whoever covers ER is never pulled (chief, 9/29/2026) ---------- */
+b = Status.build(roster, day({ absences: [
+  { id: 'c', name: 'Cheng', am: true, pm: false, reason: 'sick', coverAM: '', coverPM: '' },
+  { id: 't', name: 'Teng', am: true, pm: true, reason: 'sick', coverAM: '', coverPM: 'Djulbegovic' }
+] }), DATA);
+eq(b.needs.map(function (n) { return n.name + ' ' + n.duty + (n.erFirst ? ' (ER first)' : ''); }).join(' | '), 'Teng ER (ER first) | Cheng Surg 1',
+  'an uncovered ER session is listed before everything else');
+eq(b.statusAt('Djulbegovic', 840).neverPull, true, 'Surg 2 covering Teng’s ER PM is never pulled from it');
+
+/* ---------- checked off as done (chief, 9/29/2026) ---------- */
+sp = Status.caseSpans({ category: 'cataract', count: 7, serviceCount: 2, start: '0730', done: true, doneAt: '1005' }, DATA);
+same(sp.spans, [{ start: 450, end: 605 }], 'done at 10:05: the list is over then (estimate was 11:00)');
+eq(sp.done && !sp.estimated, true, '…flagged done, not an estimate');
+sp = Status.caseSpans({ category: 'cataract', count: 2, serviceCount: 2, start: '0730', done: true, doneAt: '0915' }, DATA);
+same(sp.spans, [{ start: 450, end: 555 }], 'done at 9:15, later than the 8:30 estimate: busy until 9:15');
+sp = Status.caseSpans({ category: 'cataract', count: 2, serviceCount: 2, start: '1300', done: true, doneAt: '1000' }, DATA);
+eq(sp.spans[0].end - sp.spans[0].start, 0, 'checked off before it started (cancelled): no busy time');
+sp = Status.caseSpans({ category: 'cataract', count: 2, serviceCount: 2, start: '0730', done: false, doneAt: '0800' }, DATA);
+same(sp.spans, [{ start: 450, end: 510 }], 'unchecked: the doneAt left behind is ignored');
+b = Status.build(roster, day({ cases: [
+  { id: 'w1', section: 'wills', surgeon: 'Wisner', count: 7, serviceCount: 7, start: '0730', category: 'cataract', assigned: 'Cheng', backup: '', done: true, doneAt: '0930' }
+] }), DATA);
+var chDone = b.availableInSession('am').filter(function (x) { return x.name === 'Cheng'; })[0];
+eq(chDone && chDone.ranges.map(function (r) { return r.start + '-' + r.end; }).join(','), '570-720', 'Cheng checked off at 9:30: available from 9:30');
 
 /* ---------- available AM / PM (chief, 9/28/2026) ---------- */
 b = Status.build(roster, day({ cases: [

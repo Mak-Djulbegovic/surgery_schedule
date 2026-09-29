@@ -406,7 +406,9 @@ const SCHED_DATA = {
   // pull from often times is retina/uveitis so there is no coverage needed
   // for retina or uveitis"). ASSUMPTION: Retina Private counts as retina.
   // neverPullTexts: never pulled for a case or to cover (chief, 9/28/2026:
-  // "residents should NEVER be pulled from path").
+  // "residents should NEVER be pulled from path"; 9/29/2026: "the ER is
+  // sacred, it is the first thing that needs to be staffed by residents.
+  // consult residents (PGY2 Cooper and PGY3 Jeff) can never be pulled").
   // offsiteTexts: at another hospital — never pulled into a Wills case or
   // clinic by a chain (ASSUMPTION, 9/2026: Cooper Clinic / Cooper OR are at
   // Cooper; remove them here if those residents can be pulled).
@@ -416,7 +418,7 @@ const SCHED_DATA = {
     offsiteTexts: ['Cooper Clinic', 'Cooper OR'],
     noCoverTexts: ['PT', 'Day Float', 'Retina', 'Retina Private', 'Uveitis'],
     pullFirstTexts: ['Retina', 'Retina Private', 'Uveitis'],
-    neverPullTexts: ['Path']
+    neverPullTexts: ['Path', 'ER', 'Jeff Consults', 'Cooper Consults']
   },
 
   // When PM clinics actually start (chief, 9/28/2026: "if the morning
