@@ -388,5 +388,19 @@ res = Assign.suggest(b1020 && [{ id: 'c', section: 'wills', surgeon: 'C', count:
 ok(res[0].skipped.some(function (s) { return s.name === 'Cotton'; }) && res[0].name === 'Williamson', 'Wills OR: Cotton (Night Float) skipped, Williamson (also on Wills OR that morning) takes the cataracts — got ' + res[0].name);
 ok(!res[0].skipped.concat(res[0].alternates.map(function (n) { return { name: n }; })).some(function (s) { return s.name === 'Camacho'; }) && res[0].name !== 'Camacho', '…Camacho (Day Float) is never in the chain');
 
+/* ---------- a case across noon pulls someone from two clinics (audit 10/18/2026) ---------- */
+// Mon 10/19: Cotton is CPEC AM / Cornea PM; a 10:00 case x2 cornea runs to
+// 1:00. The backup must cover both — the board has them cover both.
+var r1019 = Engine.resolveDay('2026-10-19', DATA);
+var two = { id: 't2', section: 'wills', surgeon: 'X', count: 2, serviceCount: 2, start: '1000', category: 'cornea', addOn: false, assigned: 'Cotton', backup: '' };
+var b1019 = Status.build(r1019, { nightFloat: '', nfCleared: true, absences: [], clinicStaffOverrides: {}, cases: [two] }, DATA);
+bp = Assign.backupPlan(two, r1019, DATA, [two], b1019);
+eq(bp && bp.clinic + ' ' + bp.window.start + '–' + bp.window.end, 'CPEC / Cornea 600–780', 'the backup plan covers CPEC 10–12 and Cornea 12–1');
+// Surg 2 (Cheng) busy 12:00–1:00 in a globe: not a backup for the whole window
+var busy12 = { id: 'g', section: 'wills', surgeon: 'Globe', count: 1, serviceCount: 1, start: '1200', until: '1300', category: 'trauma', addOn: true, assigned: 'Cheng', backup: '' };
+b1019 = Status.build(r1019, { nightFloat: '', nfCleared: true, absences: [], clinicStaffOverrides: {}, cases: [two, busy12] }, DATA);
+bp = Assign.backupPlan(two, r1019, DATA, [two, busy12], b1019);
+ok(bp && bp.primary && bp.primary.name !== 'Cheng', 'Surg 2 in a 12:00 globe is skipped — free 10–12 is not enough — got ' + (bp && bp.primary && bp.primary.name));
+
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures) process.exitCode = 1; else console.log('OK');

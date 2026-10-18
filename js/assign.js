@@ -800,19 +800,28 @@
     });
   }
 
-  // Where would `name` have been during `spans` — which clinic (theirs, or
-  // one they are covering) this case pulls them out of, and for how long.
-  // A pull-first clinic (Retina / Uveitis) needs no cover, so it never counts.
+  // Where would `name` have been during `spans` — which clinic(s) (theirs,
+  // or ones they are covering) this case pulls them out of, and for how
+  // long. A case across noon can pull someone from two (CPEC AM, Cornea
+  // PM): the window spans both and `clinic` names both ('CPEC / Cornea'),
+  // so the backup is checked for all of it — the board has the backup cover
+  // every clinic the case pulls them from. A pull-first clinic (Retina /
+  // Uveitis) needs no cover, so it never counts.
   function pulledClinic(board, name, spans, excludeId) {
     var found = null;
     (spans || []).forEach(function (sp) {
       for (var t = sp.start; t < sp.end; t += 5) {
         var st = board.statusAt(name, t, { exclude: excludeId });
         if (st.kind !== 'clinic' || isPullFirst(st)) continue; // Retina / Uveitis: no cover needed
-        if (!found) found = { clinic: st.clinic, owner: st.covering || name, start: t, end: t + 5, session: st.session };
-        else if (st.clinic === found.clinic) found.end = Math.max(found.end, t + 5);
+        if (!found) {
+          found = { clinic: st.clinic, clinics: [st.clinic], owner: st.covering || name, start: t, end: t + 5, session: st.session };
+        } else {
+          found.end = Math.max(found.end, t + 5);
+          if (found.clinics.indexOf(st.clinic) === -1) found.clinics.push(st.clinic);
+        }
       }
     });
+    if (found && found.clinics.length > 1) found.clinic = found.clinics.join(' / ');
     return found;
   }
 
@@ -836,7 +845,10 @@
       seen[c.name] = true;
       cands.push({ name: c.name, source: c.source, token: '' });
     });
-    var sess = [pulled.session || 'pm'];
+    // every session the window touches (a case across noon can pull someone
+    // from an AM and a PM clinic)
+    var sess = sessionsOfSpans([{ start: pulled.start, end: pulled.end }]);
+    if (!sess.length) sess = [pulled.session || 'pm'];
     chain.forEach(function (token) {
       if (token === 'FREE_JUNIOR') return;
       var r = resolveToken(token, roster, sess, { board: board, sessions: sess });

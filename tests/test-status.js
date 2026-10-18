@@ -334,6 +334,17 @@ b = Status.build(roster, day({ absences: [
 ], cases: [{ id: 'w3', section: 'wills', surgeon: 'Wisner', count: 2, serviceCount: 2, start: '0730', category: 'cataract', assigned: 'Cheng', backup: '' }] }), DATA);
 eq(b.needs.map(function (n) { return n.type; }).join(' '), 'absence case', 'the ER is still staffed first, then the case');
 
+/* ---------- Day Float out: the Night Float resident is uncovered (audit 10/18/2026) ---------- */
+var r1021 = Engine.resolveDay('2026-10-21', DATA);
+b = Status.build(r1021, day({ nightFloat: 'Cotton', absences: [{ id: 'x', name: 'Camacho', am: true, pm: true, reason: 'vacation', coverAM: '', coverPM: '' }] }), DATA);
+var nfNeeds = b.needs.filter(function (n) { return n.type === 'absence' && n.auto; });
+eq(nfNeeds.length, 2, 'Day Float on vacation: Cotton’s (Night Float) AM and PM are open needs, not covered by someone who is away');
+eq(nfNeeds[0] && nfNeeds[0].dayFloat, 'Camacho', '…naming the Day Float who is out');
+ok(!b.warnings.some(function (w) { return /Camacho is covering Cotton/.test(w); }), '…and no "covering but out too" warning in its place');
+b = Status.build(r1021, day({ nightFloat: 'Cotton', absences: [{ id: 'x', name: 'Camacho', am: false, pm: true, reason: 'sick', coverAM: '', coverPM: '' }] }), DATA);
+eq(b.statusAt('Camacho', 540).covering, 'Cotton', 'Day Float out only PM: still covers Cotton in the morning');
+eq(b.needs.filter(function (n) { return n.type === 'absence' && n.auto; }).map(function (n) { return n.session; }).join(), 'pm', '…the afternoon is the open need');
+
 /* ---------- weekend ---------- */
 b = Status.build(Engine.resolveDay('2026-09-26', DATA), day({}), DATA);
 eq(b.order.length, 0, 'weekend: nobody on the board');

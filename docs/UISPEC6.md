@@ -116,6 +116,17 @@ steps and what each feeds forward, someone is out, who takes a case (steps
 3–10, chains drawn from `data.hierarchy`), who covers a clinic (step 12).
 HTML boxes and arrows — one column on a phone; prints one panel per page.
 
+**From the second audit pass** (docs/AUDIT.md, 19–28): Day Float out → the
+Night Float resident's sessions are open needs and print uncovered; a
+CPEC-sheet list starts as all service (it was 0 — a list whose cover was
+out became "private"); a checked-off case is never open; the Clinics tab's
+notes follow the board's no-cover rules; Roster's Day Float line follows the
+Night Float field; an absence that needs no cover prints without "coverage
+TBD" (`Calotti (Retina)`); a case across noon gets one backup for every
+clinic it pulls from (`CPEC / Cornea`); the paste reader reads every
+Vacation line the app prints, merges two lines for one resident, and keeps
+bracketed notes and block names ("Stadium OR (Abendroth)") as they were.
+
 **Assumptions (say so if wrong)**
 
 - A coverer inherits every chain place of the person they cover, whatever

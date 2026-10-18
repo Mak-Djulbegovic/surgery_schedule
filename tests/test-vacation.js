@@ -80,5 +80,24 @@ text = ExportFmt.buildText(day({ cases: [
 has(text, '-Hark x1 (1300 start) - **Bair**', 'NC backup: just the resident');
 lacks(text, 'NC', 'the literal NC never prints on a case line');
 
+/* ---------- audit 10/18/2026 ---------- */
+// a session whose duty needs no cover (Retina / Uveitis, PT, Day Float) and
+// has none picked says nothing — not "coverage TBD"
+eq(line({ name: 'Patel', am: true, pm: true, coverAM: '', coverPM: '' }),
+  'Patel (Uveitis/Glaucoma) PM coverage TBD', 'Uveitis AM needs no cover: only the Glaucoma PM is TBD');
+eq(line({ name: 'Patel', am: true, pm: true, coverAM: '', coverPM: 'Hamou' }),
+  'Patel (Uveitis/Glaucoma) c/b Hamou PM (CPEC)', '…and with the PM covered, just that');
+var r1016 = Engine.resolveDay('2026-10-16', DATA);
+eq(ExportFmt.absenceLine({ name: 'Calotti', am: true, pm: true, coverAM: '', coverPM: '' }, r1016), 'Calotti (Retina)', 'Retina all day, nobody picked: no "coverage TBD"');
+eq(line({ name: 'Ransone', am: true, pm: true, coverAM: '', coverPM: '' }), 'Ransone (CPEC/Plastics) — coverage TBD', 'clinics that need cover still say TBD');
+// Day Float out: nobody covers the Night Float resident — their clinic no
+// longer prints "Camacho (for Cotton)" (Wed 10/21: Cotton NF, Camacho DF)
+var r1021 = Engine.resolveDay('2026-10-21', DATA);
+var d1021 = { date: '2026-10-21', nightFloat: 'Cotton', vacation: '', cases: [], clinicCounts: {}, clinicStaffOverrides: {}, addOns: [], roster: r1021,
+  absences: [{ name: 'Camacho', am: true, pm: true, reason: 'vacation', coverAM: '', coverPM: '' }] };
+text = ExportFmt.buildText(d1021);
+lacks(text, 'Camacho (for Cotton)', 'Day Float on vacation: never printed standing in for the Night Float resident');
+ok(/(^|\n)Camacho \(Day Float\)(\n|$)/.test(text), 'the Day Float line says no "coverage TBD" (Day Float needs no cover)');
+
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures) process.exitCode = 1; else console.log('OK');

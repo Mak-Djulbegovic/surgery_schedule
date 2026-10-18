@@ -153,12 +153,20 @@
     var reason = REASON_SUFFIX[a.reason];
     if (reason) head += ' — ' + reason;
 
+    // A session whose duty needs no cover (Retina / Uveitis, PT, Day Float —
+    // the board's rule) and has no cover picked says nothing: 'Calotti
+    // (Retina)', not '— coverage TBD'.
     var parts = sess.map(function (s) {
       return { s: s, who: trim(s === 'am' ? a.coverAM : a.coverPM) };
-    });
+    }).filter(function (p) { return p.who || !needsNoCover(cellText(res, p.s)); });
+    if (!parts.length) return head;
     function coverParen(who, sessions) {
       var own = uniq(sessions.map(function (s) { return cellText(byName[who], s); }));
       return own.length ? ' (' + own.join('/') + ')' : '';
+    }
+    if (parts.length === 1 && sess.length === 2) {
+      // the other session needs no cover: name the session this one is
+      return head + ' ' + sessionPart(parts[0], null, coverParen);
     }
     if (parts.length === 2 && parts[0].who === parts[1].who) {
       var w = parts[0].who;
@@ -172,14 +180,33 @@
       if (!w1) return head + ' — coverage TBD';
       return head + ' c/b ' + w1 + coverParen(w1, sess);
     }
-    return head + ' ' + parts.map(function (p, i) {
-      var S = p.s.toUpperCase();
-      if (p.who === 'NC') return 'NC ' + S;
-      if (!p.who) return S + ' coverage TBD';
-      var prev = parts[i - 1];
-      var prefix = (!prev || !prev.who || prev.who === 'NC') ? 'c/b ' : '';
-      return prefix + p.who + ' ' + S + coverParen(p.who, [p.s]);
-    }).join(' | ');
+    return head + ' ' + parts.map(function (p, i) { return sessionPart(p, parts[i - 1], coverParen); }).join(' | ');
+  }
+
+  // One session of a split Vacation line: 'NC AM', 'PM coverage TBD',
+  // 'c/b Hamou PM (CPEC)' — 'c/b' unless the previous part already said it.
+  function sessionPart(p, prev, coverParen) {
+    var S = p.s.toUpperCase();
+    if (p.who === 'NC') return 'NC ' + S;
+    if (!p.who) return S + ' coverage TBD';
+    var prefix = (!prev || !prev.who || prev.who === 'NC') ? 'c/b ' : '';
+    return prefix + p.who + ' ' + S + coverParen(p.who, [p.s]);
+  }
+
+  function getData() {
+    if (typeof window !== 'undefined' && window.SCHED_DATA) return window.SCHED_DATA;
+    if (typeof require !== 'undefined') {
+      try { return require('./data.js'); } catch (e) { return {}; }
+    }
+    return {};
+  }
+
+  // Duties that need no cover when their resident is out — as the board
+  // decides it: noCoverTexts plus the pull-first clinics (Retina / Uveitis).
+  function needsNoCover(text) {
+    var av = getData().availability || {};
+    var list = (av.noCoverTexts || ['PT', 'Day Float']).concat(av.pullFirstTexts || ['Retina', 'Retina Private', 'Uveitis']);
+    return !!text && list.indexOf(text) !== -1;
   }
 
   // Vacation section: one line per absence; with nobody out, the free-text
@@ -222,11 +249,19 @@
     });
     var nf = trim(day.nightFloat);
     if (nf && byName[nf] && !explicit[nf]) {
-      var df = ((roster && roster.dayFloat) || []).filter(function (n) { return n !== nf; })[0] || '';
-      add(nf, 'am', df);
-      add(nf, 'pm', df);
+      add(nf, 'am', dayFloatIn(day, roster, nf, 'am'));
+      add(nf, 'pm', dayFloatIn(day, roster, nf, 'pm'));
     }
     return { out: out, covering: covering };
+  }
+
+  // The Day Float covering the Night Float resident in session s — '' when
+  // there is none, or they are out then themselves (Out today): then nobody
+  // covers the Night Float resident, as on the board.
+  function dayFloatIn(day, roster, nf, s) {
+    var df = ((roster && roster.dayFloat) || []).filter(function (n) { return n !== nf; })[0] || '';
+    var away = (day.absences || []).some(function (a) { return trim(a && a.name) === df && a[s]; });
+    return df && !away ? df : '';
   }
 
   // What Out today says for `name` in session s -> null (not out) |
@@ -249,7 +284,7 @@
     }
     var nf = trim(day.nightFloat);
     if (nf && nf === name && byName[nf]) {
-      var df = ((roster && roster.dayFloat) || []).filter(function (n) { return n !== nf; })[0] || '';
+      var df = dayFloatIn(day, roster, nf, s);
       return df ? { who: df } : { nc: true };
     }
     return null;

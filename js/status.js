@@ -313,7 +313,12 @@
     });
     if (nf && !explicit[nf]) {
       var df = dayFloats.filter(function (n) { return n !== nf; })[0] || '';
-      absences.push({ id: 'nf', name: nf, am: true, pm: true, reason: 'nightfloat', coverAM: df, coverPM: df, auto: true });
+      // Day Float out that session (Out today): nobody covers the Night
+      // Float resident then — an open need, not a cover who is away
+      function dfIn(s) {
+        return df && !absences.some(function (a) { return a.name === df && a[s]; }) ? df : '';
+      }
+      absences.push({ id: 'nf', name: nf, am: true, pm: true, reason: 'nightfloat', coverAM: dfIn('am'), coverPM: dfIn('pm'), auto: true, dayFloat: df });
     }
     if (nf && dayFloats.indexOf(nf) !== -1 && dayFloats.length === 1) {
       warnings.push(nf + ' is both Day Float and Night Float this week — no Day Float today');
@@ -719,7 +724,7 @@
         if (!trim(text) || noCover.indexOf(text) !== -1 || who === 'NC' || who) return;
         needs.push({
           type: 'absence', name: a.name, session: s, duty: text,
-          absenceId: a.id, auto: a.auto, reason: a.reason
+          absenceId: a.id, auto: a.auto, reason: a.reason, dayFloat: a.dayFloat || ''
         });
       });
     });

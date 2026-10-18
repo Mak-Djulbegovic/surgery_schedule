@@ -274,7 +274,16 @@
     // as typed text; it now computes itself, so drop the stale default.
     if (!Array.isArray(st.absences) && /^\s*24 strong\s*$/i.test(out.vacation)) out.vacation = '';
     if (Array.isArray(st.absences)) {
-      out.absences = st.absences.map(normAbsence).filter(function (a) { return !!a; });
+      // one row per resident — Out today allows no second row, but a paste
+      // saved before 10/2026 could hold two ('… AM c/b NC', '… PM c/b Hamou')
+      var absBy = {};
+      out.absences = [];
+      st.absences.map(normAbsence).filter(function (a) { return !!a; }).forEach(function (a) {
+        var m = absBy[a.name];
+        if (!m) { absBy[a.name] = a; out.absences.push(a); return; }
+        if (a.am && !m.am) { m.am = true; m.coverAM = a.coverAM; }
+        if (a.pm && !m.pm) { m.pm = true; m.coverPM = a.coverPM; }
+      });
     }
     out.outConfirmed = !!st.outConfirmed;
     if (st.cooperBuddyAM) out.cooperBuddyAM = normBuddy(st.cooperBuddyAM);
@@ -945,7 +954,8 @@
         // The NF resident's daytime duties are covered by Day Float this week
         // (UISPEC5 §B) — amber note on both sessions. r.nightFloat may be
         // absent (older engine.js).
-        var nfNote = (r.nightFloat && res.name === r.nightFloat)
+        var nfNow = App.board ? App.board.nightFloat : r.nightFloat;
+        var nfNote = (nfNow && res.name === nfNow)
           ? 'Night Float this week — daytime covered by Day Float' : null;
         tbody.appendChild(el('tr', {}, [
           nameTd,
@@ -1051,10 +1061,18 @@
       var dfVal = r.dayFloat.join(', ');
       var cov = r.dayFloatCoverage;
       var dfConflict = false;
-      if (cov && cov.nf) {
-        if (r.dayFloat.indexOf(cov.nf) === -1) {
-          var duty = nfDutyText(cov.nfDuties);
-          dfVal += ' — covering ' + cov.nf + '’s daytime' + (duty ? ' (' + duty + ')' : '');
+      // the Night Float in use (the field above — a swap counts, a blank
+      // means none), as on the board and in the copied schedule
+      var nfName = App.board ? App.board.nightFloat : ((cov && cov.nf) || '');
+      if (nfName) {
+        if (r.dayFloat.indexOf(nfName) === -1) {
+          var nfr = rosterRes(nfName);
+          var duty = nfr ? nfDutyText({ am: nfr.am, pm: nfr.pm }) : '';
+          dfVal += ' — covering ' + nfName + '’s daytime' + (duty ? ' (' + duty + ')' : '');
+          if (App.board && r.dayFloat.some(function (n) { return App.board.isOut(n, 'am') || App.board.isOut(n, 'pm'); })) {
+            dfVal += ' — but out today (Out today), so ' + nfName + '’s daytime is uncovered then';
+            dfConflict = true;
+          }
         } else {
           // The day-float-block resident is themselves on Night Float this
           // week — just note it.
@@ -1431,18 +1449,25 @@
 
   // The case's resident is out while it runs (marked out on Out today after
   // the case was assigned) — the case needs someone new.
+  // A checked-off case is over — whoever was on it, nothing more to do.
   function assignedOutCase(c) {
     var b = App.board;
     var a = trim(c.assigned);
     var info = b && b.caseInfo[c.id];
-    if (!info || !a || !b.byName[a]) return false;
+    if (!info || info.done || !a || !b.byName[a]) return false;
     return b.statusDuringSpans(a, info.spans, { exclude: c.id }).kind === 'out';
   }
 
-  // Still open on the open day: a service case with nobody on it, or one
-  // whose resident is out. (needsResident alone is for days without a board,
-  // e.g. a pasted schedule.)
-  function caseOpen(c) { return c.serviceCount > 0 && (!trim(c.assigned) || assignedOutCase(c)); }
+  function caseDone(c) {
+    var info = App.board && App.board.caseInfo[c.id];
+    return info ? !!info.done : !!c.done;
+  }
+
+  // Still open on the open day — the board's rule (board.needs type 'case'):
+  // a service case, not checked off, with nobody on it or whose resident is
+  // out. (needsResident alone is for days without a board, e.g. a pasted
+  // schedule.)
+  function caseOpen(c) { return c.serviceCount > 0 && !caseDone(c) && (!trim(c.assigned) || assignedOutCase(c)); }
 
   // 'Surg 2', or 'Surg 2 for Cheng' while standing in for an absent Surg 2,
   // in the session(s) `spans` touch.
@@ -1476,9 +1501,12 @@
     var b = App.board;
     var name = trim(c.assigned);
     if (!b || !name || !b.byName[name] || !info) return null;
+    if (info.done) return { tone: 'ok', text: name + ' — checked off as done' };
     var st = b.statusDuringSpans(name, info.spans, { exclude: c.id });
     if (st.kind === 'out') return { tone: 'bad', out: true, text: name + ' is out (' + st.label + ') — pick someone else' };
     if (st.kind === 'case') return { tone: 'bad', text: name + ' is double-booked — ' + statusShort(st) };
+    // Retina / Uveitis: pulled first, no cover needed — as the backup pill shows it
+    if (st.kind === 'clinic' && st.pullFirst) return { tone: 'ok', text: name + ' leaves ' + (st.clinic || 'clinic') + ' — no cover needed' };
     if (st.kind === 'clinic') return { tone: 'amber', kind: 'clinic', text: name + ' leaves ' + (st.clinic || 'clinic') + ' for this case' };
     if (st.kind === 'duty') return { tone: 'neutral', text: name + ' is on ' + st.label };
     return { tone: 'ok', text: name + ' is free then (' + st.label + ')' };
@@ -2125,6 +2153,12 @@
     var b = App.board;
     var S = window.Status;
     if (!b || !S || (session !== 'am' && session !== 'pm')) return out;
+    // as the board decides it: Retina / Uveitis, PT … need no backfill, nor
+    // does a label the board does not count as a clinic (an attending's
+    // cataract day, Cooper Clinic) — never a red "nobody covering" there
+    var av = data().availability || {};
+    var noCoverHere = (av.noCoverTexts || ['PT', 'Day Float']).concat(av.pullFirstTexts || ['Retina', 'Retina Private', 'Uveitis']).indexOf(label) !== -1 ||
+      S.classifyText(label, data()) !== 'clinic';
     var from = session === 'am' ? b.dayStart : b.noon;
     var to = session === 'am' ? b.noon : b.dayEnd;
     staff.forEach(function (name) {
@@ -2135,8 +2169,8 @@
         var abs = base.absence || {};
         var cov = session === 'am' ? abs.coverAM : abs.coverPM;
         out.lines.push({
-          text: name + ' out (' + base.label + ')' + (cov && cov !== 'NC' ? ' → ' + cov + ' covers' : cov === 'NC' ? ' — NC' : ' — nobody covering yet'),
-          bad: !cov
+          text: name + ' out (' + base.label + ')' + (cov && cov !== 'NC' ? ' → ' + cov + ' covers' : cov === 'NC' ? ' — NC' : noCoverHere ? ' — no cover needed' : ' — nobody covering yet'),
+          bad: !cov && !noCoverHere
         });
         return;
       }
@@ -2157,7 +2191,10 @@
         var who = coveredBySegments(name, label, s0, s1);
         var gap = who.some(function (w) { return !w.name; });
         var txt = name + ' in ' + sg.label + ' ' + S.fmtClock(s0) + '–' + S.fmtClock(s1);
-        if (info && info.backup === 'NC' && !who.some(function (w) { return w.name; })) {
+        if (noCoverHere && !who.some(function (w) { return w.name; })) {
+          txt += ' — no cover needed';
+          gap = false;
+        } else if (info && info.backup === 'NC' && !who.some(function (w) { return w.name; })) {
           txt += ' — NC';
           gap = false;
         } else if (who.length === 1) {
@@ -2364,7 +2401,11 @@
     c.surgeon = e.attending || '';
     c.start = e.time || '';           // 'AM TF' goes in start as text
     if (e.count != null) c.count = e.count;
-    c.serviceCount = 0;               // unknown — user fills
+    // The sheet's lists are resident lists (its colours say who covers), so
+    // all service until someone lowers it from NextGen / Cerner — which is
+    // also how a pasted schedule reads them back. (It was 0, which made a
+    // list whose cover is out a "private" list nobody was asked to fill.)
+    c.serviceCount = c.count;
     c.category = 'cataract';
     var noteBits = [];
     var site = CPEC_SITE_LABELS[e.site];
@@ -2584,10 +2625,12 @@
       if (n.erFirst) row.classList.add('er-first');
       row.appendChild(el('div', { class: 'need-text' }, [
         el('b', { text: n.name + ' out ' + n.session.toUpperCase() }),
-        ' — ' + n.duty + ': nobody covering yet' + (n.auto ? ' (Night Float — no Day Float to cover)' : ''),
+        ' — ' + n.duty + ': nobody covering yet' + (!n.auto ? '' : n.dayFloat
+          ? ' (Night Float — Day Float ' + n.dayFloat + ' is out; add ' + n.name + ' on Out today to pick a cover)'
+          : ' (Night Float — no Day Float to cover)'),
         n.erFirst ? el('span', { class: 'er-flag', text: ' ER is staffed first' }) : null
       ]));
-      if (!n.auto) {
+      if (!n.auto || n.dayFloat) {
         actions.appendChild(el('button', {
           type: 'button', class: 'btn btn-small', text: 'Pick cover on Out today',
           onclick: function () { setTab('out'); }
@@ -2907,7 +2950,11 @@
       var duty = [dutyOf(nf, 'am'), dutyOf(nf, 'pm')];
       var dutyStr = duty[0] === duty[1] ? duty[0] : duty.filter(Boolean).join(' / ');
       var txt = nf + ' is on Night Float — out for the day (post-call).';
-      if (nfAbs && nfAbs.coverAM) txt += ' Day Float ' + nfAbs.coverAM + ' covers ' + nf + '’s ' + (dutyStr || 'daytime') + '.';
+      var dfOut = nfAbs && nfAbs.dayFloat && (b.isOut(nfAbs.dayFloat, 'am') || b.isOut(nfAbs.dayFloat, 'pm'));
+      if (dfOut) {
+        txt += ' Day Float ' + nfAbs.dayFloat + ' is out' + (nfAbs.coverAM || nfAbs.coverPM ? ' part of the day' : '') +
+          ' — ' + nf + '’s ' + (dutyStr || 'daytime') + ' is uncovered then. To cover it, add ' + nf + ' above as out and pick who covers.';
+      } else if (nfAbs && nfAbs.coverAM) txt += ' Day Float ' + nfAbs.coverAM + ' covers ' + nf + '’s ' + (dutyStr || 'daytime') + '.';
       else if ((b.dayFloats || []).indexOf(nf) !== -1) txt += ' ' + nf + ' is also the Day Float, so there is no Day Float today — nothing to cover.';
       else txt += ' No Day Float on the roster today — ' + nf + '’s ' + (dutyStr || 'daytime') + ' is uncovered.';
       nfCard.appendChild(el('p', { class: 'ref-para', text: txt }));
@@ -3432,9 +3479,10 @@
       var a = trim(c.assigned);
       return a && a !== 'NC' && b.byName[a] && b.caseInfo[c.id];
     });
-    // a case whose resident is out is not happening with them — it is under
-    // Needs coverage until someone takes it
-    var outCases = withRes.filter(assignedOutCase).length;
+    // a case whose resident is out is not happening with them — a service
+    // case is under Needs coverage until someone takes it
+    var outList = withRes.filter(assignedOutCase);
+    var outNeeds = outList.filter(function (c) { return c.serviceCount > 0; }).length;
     var list = withRes.filter(function (c) { return !assignedOutCase(c); })
       .sort(function (x, y) { return b.caseInfo[x.id].start - b.caseInfo[y.id].start; });
     var left = list.filter(function (c) { return !c.done; }).length;
@@ -3444,7 +3492,8 @@
       text: (!list.length ? 'Nothing to check off yet'
         : left ? left + ' of ' + list.length + ' not done · checking one off frees the resident from then, and Available below follows'
           : 'All ' + list.length + ' done') +
-        (outCases ? ' · ' + outCases + ' whose resident is out ' + (outCases === 1 ? 'is' : 'are') + ' under Needs coverage' : '')
+        (outList.length ? ' · ' + outList.length + ' whose resident is out ' + (outList.length === 1 ? 'is' : 'are') +
+          (outNeeds === outList.length ? ' under Needs coverage' : ' left off — reassign on Surgery') : '')
     })]));
     if (!list.length) {
       card.appendChild(el('p', { class: 'empty-note', text: 'No case has a resident yet — assign them on Surgery.' }));
@@ -4072,6 +4121,17 @@
     return wrap;
   }
 
+  // 'Retina, Retina Private, Uveitis or PT' — duties that need no cover,
+  // from the active configuration (Day Float aside: it never covers others)
+  function noCoverWords() {
+    var av = data().availability || {};
+    var list = [];
+    (av.pullFirstTexts || ['Retina', 'Retina Private', 'Uveitis']).concat(av.noCoverTexts || ['PT']).forEach(function (t) {
+      if (t !== 'Day Float' && list.indexOf(t) === -1) list.push(t);
+    });
+    return list.length > 1 ? list.slice(0, -1).join(', ') + ' or ' + list[list.length - 1] : list.join('');
+  }
+
   var FLOW_STEPS = [
     { title: 'Out today', you: 'Who is out — all day, AM or PM — and who covers each session, or NC.', app: 'The coverer does the absent resident’s job that session: duty and place in every chain. Night Float is automatic.' },
     { title: 'Roster', you: 'Check Night Float, add lectures.', app: 'Surg 1–5, WER, consults and clinics from the block schedule — with whoever covers anyone out.' },
@@ -4122,7 +4182,7 @@
         el('div', { class: 'fc-branch' }, [el('div', { class: 'fc-branch-label', text: 'A resident' }),
           fcNode('ok', 'They do that resident’s job for the session', [
             'Their duty, and their place in every chain. Cover Surg 2 and you are Surg 2: first for trauma, the remaining cases and clinic cover — and the daytime add-on call.',
-            'Your own clinic is then a gap to cover (unless Retina, Uveitis or PT).'
+            'Your own clinic is then a gap to cover (unless ' + noCoverWords() + ').'
           ])]),
         el('div', { class: 'fc-branch' }, [el('div', { class: 'fc-branch-label', text: 'NC' }),
           fcNode('warn', 'Not covered', 'The duty runs short. A Surg role’s cases go to the next person in each chain.')]),
@@ -5185,7 +5245,8 @@
 
     var facts = el('div', { class: 'pv-facts' });
     function fact(k, v) { facts.appendChild(el('span', { class: 'pv-fact' }, [el('span', { class: 'k', text: k }), el('b', { text: v })])); }
-    fact('Night Float', trim(saved && saved.nightFloat) || r.nightFloat || '—');
+    // a Night Float blanked on purpose stays blank (nfCleared)
+    fact('Night Float', saved && saved.nfCleared ? '—' : (trim(saved && saved.nightFloat) || r.nightFloat || '—'));
     if ((r.dayFloat || []).length) fact('Day Float', r.dayFloat.join(', '));
     if (r.cooperSenior) fact('Cooper', r.cooperSenior);
     var cpec = null;

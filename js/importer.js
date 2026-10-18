@@ -124,6 +124,33 @@
   /*   app:   Hark x1 (1300 start), x1 service - 1030 - Bair; Djulbegovic note (notes) */
   /*   typed: Abendroth x 7 (7:30AM start, service x 4 start @ 9:15AM): Cheng + note  */
   /* ------------------------------------------------------------------ */
+  // Length of the bracketed group that opens s ('(a (b) c) rest' → 9),
+  // nested brackets included; 0 when s does not open with one.
+  function groupLength(s) {
+    if (s.charAt(0) !== '(') return 0;
+    var depth = 0;
+    for (var i = 0; i < s.length; i++) {
+      if (s.charAt(i) === '(') depth++;
+      else if (s.charAt(i) === ')') { depth--; if (depth === 0) return i + 1; }
+    }
+    return 0;
+  }
+
+  // '(confirm (Surg 2))' → 'confirm (Surg 2)': strip one pair of brackets
+  // that wraps the whole text (a note with its own brackets came back from
+  // the copied schedule wrapped once more on every paste)
+  function unwrap(s) {
+    s = trim(s);
+    if (s.charAt(0) !== '(' || s.charAt(s.length - 1) !== ')') return s;
+    var depth = 0;
+    for (var i = 0; i < s.length; i++) {
+      if (s.charAt(i) === '(') depth++;
+      else if (s.charAt(i) === ')') depth--;
+      if (depth === 0 && i < s.length - 1) return s; // closes before the end
+    }
+    return trim(s.slice(1, -1));
+  }
+
   function parseCase(body, section, names, unknownNames) {
     if (/^none\.?$/i.test(body)) return { none: true };
     var c = {
@@ -201,9 +228,10 @@
       if (appSvc && segs.length > 1 && TIMES.test(trim(segs[0]))) c.serviceTimes = trim(segs.shift());
       who = trim(segs.join(' - '));
     } else if (rest) {
-      var extra = /^\(([^()]*)\)$/.exec(rest);
-      if (!extra) return null; // text we cannot place
-      notes.push(extra[1]);
+      // '(no Peds OR)', '(confirm (Surg 2))' — notes in one pair of brackets
+      var inner = unwrap(rest);
+      if (inner === rest) return null; // text we cannot place
+      notes.push(inner);
     }
     if (!c.surgeon) return null;
 
@@ -233,7 +261,9 @@
       }
       if (tail) {
         var pm = /^(.*?)\s*\(([^()]*)\)$/.exec(tail);
-        if (pm) {
+        if (unwrap(tail) !== tail) {
+          notes.push(unwrap(tail)); // '(confirm (Surg 2))' — the notes, whole
+        } else if (pm) {
           if (trim(pm[1])) {
             if (c.assigned) c.backupNote = trim(pm[1]);
             else notes.push(trim(pm[1]));
@@ -277,8 +307,10 @@
     var marked = false;
     var hm = /^(AM|PM)\b\s*/i.exec(rest);
     if (hm) { a.am = hm[1].toUpperCase() === 'AM'; a.pm = !a.am; rest = rest.slice(hm[0].length); marked = true; }
-    var dm = /^\(([^()]*)\)\s*/.exec(rest); // what they would have been doing
-    if (dm) { rest = rest.slice(dm[0].length); marked = true; }
+    // what they would have been doing — may hold brackets of its own, e.g.
+    // '(Stadium OR (Abendroth)/Cornea)'
+    var dlen = groupLength(rest);
+    if (dlen) { rest = trim(rest.slice(dlen)); marked = true; }
     var rm = /^[-–—:,]?\s*(sick|conference|out)\b\s*[-–—,:]?\s*/i.exec(rest);
     if (rm) { a.reason = REASONS[rm[1].toLowerCase()]; rest = rest.slice(rm[0].length); marked = true; }
     rest = trim(rest);
@@ -286,14 +318,20 @@
     var cb = /^(?:c\/b|covered\s+by|cov\.?\s+by)\s*:?\s*(.*)$/i.exec(rest);
     if (cb) clause = cb[1];
     else if (/^(?:nc|n\/c|not\s+covered|no\s+coverage)$/i.test(rest)) clause = 'NC';
+    // the app's own split line when the first session is NC or undecided:
+    // 'NC AM | c/b Hamou PM (CPEC)', 'AM coverage TBD | NC PM', 'PM coverage TBD'
+    else if (/^(?:(?:nc|n\/c)\s+(?:am|pm)|(?:am|pm)\s+coverage\s+tbd)\b/i.test(rest)) clause = rest;
     else if (/^(?:[-–—]\s*)?(?:coverage\s+)?tbd$/i.test(rest)) return a;
     else if (!rest) return marked ? a : null; // a bare name is a note, not an absence
     else return null;                          // free text: a note
     clause = clause
+      .replace(/(?:^|\s)(?:c\/b|covered\s+by)(?=\s)/gi, ' ') // 'c/b' before a later session
       .replace(/\bd\/s\b/gi, ' ')
       .replace(/\bn\/c\b/gi, 'NC')
-      .replace(/\bnot\s+covered\b/gi, 'NC')
-      .replace(/\([^()]*\)/g, ' ');
+      .replace(/\bnot\s+covered\b/gi, 'NC');
+    // drop the coverers' own assignments in brackets, nested ones too
+    // ('c/b Illiano (Stadium OR (Abendroth))')
+    while (/\([^()]*\)/.test(clause)) clause = clause.replace(/\([^()]*\)/g, ' ');
     var parts = clause.split(/\s*(?:[|/;,&]|\band\b)\s*/i).map(trim).filter(Boolean);
     if (!parts.length) return null;
     var sessions = [];
@@ -564,8 +602,19 @@
     day.lectures = parsed.lectures.join('\n');
     if (parsed.nightFloat) day.nightFloat = parsed.nightFloat;
     else if (parsed.sawInfo) { day.nightFloat = ''; day.nfCleared = true; }
-    day.absences = parsed.absences.map(function (a, i) {
-      return { id: 'imp' + (i + 1), name: a.name, am: a.am, pm: a.pm, reason: a.reason, coverAM: a.coverAM, coverPM: a.coverPM };
+    // One row per resident: a paste may give 'Ransone AM … c/b NC' and
+    // 'Ransone PM … c/b Hamou' on two lines; the app (and the board, which
+    // reads only a resident's first row) keeps one row with both sessions.
+    var absBy = {};
+    day.absences = [];
+    parsed.absences.forEach(function (a) {
+      var m = absBy[a.name];
+      if (!m) {
+        m = absBy[a.name] = { id: 'imp' + (day.absences.length + 1), name: a.name, am: false, pm: false, reason: a.reason, coverAM: '', coverPM: '' };
+        day.absences.push(m);
+      }
+      if (a.am && !m.am) { m.am = true; m.coverAM = a.coverAM; }
+      if (a.pm && !m.pm) { m.pm = true; m.coverPM = a.coverPM; }
     });
     day.outConfirmed = !!parsed.outConfirmed && !day.absences.length;
     day.vacation = parsed.vacationNote.join('\n');

@@ -296,6 +296,52 @@ eq(rc.text, tc, 'round trip with covered Surg roles');
 eq(rc.parsed.surg['2'] + ' / ' + rc.parsed.surg['4'], 'Djulbegovic / Calotti', 'the Surg lines read back as the block schedule’s holders (no false "check the date" flag)');
 eq(rc.day.addOns.every(function (a) { return a.s2 !== true; }), true, 'pasted add-on names are the sender’s — never marked as app-filled');
 
+/* ---------- the app's own Vacation lines all read back (audit 10/18/2026) ---------- */
+[
+  { name: 'Ransone', am: true, pm: true, reason: 'vacation', coverAM: 'NC', coverPM: 'Hamou' },
+  { name: 'Ransone', am: true, pm: true, reason: 'vacation', coverAM: '', coverPM: 'Hamou' },
+  { name: 'Ransone', am: true, pm: true, reason: 'vacation', coverAM: 'NC', coverPM: '' },
+  { name: 'Ransone', am: true, pm: true, reason: 'sick', coverAM: '', coverPM: 'NC' },
+  { name: 'Patel', am: true, pm: true, reason: 'vacation', coverAM: '', coverPM: '' }
+].forEach(function (a) {
+  var dv = base();
+  dv.absences = [{ id: 'a1', name: a.name, am: a.am, pm: a.pm, reason: a.reason, coverAM: a.coverAM, coverPM: a.coverPM }];
+  var tv = ExportFmt.buildText(withRoster(dv));
+  var rv = roundTrip(tv);
+  var ln = tv.split('\n').filter(function (l) { return l.indexOf(a.name + ' (') === 0; })[0];
+  eq(rv.text, tv, 'round trip of "' + ln + '"');
+  eq(rv.day.absences.length, 1, '…read as an absence, not a note: "' + ln + '"');
+});
+// block assignments with brackets of their own ('Stadium OR (Abendroth)',
+// 3rd Wed for PGY-2 block 3) nest inside the Vacation line's brackets
+var r1021i = Engine.resolveDay('2026-10-21', DATA);
+var n1021 = r1021i.residents.map(function (r) { return r.name; });
+eq(r1021i.residents.filter(function (r) { return r.name === 'Illiano'; })[0].am.text, 'Stadium OR (Abendroth)', 'fixture: Illiano on Stadium OR (Abendroth) Wed 10/21 AM');
+[
+  { name: 'Illiano', am: true, pm: true, reason: 'sick', coverAM: 'Samuel', coverPM: 'Samuel' },
+  { name: 'DeSimone', am: true, pm: false, reason: 'other', coverAM: 'Illiano', coverPM: '' }
+].forEach(function (a) {
+  var ln = ExportFmt.absenceLine(a, r1021i);
+  var pa = ImportFmt.parse('Vacation\n' + ln, { names: n1021, clinics: r1021i.clinics }).absences[0];
+  eq(pa ? ExportFmt.absenceLine(pa, r1021i) : '(read as a note)', ln, 'nested brackets read back: "' + ln + '"');
+});
+// a list with nobody on it and a bracketed note was not read at all
+var pr = ImportFmt.parse('JHN/TJUH/JSC\n-Bilyk x1 (0900 start) (confirm (Surg 2))', { names: names, clinics: roster.clinics });
+eq(pr.cases.length + ' | ' + (pr.cases[0] && pr.cases[0].notes), '1 | confirm (Surg 2)', 'a note in brackets of its own, on a line with no resident, is read');
+// two lines for one resident (as typed) → one row with both sessions
+var p2 = ImportFmt.parse('Vacation\nRansone AM (CPEC) c/b NC\nRansone PM (Plastics) c/b Hamou', { names: names, clinics: roster.clinics });
+var d2r = ImportFmt.toDay(p2, base(), roster, DATA, ExportFmt, OPTS);
+eq(JSON.stringify(d2r.absences.map(function (a) { return [a.name, a.am, a.pm, a.coverAM, a.coverPM]; })), JSON.stringify([['Ransone', true, true, 'NC', 'Hamou']]),
+  'two lines for one resident merge into one row (the board reads only the first)');
+// a note with its own brackets is stable across pastes (it gained a pair each time)
+var dn = base();
+dn.cases = [kase({ section: 'jhn', surgeon: 'Bilyk', count: 1, start: '0900', category: 'plastics', notes: 'confirm (Surg 2)' }),
+  kase({ surgeon: 'Hark', count: 1, start: '1300', category: 'cornea', assigned: 'Bair', notes: 'tissue (Lions)' })];
+var tn = ExportFmt.buildText(withRoster(dn));
+var rn = roundTrip(tn);
+eq(roundTrip(rn.text).text, tn, 'notes with brackets come back unchanged, paste after paste');
+eq(bySurgeon(rn.day.cases, 'Hark').notes + ' | ' + bySurgeon(rn.day.cases, 'Hark').backupNote, 'tissue (Lions) | ', '…and stay notes, not a backup note');
+
 if (failures) {
   console.error(failures + ' failure(s) of ' + checks);
   process.exit(1);

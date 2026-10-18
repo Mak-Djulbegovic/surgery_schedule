@@ -105,6 +105,57 @@ available, chief 9/2026).
     Rows now match by date and period.
 18. The landing page's Surg tiles said "out" but not who covers.
 
+## Second pass — an independent read-only audit
+
+A second, independent audit of the code (after the fixes above) reported
+ten more. Each was reproduced again before changing anything; nine were
+real and are fixed, one is a deliberate format rule (last item).
+
+19. **The paste reader could not read the app's own Vacation line** when its
+    first session was NC or undecided — `Ransone (CPEC/Plastics) NC AM | c/b
+    Hamou PM (CPEC)`, `AM coverage TBD | NC PM` — so it became a note and
+    Ransone looked free after the paste. Fixed; a 7,500-day random copy →
+    paste → copy test now comes back identical every time (it also caught
+    block names with brackets of their own, "Stadium OR (Abendroth)", and
+    resident-less lines with a bracketed note — both fixed).
+20. **Day Float out**: the Night Float resident's duties were still shown as
+    covered by the Day Float — the copied schedule printed "Camacho (for
+    Cotton)" next to "Camacho (Day Float) — coverage TBD", and nothing was
+    under Needs coverage. Now it is an open need ("Day Float Camacho is out")
+    and the copied schedule no longer prints the stand-in.
+21. **A CPEC-sheet list added while its cover was out became a private list**
+    (service count 0), so nobody was asked to fill it. Sheet lists now start
+    as all service (how a pasted schedule reads them back anyway).
+22. **"Under Needs coverage" claimed for cases that were not**, and a case
+    already checked off counted as open on Surgery once its resident was
+    marked out. One rule now everywhere: a service case, not checked off,
+    with nobody or with its resident out.
+23. **Clinics-tab notes were stricter than the board**: red "nobody covering"
+    for Retina / Uveitis (no cover needed) and for labels the board does not
+    count as a clinic (an attending's cataract day, Cooper Clinic).
+24. **Roster's Day Float line used the call schedule's Night Float**, not the
+    field — after a swap it named the wrong resident (the landing page also
+    showed a Night Float that had been blanked on purpose).
+25. **Two Vacation lines for one resident** (possible in a paste) — the copied
+    schedule printed both, the board used only the first. Merged into one
+    row on paste and on load.
+26. **A case across noon that pulls someone from two clinics** (CPEC AM,
+    Cornea PM) got a backup checked for the first only, shown green, while
+    the board had them cover both. The backup is now checked for the whole
+    window ("CPEC / Cornea").
+27. **The copied schedule said "— coverage TBD" for absences that need no
+    cover** (Retina, Uveitis, PT, Day Float). Now `Calotti (Retina)`, and a
+    half-and-half line names only the session that needs a decision.
+28. Small: a resident pulled from Retina / Uveitis showed an amber dot (green
+    for a backup); a note with brackets gained a pair on every paste; the
+    landing page's "needs a resident" ignored cases whose resident is out;
+    the flow chart's "no cover" list is now read from the configuration.
+
+Not changed: **a case backup of NC is not printed** on the case line — a
+deliberate rule ("the literal NC never prints on a case line", tested). The
+consequence is that a pasted schedule shows that clinic gap as open again;
+the receiver marks NC once more.
+
 ## Still open — questions for the chief
 
 - **Cooper buddies are not on the board.** The buddy (pulled from, e.g.,
@@ -117,6 +168,12 @@ available, chief 9/2026).
 - **The copied schedule's format changed** (Surg / WER / consult "(for X)",
   a Stadium/Cherry Hill section after Wills). Worth a look before it goes
   out.
+- **A case backup of NC does not survive a paste** (see above). Printing it
+  as "; NC" would carry it — say if that is wanted on the sent schedule.
+- **Engine vs board on two labels**: the engine lists an attending's cataract
+  day (Tabas / Dunn) and Cooper Clinic as clinics (Clinics tab, copied
+  schedule); the board treats them as an OR day and off-site. The Clinics
+  tab no longer claims a gap there, but the two views still differ.
 - **Needs coverage suggests one fix at a time**: two open gaps can suggest
   the same coverer for overlapping windows; after the first click the second
   updates.
