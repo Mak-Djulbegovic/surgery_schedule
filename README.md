@@ -43,7 +43,8 @@ The six tabs follow the "How to Surgical Schedule" order:
    Stadium / Cherry Hill — the ASC · JHN/TJUH/JSC · Privates), with the
    resident picked on each case: a one-click suggestion that follows the
    how-to doc step by step (scheduled cornea → Surg 3, add-on glaucoma →
-   Surg 4, …, trauma → Surg 2; anything skipped waits for Step 10, the
+   Surg 4, …, a globe → Surg 2 always — scrubbed, it starts when they are
+   free, one click away; anything skipped waits for Step 10, the
    remaining cases Surg 2 → 3 → 4 → Cooper → 1 → 5, in time order). It skips
    anyone out or already in a case then, never suggests anyone off the doc's
    chains (past the end it's Surg 2's call, and it shows who else is free),
@@ -58,18 +59,24 @@ The six tabs follow the "How to Surgical Schedule" order:
    each with its fix), the day's cases to check off as they finish, then who is
    available AM and PM (free, or done with their cases; then Retina /
    Uveitis, the first to pull from — no cover needed; never ER, consults or
-   Path), what happens if add-ons come in — one or several,
-   each at its own time, placed in the doc's step order and searched
-   exactly so none is left without a resident when some choice covers it
-   (docs/OPTIMIZATION.md) — who covers a clinic if a morning OR runs late
-   (free juniors first for a junior), add-on call names.
+   Path), Surg 2's day — with no globe, Surg 2 is free to cover the Surg 3 /
+   Surg 4 PM clinic (Cornea Mon/Wed/Fri, Glaucoma Tue/Wed/Thu) or take over
+   a case — and what happens if a globe or other add-ons come in: a globe
+   always goes to Surg 2 (whoever covers them), waiting until they are out
+   of a case, and the clinic they were covering passes down the chain; the
+   rest one or several, each at its own time, placed in the doc's step
+   order and searched exactly so none is left without a resident when some
+   choice covers it (docs/OPTIMIZATION.md). Then who covers a clinic if a
+   morning OR runs late (free juniors first for a junior), add-on call
+   names, and the rules as a flow chart at the foot of the tab.
 6. **Preview & Copy** — the day in the standard document format, copied
    with formatting for Google Docs, Word, or email.
 
 A Free AM / Free PM strip stays under the tabs; How-to, a printable **flow
-chart** (the six steps, someone out, who takes a case, who covers a clinic —
-drawn from the active chains), the CPEC sheet, the block grids and Setup live
-in the **Library** menu. The rules the app
+chart** (the six steps, Surg 2 and the globe, someone out, who takes a case,
+who covers a clinic — drawn from the active chains and this week's block
+schedule; the same rules sit at the foot of Coverage), the CPEC sheet, the
+block grids and Setup live in the **Library** menu. The rules the app
 encodes — and the assumptions still to calibrate — are listed in
 [docs/UISPEC6.md](docs/UISPEC6.md).
 
@@ -85,8 +92,10 @@ encodes — and the assumptions still to calibrate — are listed in
   Surg 2), cases whose resident is out are listed to reassign, the daytime
   add-on call follows the acting Surg 2, and the copied schedule's
   Assignments / WER / consult lines show who stands in. Wills and Stadium /
-  Cherry Hill are separate sections. A flow chart in the Library. What was
-  audited and what changed: [docs/AUDIT.md](docs/AUDIT.md).
+  Cherry Hill are separate sections. A flow chart in the Library and on
+  Coverage. Surg 2 always takes the globe (scrubbed, it waits for them);
+  with no globe Coverage shows Surg 2 free for the Surg 3 / Surg 4 PM
+  clinics. What was audited and what changed: [docs/AUDIT.md](docs/AUDIT.md).
 - **v2** (9/2026) — the flow follows the how-to (Out today →
   Roster → Surgery → Clinics → Coverage → Preview), the app knows who is
   free at any minute, the Surgery tab is one line per attending with the

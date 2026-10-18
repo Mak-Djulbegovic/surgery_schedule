@@ -43,15 +43,51 @@ eq(plan.handoff && plan.handoff.primary && plan.handoff.primary.name, 'Calotti',
 var skipBair = plan.handoff && plan.handoff.steps.filter(function (s) { return s.name === 'Bair'; })[0];
 eq(skipBair && skipBair.verdict, 'skip', 'Bair skipped for clinic cover (in a case)');
 
-/* ---------- same, but Surg 2 is scrubbed in a case ---------- */
+/* ---------- same, but Surg 2 is scrubbed: the globe waits for Surg 2 ---------- */
+// 10/18/2026: "surg 2 is ALWAYS going to take a globe"
 x = board({ cases: [hark('Djulbegovic'),
   { id: 'c2', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1300', category: 'cataract', addOn: false, assigned: 'Djulbegovic', backup: '' }] });
 plan = Assign.planAddOn('globe', 810, roster, DATA, x.b);
-eq(plan.pick && plan.pick.name, 'Calotti', 'Surg 2 and Surg 3 in cases → Surg 4 takes the globe');
-eq(plan.handoff, null, 'Surg 4 was free — nothing to hand off');
-var s2 = plan.steps.filter(function (s) { return s.name === 'Djulbegovic'; })[0];
-eq(s2 && s2.verdict, 'skip', 'Surg 2 skipped');
-ok(s2 && /in Tyson x3 until 2:30 PM/.test(s2.why), 'skip reason names the case and the estimated end — got ' + (s2 && s2.why));
+eq(plan.pick && plan.pick.name, 'Djulbegovic', 'Surg 2 scrubbed in Tyson x3 → still Surg 2 (always takes the globe)');
+eq(plan.always, 'Surg 2', '…by the always-takes rule');
+eq(plan.start, 870, '…starting when they are free: 2:30 PM (Tyson x3 from 1 PM, 30 min each)');
+ok(/^in Tyson x3 until 2:30 PM \(est\.\)$/.test(plan.waitText), 'the plan says what it waits behind — got ' + plan.waitText);
+eq(plan.spans[0].start, 870, 'the globe’s time on the board starts then');
+eq(plan.handoff, null, 'Surg 2 is free from 2:30 — nothing to hand off');
+eq(plan.steps.length, 1, 'no chain walk: Surg 3 / Surg 4 are not offered the globe');
+// two globes: the second waits for Surg 2 to finish the first
+var twoG = Assign.planAddOns([{ kind: 'globe', t: 780 }, { kind: 'globe', t: 800 }], null, roster, DATA, board({}).b);
+eq(twoG.items.map(function (it) { return it.pick && it.pick.name + '@' + it.start; }).join(' '), 'Djulbegovic@780 Djulbegovic@900',
+  'two globes: both Surg 2 — 1:00 PM, then 3:00 PM when the first ends');
+ok(/^taking the globe \/ trauma at 1:00 PM until 3:00 PM$/.test(twoG.items[1].waitText), '…the second says it waits behind the first — got ' + twoG.items[1].waitText);
+// Surgery tab: a trauma case while Surg 2 is scrubbed → Surg 2, with the time they are free
+var gcase = { id: 'g1', section: 'wills', surgeon: 'Globe/trauma', count: 1, serviceCount: 1, start: '1330', category: 'trauma', addOn: true, assigned: '' };
+var tyson = { id: 'c2', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1300', category: 'cataract', addOn: false, assigned: 'Djulbegovic', backup: '' };
+x = board({ cases: [tyson, gcase] });
+res = Assign.suggest([tyson, gcase], roster, DATA, x.b);
+var gr = res.filter(function (r) { return r.caseId === 'g1'; })[0];
+eq(gr && gr.name, 'Djulbegovic', 'Surgery: the trauma case is suggested to Surg 2 while they are scrubbed');
+eq(gr && gr.freeAt, 870, '…free at 2:30 PM');
+ok(gr && gr.warnings.some(function (w) { return /Djulbegovic is in Tyson x3 until 2:30 PM \(est\.\) — start it at 2:30 PM/.test(w); }), '…and the warning says to start it at 2:30 — got ' + JSON.stringify(gr && gr.warnings));
+ok(gr && gr.alternates.indexOf('Calotti') !== -1, '…the chain’s free members stay as alternates');
+// Surg 2 out with nobody covering: the chain as before
+x = board({ cases: [tyson], absences: [{ id: 'a9', name: 'Djulbegovic', am: true, pm: true, reason: 'sick', coverAM: 'NC', coverPM: 'NC' }] });
+plan = Assign.planAddOn('globe', 810, roster, DATA, x.b);
+eq(plan.always, '', 'Surg 2 out, NC: no always-takes');
+eq(plan.pick && plan.pick.name, 'Bair', '…the trauma chain: Surg 3 takes it');
+// Surg 2 covered by someone: the coverer is Surg 2 and waits the same way
+x = board({ cases: [{ id: 'c3', section: 'wills', surgeon: 'Tyson', count: 2, serviceCount: 2, start: '1300', category: 'cataract', addOn: false, assigned: 'Wibbelsman', backup: '' }],
+  absences: [{ id: 'a9', name: 'Djulbegovic', am: true, pm: true, reason: 'vacation', coverAM: 'Wibbelsman', coverPM: 'Wibbelsman' }] });
+plan = Assign.planAddOn('globe', 790, roster, DATA, x.b);
+eq(plan.pick && plan.pick.name + ' @' + plan.start, 'Wibbelsman @840', 'Surg 2 c/b Wibbelsman, scrubbed until 2 PM → Wibbelsman at 2 PM');
+ok(/covering Djulbegovic/.test(plan.pick && plan.pick.via), '…named as covering Djulbegovic — got ' + (plan.pick && plan.pick.via));
+// split cover: Wibbelsman Surg 2 AM (scrubbed 11:00–12:30), Cheng PM — an
+// 11:30 globe goes to the PM Surg 2 from noon, not after the AM one's case
+x = board({ cases: [{ id: 'c4', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1100', category: 'cataract', addOn: false, assigned: 'Wibbelsman', backup: '' }],
+  absences: [{ id: 'a9', name: 'Djulbegovic', am: true, pm: true, reason: 'vacation', coverAM: 'Wibbelsman', coverPM: 'Cheng' }] });
+plan = Assign.planAddOn('globe', 690, roster, DATA, x.b);
+eq(plan.pick && plan.pick.name + ' @' + plan.start, 'Cheng @720', 'Surg 2 AM scrubbed past noon → the PM Surg 2 (Cheng) takes the globe at noon');
+eq(plan.waitText, '', '…with nothing to wait behind');
 
 /* ---------- cornea add-on (needs tissue) while Surg 3 is scrubbed ---------- */
 x = board({ cases: [hark('Djulbegovic')] });
@@ -149,9 +185,11 @@ x = board({ cases: [
   { id: 'b2', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1300', category: 'cataract', assigned: 'Djulbegovic', backup: '' },
   { id: 'b3', section: 'wills', surgeon: 'Moster', count: 2, serviceCount: 2, start: '1300', category: 'glaucoma', assigned: 'Calotti', backup: '' }
 ] });
-plan = Assign.planAddOn('globe', 810, roster, DATA, x.b);
-eq(plan.pick && plan.pick.name, 'Samuel', 'Surg 2/3/4 in cases → the Cooper-block senior (Samuel) takes the globe');
+plan = Assign.planAddOn('other', 810, roster, DATA, x.b);
+eq(plan.pick && plan.pick.name, 'Samuel', 'Surg 2/3/4 in cases → the Cooper-block senior (Samuel) takes an add-on (Step 10)');
 eq(plan.pick && plan.pick.via, 'Cooper (PGY-4)', '…via the Cooper (PGY-4) chain step');
+plan = Assign.planAddOn('globe', 810, roster, DATA, x.b);
+eq(plan.pick && plan.pick.name + ' @' + plan.start, 'Djulbegovic @870', '…a globe still waits for Surg 2 (2:30 PM), not Cooper');
 // Thu 10/1: Samuel is at Cooper Clinic — off-site, skipped
 var r101 = Engine.resolveDay('2026-10-01', DATA);
 var b101 = Status.build(r101, { nightFloat: 'Perez', absences: [], clinicStaffOverrides: {}, cases: [
@@ -161,11 +199,11 @@ var b101 = Status.build(r101, { nightFloat: 'Perez', absences: [], clinicStaffOv
 ] }, DATA);
 eq(b101.statusAt('Samuel', 810).cls, 'offsite', 'Thu: Samuel at Cooper Clinic is off-site');
 ok(b101.freeAt(810).indexOf('Samuel') === -1, 'off-site is never listed as free');
-plan = Assign.planAddOn('globe', 810, r101, DATA, b101);
+plan = Assign.planAddOn('other', 810, r101, DATA, b101);
 var sam = plan.steps.filter(function (s) { return s.name === 'Samuel'; })[0];
-eq(sam && sam.verdict, 'skip', 'Thu: the Cooper senior is skipped for a Wills globe');
+eq(sam && sam.verdict, 'skip', 'Thu: the Cooper senior is skipped for a Wills add-on');
 ok(sam && /off-site/.test(sam.why || ''), 'skip reason says off-site — got ' + (sam && sam.why));
-ok(plan.pick && plan.pick.name !== 'Samuel', 'the globe goes past Cooper to the next in chain');
+ok(plan.pick && plan.pick.name !== 'Samuel', 'the add-on goes past Cooper to the next in chain');
 
 /* ---------- several at once: a globe while an emergent glaucoma AND cornea come in ---------- */
 function names(res) { return res.items.map(function (it) { return it.label.split(' ')[0] + ':' + (it.pick ? it.pick.name : '-'); }).join(' '); }
@@ -312,12 +350,16 @@ var busyCase = function (id, who, start, count, cat) {
 };
 x = board({ cases: [busyCase('a', 'Djulbegovic', '1230', 4, 'other'), busyCase('b', 'Bair', '1230', 4, 'other'),
   busyCase('c', 'Samuel', '1230', 4, 'other'), busyCase('d', 'Wibbelsman', '1230', 4, 'other'), busyCase('e', 'Cheng', '1200', 3, 'cataract')] });
-jt = Assign.planAddOns([{ kind: 'globe', t: 780 }, { kind: 'glaucoma', t: 810 }], null, roster, DATA, x.b);
+jt = Assign.planAddOns([{ kind: 'other', t: 780 }, { kind: 'glaucoma', t: 810 }], null, roster, DATA, x.b);
 eq(jt.unfilledByOrder + ' → ' + jt.unfilled, '1 → 0', 'the doc’s order alone leaves one add-on with nobody; the plan covers both');
-eq(jt.items.map(function (it) { return it.label.split(' ')[0] + ':' + (it.pick ? it.pick.name : '-'); }).join(' '), 'Globe:Calotti Glaucoma:Cheng',
-  'globe 1:00 → Surg 4 (the only one free); glaucoma 1:30 → skipped for now → Step 10 → Surg 1, whose list ends at 1:30');
+eq(jt.items.map(function (it) { return it.label.split(' ')[0] + ':' + (it.pick ? it.pick.name : '-'); }).join(' '), 'Other:Calotti Glaucoma:Cheng',
+  'add-on 1:00 → Surg 4 (the only one free); glaucoma 1:30 → skipped for now → Step 10 → Surg 1, whose list ends at 1:30');
 eq(jt.items[1].adjusted && jt.items[1].byOrder, 'Calotti', '…and it says the order alone would give the glaucoma to Calotti');
 ok(jt.searched < 100, 'the search is tiny (' + jt.searched + ' nodes)');
+// a globe in the same squeeze: Surg 2 always — it waits until their list ends (4:30)
+jt = Assign.planAddOns([{ kind: 'globe', t: 780 }, { kind: 'glaucoma', t: 810 }], null, roster, DATA, x.b);
+eq(jt.items.map(function (it) { return it.label.split(' ')[0] + ':' + (it.pick ? it.pick.name + '@' + it.start : '-'); }).join(' '), 'Globe:Djulbegovic@990 Glaucoma:Calotti@810',
+  'globe 1:00 → Surg 2 at 4:30 PM, when their list ends; glaucoma 1:30 → Surg 4 (Step 6)');
 // with nothing in the way the plan is exactly the doc's order
 jt = Assign.planAddOns([{ kind: 'globe', t: 600 }, { kind: 'glaucoma', t: 600 }, { kind: 'cornea', t: 600 }], null, roster, DATA, board({}).b);
 ok(jt.items.every(function (it) { return !it.adjusted; }) && jt.unfilledByOrder === 0, 'no conflict: nothing changed from the doc’s order');
@@ -401,6 +443,49 @@ var busy12 = { id: 'g', section: 'wills', surgeon: 'Globe', count: 1, serviceCou
 b1019 = Status.build(r1019, { nightFloat: '', nfCleared: true, absences: [], clinicStaffOverrides: {}, cases: [two, busy12] }, DATA);
 bp = Assign.backupPlan(two, r1019, DATA, [two, busy12], b1019);
 ok(bp && bp.primary && bp.primary.name !== 'Cheng', 'Surg 2 in a 12:00 globe is skipped — free 10–12 is not enough — got ' + (bp && bp.primary && bp.primary.name));
+
+/* ---------- the week of 10/19: Surg 2, the globe, the Surg 3 / Surg 4 PM clinics ---------- */
+// 10/18/2026: Surg 3 has Cornea clinic Mon/Wed/Fri PM, Surg 4 Glaucoma
+// Tue/Wed/Thu PM. No globe: Surg 2 covers the clinic of a Surg 3 / Surg 4
+// in a PM case (Wednesday both: Surg 2 one, the chain the other). A globe:
+// Surg 2 takes it and the clinic they were covering passes down the chain;
+// scrubbed, the globe waits for them.
+[
+  { d: '2026-10-19', s2: 'Cheng', s3pm: 'Cornea', s4pm: '', covers: 'Cornea:Cheng', handoff: 'Cornea→Shields' },
+  { d: '2026-10-20', s2: 'Cheng', s3pm: '', s4pm: 'Glaucoma', covers: 'Glaucoma:Cheng', handoff: 'Glaucoma→Djulbegovic' },
+  { d: '2026-10-21', s2: 'Samuel', s3pm: 'Cornea', s4pm: 'Glaucoma', covers: 'Cornea:Samuel Glaucoma:Wibbelsman', handoff: 'Cornea→Cheng' },
+  { d: '2026-10-22', s2: 'Samuel', s3pm: 'CPEC', s4pm: 'Glaucoma', covers: 'CPEC:Samuel Glaucoma:Aguwa', handoff: 'CPEC→Cheng' },
+  { d: '2026-10-23', s2: 'Samuel', s3pm: 'Cornea', s4pm: '', covers: 'Cornea:Samuel', handoff: 'Cornea→Shields' }
+].forEach(function (w) {
+  var r = Engine.resolveDay(w.d, DATA);
+  var day = { nightFloat: '', nfCleared: true, absences: [], clinicStaffOverrides: {}, cases: [] };
+  var b0 = Status.build(r, day, DATA);
+  var s3 = r.surg['3'].name;
+  var s4 = r.surg['4'].name;
+  function pmClinic(n) { var bd = b0.base[n].pm; return bd.kind === 'clinic' ? bd.text : ''; }
+  eq(r.surg['2'].name, w.s2, w.d + ': Surg 2');
+  eq(pmClinic(s3) + '|' + pmClinic(s4), w.s3pm + '|' + w.s4pm, w.d + ': Surg 3 / Surg 4 PM clinics from the grid');
+  // a 1 PM case for each Surg 3 / Surg 4 with a PM clinic; take each backup the app suggests, in order
+  var cases = [];
+  if (w.s3pm) cases.push({ id: 'p', section: 'wills', surgeon: 'PKP', count: 1, serviceCount: 1, start: '1300', category: 'cornea', addOn: false, assigned: s3, backup: '' });
+  if (w.s4pm) cases.push({ id: 't', section: 'wills', surgeon: 'Tube', count: 1, serviceCount: 1, start: '1300', category: 'glaucoma', addOn: false, assigned: s4, backup: '' });
+  cases.forEach(function (c) {
+    day.cases = cases;
+    var bp = Assign.backupPlan(c, r, DATA, cases, Status.build(r, day, DATA));
+    c.backup = bp && bp.primary ? bp.primary.name : '';
+  });
+  eq(cases.map(function (c) { return (c.id === 'p' ? w.s3pm : w.s4pm) + ':' + c.backup; }).join(' '), w.covers, w.d + ': no globe — who covers the clinics (Surg 2 first)');
+  day.cases = cases;
+  var bw = Status.build(r, day, DATA);
+  var gp = Assign.planAddOn('globe', 810, r, DATA, bw);
+  eq(gp.pick && gp.pick.name, w.s2, w.d + ': a 1:30 globe → Surg 2');
+  eq(gp.handoff && gp.handoff.clinic + '→' + (gp.handoff.primary && gp.handoff.primary.name), w.handoff, w.d + ': the clinic Surg 2 was covering passes down the chain');
+  // Surg 2 scrubbed 1:00–2:30: the globe waits for them
+  var cat = { id: 'k', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1300', category: 'cataract', addOn: false, assigned: w.s2, backup: '' };
+  day.cases = cases.map(function (c) { var d = {}; for (var k in c) d[k] = c[k]; d.backup = ''; return d; }).concat([cat]);
+  gp = Assign.planAddOn('globe', 810, r, DATA, Status.build(r, day, DATA));
+  eq(gp.pick && gp.pick.name + ' @' + gp.start, w.s2 + ' @870', w.d + ': Surg 2 scrubbed until 2:30 → the globe waits for them');
+});
 
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures) process.exitCode = 1; else console.log('OK');

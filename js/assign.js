@@ -542,7 +542,7 @@
       if (!w.primary || !e.open) return; // an assigned case is on the board already
       var cl = claimOf(e);
       claims[w.primary.name] = (claims[w.primary.name] || []).concat(e.spans.map(function (sp) {
-        return { start: sp.start, end: sp.end, what: cl.what, by: cl.by || null };
+        return { start: sp.start, end: sp.end, what: cl.what, label: cl.label, by: cl.by || null };
       }));
     }
     var later = [];
@@ -553,9 +553,12 @@
       e.pick = null;
       e.pickStatus = null;
       e.deferred = false;
+      e.waits = null;
+      e.freeAt = null;
       if (e.step >= 10) { later.push(e); return; }
       if (e.private) { settled.push(e); return; }
       var w = walkStep(e.c, e.chain, e.step, roster, board, claims, e.spans, null);
+      if (e.always) applyAlways(e, w, roster, board, claims);
       e.stages.push(w);
       if (w.primary) { take(e, w); settled.push(e); } else later.push(e);
     });
@@ -570,11 +573,142 @@
       stepsOf(e).forEach(function (s) { tried[s.name] = true; });
       e.deferred = e.step < 10;
       var w = walkStep(e.c, e.deferred ? remChain : e.chain, 10, roster, board, claims, e.spans, tried);
+      if (e.always && !e.deferred) applyAlways(e, w, roster, board, claims);
       e.stages.push(w);
       take(e, w);
       settled.push(e);
     });
     return { settled: settled, claims: claims };
+  }
+
+  /* ---- a case type one role always takes (data.alwaysTakes) ---------- */
+  // 10/18/2026: "surg 2 is ALWAYS going to take a globe". The role is
+  // whoever holds it at the time — the block holder, or their stand-in.
+  // Scrubbed in another case → the case still goes to them and waits until
+  // they are free. Only when the role is out with nobody covering, or its
+  // holder is on a duty that is never pulled (ER, consults, Path) or
+  // off-site, does the case walk its chain as before.
+  // A configuration from before the rule (no alwaysTakes) gets it; {} is off.
+  var ALWAYS_TAKES = { trauma: 'Surg 2' };
+  function alwaysRole(c, data) {
+    var at = (data && data.alwaysTakes !== undefined ? data.alwaysTakes : ALWAYS_TAKES) || {};
+    var role = c && c.category ? at[c.category] : '';
+    return typeof role === 'string' ? role : '';
+  }
+
+  // Who holds `role` at minute t -> { name, via, standingFor } or null (out,
+  // nobody standing in).
+  function roleHolderAt(role, roster, board, t) {
+    var s = t < NOON ? 'am' : 'pm';
+    var m = /^Surg (\d)$/.exec(role);
+    if (m && board.actingSurg) {
+      var a = board.actingSurg(m[1], s);
+      return a ? { name: a.name, via: role + (a.for ? ' — covering ' + a.for : ''), standingFor: a.for || '' } : null;
+    }
+    var r = resolveToken(role, roster, [s], { board: board, sessions: [s] });
+    var n = r.names[0];
+    if (!n || (board.isOut && board.isOut(n, s))) return null;
+    return { name: n, via: tokenVia(r, n), standingFor: (r.standIn || {})[n] || '' };
+  }
+
+  // The first minute from `t` on when `name` is out of every case they are
+  // in (back to back included) and of what `claims` already gives them ->
+  // { start, behind: [{ label, until, estimated }] } — what it waits behind.
+  function waitFor(name, selfId, t, board, claims) {
+    var start = t;
+    var behind = [];
+    for (var guard = 0; guard < 40; guard++) {
+      var st = board.statusAt(name, start, { exclude: selfId });
+      if (st.kind === 'case' && st.until != null && st.until > start) {
+        behind.push({ label: st.label, until: st.until, estimated: !!st.estimated });
+        start = st.until;
+        continue;
+      }
+      var cl = claimAt((claims || {})[name], [{ start: start, end: start + 1 }]);
+      if (cl && cl.end > start) {
+        behind.push({ claim: true, label: cl.label || cl.what || 'another add-on', until: cl.end, estimated: true });
+        start = cl.end;
+        continue;
+      }
+      break;
+    }
+    return { start: start, behind: behind };
+  }
+
+  // 'in Tyson x3 until 2:30 PM (est.)' — what the case waits behind
+  function behindText(behind) {
+    var S = getStatus();
+    return (behind || []).map(function (w) {
+      return (w.claim ? '' : 'in ') + w.label + (S ? ' until ' + S.fmtClock(w.until) : '') + (w.estimated && !w.claim ? ' (est.)' : '');
+    }).join(', then ');
+  }
+
+  // Surgery's suggestion for a case one role always takes: the walk `w` of
+  // its chain, with the role's holder put first — whatever they are doing
+  // then. The case keeps its typed start, so a holder still scrubbed then
+  // gets a warning with the time they are free (e.waits, e.freeAt).
+  function applyAlways(e, w, roster, board, claims) {
+    var t = e.spans && e.spans.length ? e.spans[0].start : null;
+    if (t == null) return;
+    var h = roleHolderAt(e.always, roster, board, t);
+    if (!h) return;
+    var st = board.statusDuringSpans(h.name, e.spans, { exclude: e.c.id });
+    if (st.kind === 'out' || st.neverPull || st.cls === 'offsite') return;
+    var wt = waitFor(h.name, e.c.id, t, board, claims);
+    var cand = {
+      name: h.name, via: h.via, token: e.always, step: e.step, requireFree: false,
+      orBlock: false, standingFor: h.standingFor, always: true
+    };
+    var mine = { name: h.name, via: h.via, step: e.step, token: e.always, status: st, verdict: 'take', why: null, takenBy: null, always: true };
+    var rest = w.steps.filter(function (x) { return x.name !== h.name; }).map(function (x) {
+      if (x.verdict !== 'take') return x;
+      var y = {};
+      for (var k in x) y[k] = x[k];
+      y.verdict = 'alt';
+      return y;
+    });
+    w.steps = [mine].concat(rest);
+    w.primary = cand;
+    w.primaryStatus = st;
+    w.alternates = rest.filter(function (x) { return x.verdict === 'alt'; }).map(function (x) { return x.name; });
+    e.waits = wt.behind;
+    e.freeAt = wt.start;
+  }
+
+  // The role's holder for a case of `draft`'s kind asked for at minute `t`
+  // -> null (walk the chain) or { cand, status, start, spans, behind }:
+  // when it starts (later than `t` when they are scrubbed), its spans then,
+  // and the holder's status over them. `spansAt(start)` gives the spans of
+  // the case starting then.
+  function alwaysPick(role, draft, t, roster, board, claims, spansAt) {
+    var start = t;
+    var behind = [];
+    var holder = null;
+    for (var pass = 0; pass < 3 && !holder; pass++) {
+      var h = roleHolderAt(role, roster, board, start);
+      if (!h) return null;
+      var w = waitFor(h.name, draft.id, start, board, claims);
+      var h2 = w.start === start ? h : roleHolderAt(role, roster, board, w.start);
+      if (!h2) return null; // free only once the role is out with nobody covering
+      if (h2.name !== h.name) {
+        // AM and PM covered by different people, the AM one scrubbed past
+        // noon: the PM one is the role from noon, and takes it then
+        start = Math.max(start, NOON);
+        continue;
+      }
+      holder = h;
+      behind = w.behind;
+      start = w.start;
+    }
+    if (!holder) return null;
+    var spans = spansAt(start);
+    var st = board.statusDuringSpans(holder.name, spans, { exclude: draft.id });
+    if (st.kind === 'out' || st.neverPull || st.cls === 'offsite') return null;
+    var cand = {
+      name: holder.name, via: holder.via, token: role, step: null, requireFree: false,
+      orBlock: false, standingFor: holder.standingFor, always: true
+    };
+    return { cand: cand, status: st, start: start, spans: spans, behind: behind };
   }
 
   // Trauma skips the junior on Plastics OR — the doc gives them only TABs
@@ -635,6 +769,15 @@
     var reasons = [hier.label + ' → ' + p.via + (e.deferred ? ' (remaining-cases chain)' : '')];
     if (e.deferred) reasons.push('how-to Step ' + e.step + ': skipped for now → Step 10');
     var warnings = [];
+    if (p.always) {
+      reasons[0] = hier.label + ' → ' + p.via + ' — ' + p.token + ' always takes it';
+      var S = getStatus();
+      if (e.waits && e.waits.length && S) {
+        warnings.push(p.name + ' is ' + behindText(e.waits) + ' — start it at ' + S.fmtClock(e.freeAt) + ', when they are free');
+      } else if (st && st.kind === 'case') {
+        warnings.push(p.name + ' is also booked in ' + st.label + ' during it — hand one off or move the start');
+      }
+    }
     if (p.token === 'FREE_JUNIOR') {
       warnings.push(p.name + (isPullFirst(st) ? ' is a junior in ' + (st.clinic || 'clinic') : ' is a free junior') + ' — confirm with Surg 2 (their discretion)');
     }
@@ -656,6 +799,7 @@
     return {
       caseId: c.id, name: p.name, status: st, skipped: skipped, outside: [],
       step: e.step, deferred: e.deferred, replaces: e.replaces, standingFor: p.standingFor || '',
+      always: p.always ? p.token : '', freeAt: p.always && e.waits && e.waits.length ? e.freeAt : null,
       reasons: reasons, warnings: warnings, alternates: alternates.slice(0, 6)
     };
   }
@@ -772,13 +916,15 @@
         step: stepOf(key, hier), sub: subRank(c), private: !needsResident(c),
         spans: board ? board.caseSpansFor(c).spans : null,
         // open = still needs someone: nobody on it, or its resident is out
-        open: !trimStr(c.assigned) || out, replaces: out ? trimStr(c.assigned) : ''
+        open: !trimStr(c.assigned) || out, replaces: out ? trimStr(c.assigned) : '',
+        always: alwaysRole(c, data)
       });
     });
 
     if (board) {
       var run = runSteps(entries, roster, data, board, function (e) {
-        return { what: 'suggested for ' + (trimStr(e.c.surgeon) || 'another case') + ' at this time' };
+        var who = trimStr(e.c.surgeon) || 'another case';
+        return { what: 'suggested for ' + who + ' at this time', label: 'suggested for ' + who };
       });
       return run.settled.map(function (e) {
         return e.private ? privateResult(e.c) : boardResult(e, board, load, run.claims);
@@ -993,10 +1139,11 @@
   // lexicographic: coverage first, then the doc's order. A depth-first
   // branch and bound; the node cap is a safety net, far above what a day of
   // add-ons needs.
-  function solvePlan(entries) {
+  function solvePlan(entries, preClaims) {
     var LIMIT = 50000;
     var nodes = 0;
     var claims = {};
+    for (var pc in (preClaims || {})) claims[pc] = preClaims[pc].slice();
     var pick = {};
     var best = null;
     var greedy = null; // the first complete answer = the doc's own order
@@ -1079,11 +1226,14 @@
   // anything skipped or left (Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 →
   // Surg 5), in time order — with one change the doc cannot make by hand:
   // if following it leaves an add-on with nobody while another choice would
-  // cover it, the plan takes the first such choice (solvePlan). Then Step
-  // 12: everyone pulled out of a clinic hands it down the clinic-coverage
-  // chain, never to someone taking an add-on at that time. Nobody in the
-  // chains free → no pick, and `outside` / `pullable` list who else could
-  // (Surg 2's call).
+  // cover it, the plan takes the first such choice (solvePlan). A kind one
+  // role always takes (data.alwaysTakes — the globe, Surg 2) is settled
+  // first, in time order: it goes to that role's holder, and starts when
+  // they are free (`start`, later than `time` when they are scrubbed);
+  // the rest of the plan works around it. Then Step 12: everyone pulled
+  // out of a clinic hands it down the clinic-coverage chain, never to
+  // someone taking an add-on at that time. Nobody in the chains free → no
+  // pick, and `outside` / `pullable` list who else could (Surg 2's call).
   function planAddOns(items, t, roster, data, board) {
     data = getData(data);
     var S = getStatus();
@@ -1112,10 +1262,41 @@
         e.stage1 = [];
       }
       e.stage2 = stageOptions(draft, e.step < 10 ? remChain : e.chain, 10, roster, board, e.spans, tried);
+      e.always = alwaysRole(draft, data);
+      e.start = at;
       return e;
     });
-    var sol = solvePlan(entries);
+    // the role that always takes a kind (Surg 2, the globe) takes it first,
+    // one after another in time order
+    var preClaims = {};
+    entries.filter(function (e) { return e.always; }).sort(function (a, b) { return a.time - b.time || a.i - b.i; }).forEach(function (e) {
+      var ap = alwaysPick(e.always, e.c, e.time, roster, board, preClaims, function (start) {
+        var d = {};
+        for (var k in e.c) d[k] = e.c[k];
+        d.start = S.fmtHHMM(start);
+        return board.caseSpansFor(d).spans;
+      });
+      if (!ap) return; // out with nobody covering, never pulled, off-site: its chain as before
+      e.alwaysPick = ap;
+      e.start = ap.start;
+      e.spans = ap.spans;
+      e.c.start = S.fmtHHMM(ap.start);
+      preClaims[ap.cand.name] = (preClaims[ap.cand.name] || []).concat(ap.spans.map(function (sp) {
+        var what = 'taking the ' + e.def.label.toLowerCase() + ' at ' + S.fmtClock(ap.start);
+        return { start: sp.start, end: sp.end, entry: e, what: what, label: what };
+      }));
+    });
+    var sol = solvePlan(entries.filter(function (e) { return !e.alwaysPick; }), preClaims);
     entries.forEach(function (e) {
+      if (e.alwaysPick) {
+        e.pick = e.alwaysPick.cand;
+        e.pickStatus = e.alwaysPick.status;
+        e.pickStage = 1;
+        e.deferred = false;
+        e.byOrder = e.pick.name;
+        e.changed = false;
+        return;
+      }
       var p = sol.pick[e.i];
       var g = sol.greedy[e.i];
       e.pick = p ? p.opt.cand : null;
@@ -1160,14 +1341,20 @@
       // the walk as it played out: who was passed over, and why
       var steps = [];
       var adjusted = false;
-      var stages = e.step < 10 ? [[e.stage1, e.step]] : [];
-      if (e.step >= 10 || e.pickStage !== 1) stages.push([e.stage2, 10]);
+      var stages = e.alwaysPick ? [] : e.step < 10 ? [[e.stage1, e.step]] : [];
+      if (!e.alwaysPick && (e.step >= 10 || e.pickStage !== 1)) stages.push([e.stage2, 10]);
+      if (e.alwaysPick) {
+        steps.push({
+          name: e.pick.name, via: e.pick.via, step: e.step, token: e.always, status: e.pickStatus,
+          verdict: 'take', why: null, takenBy: null, always: true
+        });
+      }
       var seenPick = false;
       stages.forEach(function (sg) {
         sg[0].forEach(function (o) {
           var isPick = e.pick && o.cand === e.pick;
           var taker = !o.why ? takerOf(o.cand.name, e) : null;
-          var why = o.why || (taker ? 'taking the ' + taker.def.label.toLowerCase() + (taker.time !== e.time && S ? ' at ' + S.fmtClock(taker.time) : '') : null);
+          var why = o.why || (taker ? 'taking the ' + taker.def.label.toLowerCase() + (taker.start !== e.start && S ? ' at ' + S.fmtClock(taker.start) : '') : null);
           var verdict;
           if (isPick) { verdict = 'take'; seenPick = true; }
           else if (why) verdict = 'skip';
@@ -1188,6 +1375,13 @@
       var os = e.pick ? { free: [], pullable: [] } : outsideOf(board, e.spans, e.c.id, walked, claimsFinal);
       return {
         kind: e.def.key, label: e.def.label, key: e.key, hierLabel: e.hier.label, time: e.time,
+        // when it starts: `time`, or later when the role that always takes
+        // it is scrubbed (`waits`: what it waits behind)
+        start: e.start, always: e.alwaysPick ? e.always : '',
+        waits: e.alwaysPick ? e.alwaysPick.behind : [],
+        waitText: e.alwaysPick ? behindText(e.alwaysPick.behind) : '',
+        // the holder also has a case booked inside the add-on's time
+        overlap: e.alwaysPick && e.pickStatus && e.pickStatus.kind === 'case' ? e.pickStatus.label : '',
         step: e.step, deferred: e.deferred, adjusted: adjusted || e.changed, byOrder: e.byOrder, draft: e.c, spans: e.spans,
         pick: e.pick ? { name: e.pick.name, via: e.pick.via } : null,
         status: e.pickStatus || null,
@@ -1220,6 +1414,7 @@
     var it = planAddOns([{ kind: kind, t: t }], t, roster, data, board).items[0];
     return {
       kind: it.kind, label: it.label, time: t, key: it.key, hierLabel: it.hierLabel,
+      start: it.start, always: it.always, waits: it.waits, waitText: it.waitText, overlap: it.overlap,
       step: it.step, deferred: it.deferred, draft: it.draft, spans: it.spans,
       pick: it.pick, pickStatus: it.status, steps: it.steps, skipped: it.skipped,
       alternates: it.alternates, outside: it.outside, pullable: it.pullable, handoff: it.handoff
@@ -1265,6 +1460,12 @@
     lateCover: lateCover,
     stepOf: stepOf,
     sessionsOfSpans: sessionsOfSpans,
+    alwaysRole: function (c, data) { return alwaysRole(c, getData(data)); },
+    // when `name` is free of every case from minute t on -> { start, behind, text }
+    whenFree: function (name, t, board, excludeId) {
+      var w = waitFor(name, excludeId || null, t, board, null);
+      return { start: w.start, behind: w.behind, text: behindText(w.behind) };
+    },
     outsideWords: outsideWords,
     ADDON_KINDS: ADDON_KINDS,
     FREE_JUNIOR_LABEL: FREE_JUNIOR_LABEL

@@ -1216,6 +1216,14 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .plan-at { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
 .plan-when { border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13.5px; }
 .plan-add { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+/* Surg 2 when no globe is entered */
+.surg2-today { margin-bottom: 10px; font-size: 13px; }
+.surg2-today p { margin: 0 0 6px; }
+.surg2-today .warn-line { margin-top: 0; }
+.surg2-clinics { list-style: none; margin: 0 0 6px; padding: 0; }
+.surg2-clinics li { padding: 4px 0 4px 10px; border-left: 3px solid var(--accent-border); margin-bottom: 4px; }
+.bad-text { color: var(--red-text); font-weight: 600; }
+.plan-wait { margin-bottom: 6px; }
 .plan-joint-time { font-weight: 600; color: var(--muted); font-size: 12px; }
 .plan-changed { margin-bottom: 8px; }
 /* available AM | PM */
@@ -1672,3 +1680,15 @@ select.imp-type.unset { border-color: var(--amber-border); background: var(--amb
   .flow-chains { margin-bottom: 10px; }
 }
 .flow-note { margin-top: 12px; max-width: 860px; }
+/* the rules at the foot of Coverage (the flow chart's cards) */
+.cov-rules { margin: 18px 0 8px; }
+.cov-rules-sum {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+  cursor: pointer; list-style: none; padding: 10px 14px; margin-bottom: 12px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.cov-rules-sum::-webkit-details-marker { display: none; }
+.cov-rules-sum::before { content: '▸'; color: var(--accent); font-size: 12px; }
+.cov-rules[open] > .cov-rules-sum::before { content: '▾'; }
+.cov-rules-title { font-size: 15px; font-weight: 700; }
+.roles-rules { font-size: 12px; padding: 0; vertical-align: baseline; }

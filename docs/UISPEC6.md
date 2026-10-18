@@ -138,6 +138,76 @@ bracketed notes and block names ("Stadium OR (Abendroth)") as they were.
 - Absences are per day: the next day's add-on row uses that day's saved
   draft, if there is one, else the block schedule.
 
+## Surg 2 and the globe (10/18/2026, later)
+
+The rule as given: "surg 2 is ALWAYS going to take a globe. where we get
+into issues is when Surg 2 is in a globe then the surg 3 person may have a
+corneal transplant (PKP) while they have clinic on M, W, or F afternoon.
+then there is the consideration that there is glaucoma cases going during
+the PM clinic on T, W, Th"; "if there is no globe selected in the coverage
+tab then surg 2 should be available for clinic to cover other surgery
+service. ofc they may the one to take over the OR if needed (least
+redundency is on Wednesdays)"; "make the flow chart on the coverage page to
+allow the user to know what the rules are".
+
+**Before.** A globe walked the trauma chain like any add-on, so a Surg 2
+scrubbed at the globe's time was passed over: on Wed 10/21, with Surg 2 in a
+1 PM cataract list, a 1:30 globe went to the Cooper senior pulled out of
+CPEC. The Coverage planner always held a globe ("a globe at now", and the
+last row could not be removed), so there was no way to say "no globe".
+
+**Now.** `data.alwaysTakes = { trauma: 'Surg 2' }`: a globe goes to whoever
+holds Surg 2 at the time — the block holder or their stand-in. Scrubbed in a
+case, the globe waits: it starts when they are out of the case(s) they are
+in, and of any globe planned before it (two globes: one after the other).
+The Coverage planner says so ("Samuel is in Tyson x3 until 2:30 PM (est.) →
+it starts at 2:30 PM") and adds the case at that time; Surgery suggests Surg 2
+with "start it at 2:30 PM", and once assigned offers **Start it at …**. A
+globe still goes down the trauma chain (Surg 3 → Surg 4 → Cooper → Surg 1 →
+Surg 5) only when Surg 2 is out with nobody covering, or its holder is on
+a duty that is never pulled (covering the ER, consults, Path) or off-site.
+A globe that would start at 4:30 PM or later carries the scheduling note —
+"if the patient has not rolled back to the OR by 4:30, it can be passed to
+the call person" (`data.callAfter`); it is not reassigned. A configuration
+without `alwaysTakes` gets the rule; `{}` turns it off.
+
+**Coverage, with no globe.** The planner starts empty. Its card says Surg 2
+is free — first on the clinic-coverage chain (Step 12) and first on the
+remaining-cases chain (Step 10) — lists what Surg 2 already has today, and
+the Surg 3 / Surg 4 PM clinics with each PM case and its backup. When both
+have a PM clinic that day it says Surg 2 can cover only one at a time. A
+globe already on Surgery turns the card into "Globe today". After **Add it
+as an add-on case** the planner empties (it used to keep the globe, ready
+to be added twice); a new date starts empty.
+
+**The rules on Coverage.** The flow chart's cards sit at the foot of
+Coverage (open unless this browser closed it; "The rules ↓" at the top
+jumps there), led by a new **Surg 2 and the globe** chart — also in Library
+→ Flow chart. Its weekdays come from the block schedule for the selected
+week, not from text: Cornea (Surg 3) Mon / Wed / Fri, Glaucoma (Surg 4)
+Tue / Wed / Thu, and CPEC (Surg 3) Thu.
+
+Checked for the week of 10/19 (`tests/test-coverage.js`; a PKP for Surg 3
+and a glaucoma case for Surg 4 at 1 PM whenever they have a PM clinic, each
+backup as the app suggests it, then a 1:30 globe):
+
+| Day | Surg 2 | No globe — the clinics | Globe at 1:30 — the clinic Surg 2 was covering |
+|---|---|---|---|
+| Mon 10/19 | Cheng | Cornea: Cheng | Cornea → Shields (Surg 4) |
+| Tue 10/20 | Cheng | Glaucoma: Cheng | Glaucoma → Djulbegovic (Surg 3) |
+| Wed 10/21 | Samuel | Cornea: Samuel · Glaucoma: Wibbelsman (Surg 1) | Cornea → Cheng (Surg 5) |
+| Thu 10/22 | Samuel | CPEC: Samuel · Glaucoma: Aguwa (Surg 1) | CPEC → Cheng (Surg 5) |
+| Fri 10/23 | Samuel | Cornea: Samuel | Cornea → Shields (Surg 4) |
+
+With Surg 2 in a cataract list 1:00–2:30 instead, every day's globe goes to
+Surg 2 at 2:30.
+
+Assumptions, to confirm: Surg 3's **Thursday PM CPEC** counts as a clinic to
+cover when Surg 3 has a PM case (CPEC is a clinic — chief, 9/28/2026), so
+Thursday is a "both clinics" day like Wednesday; **two globes** both go to
+Surg 2, one after the other; Surg 2 **covering the ER** keeps the ER and the
+globe goes down the chain.
+
 ## Saving and working at the same time (9/28/2026)
 
 The chief: "I do not want my instance affecting someone else who may be

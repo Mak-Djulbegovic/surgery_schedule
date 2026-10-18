@@ -156,6 +156,29 @@ deliberate rule ("the literal NC never prints on a case line", tested). The
 consequence is that a pasted schedule shows that clinic gap as open again;
 the receiver marks NC once more.
 
+## Third pass — Surg 2 and the globe
+
+After the rule "surg 2 is ALWAYS going to take a globe" (and, with no
+globe, Surg 2 free for the Surg 3 / Surg 4 PM clinics), a run of the week of
+10/19 showed what the app did with it. Details and the day-by-day result:
+docs/UISPEC6.md, "Surg 2 and the globe".
+
+29. **A scrubbed Surg 2 was passed over for a globe** — it went down the
+    trauma chain: Surg 4 on Mon, Surg 3 on Tue, the Cooper senior pulled out
+    of CPEC on Wed, Surg 1 on Thu. Now Surg 2 (or whoever covers them)
+    always takes it and it starts when they are free — on Coverage and on
+    Surgery. Tests: `test-coverage.js`.
+30. **The Coverage planner could not say "no globe"** — it always held one,
+    and the last row could not be removed. It now starts empty, and with no
+    globe shows Surg 2 free, what Surg 2 already has, and the Surg 3 /
+    Surg 4 PM clinics with their backups.
+31. **After "Add it as an add-on case" the planner kept the globe**, ready to
+    be added a second time, and planned add-ons carried over to the next
+    date. Both now reset; a globe on Surgery shows as "Globe today".
+32. **The rules were only in the Library.** The flow chart's cards are now
+    at the foot of Coverage too, with a Surg 2 and the globe chart whose
+    weekdays come from the block schedule.
+
 ## Still open — questions for the chief
 
 - **Cooper buddies are not on the board.** The buddy (pulled from, e.g.,
@@ -177,6 +200,13 @@ the receiver marks NC once more.
 - **Needs coverage suggests one fix at a time**: two open gaps can suggest
   the same coverer for overlapping windows; after the first click the second
   updates.
+- **Thursday PM CPEC for Surg 3**: the grid has Surg 3 in CPEC on
+  Thursday afternoons, so a Surg 3 PM case on Thursday asks for clinic cover
+  and Thursday shows as a "both clinics" day with Wednesday. Is that right,
+  or does only Cornea (Mon / Wed / Fri) need cover?
+- **Two globes at once** both go to Surg 2, one after the other. Should the
+  second go to Surg 3 instead?
+- **Surg 2 covering the ER** keeps the ER; the globe goes down the chain.
 - Assumptions, as listed in docs/UISPEC6.md (10/18/2026): a coverer inherits
   every chain place whatever their year; Surg 2 out all day → the AM coverer
   takes daytime add-ons; after the ER, a case without its resident is the

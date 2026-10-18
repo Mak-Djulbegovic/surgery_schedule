@@ -393,6 +393,20 @@ const SCHED_DATA = {
     clinicCoverage: { step: 12, label: 'Clinic coverage', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5', 'WILLS_OR', 'RETINA'], note: 'Step 12: if a PM clinic needs coverage. The PM clinic manager is helpful with clinic assignments.' }
   },
 
+  // A case type one role always takes (10/18/2026: "surg 2 is ALWAYS going
+  // to take a globe"). Scrubbed in another case → the case waits for them
+  // (the Coverage planner starts it when they are free). Only out with
+  // nobody covering them, or on a duty that is never pulled (ER, consults,
+  // Path), sends it down its chain. Whoever covers Surg 2 is Surg 2.
+  // {} turns this off (left out, as in a configuration saved before
+  // 10/18/2026, it is on).
+  alwaysTakes: { trauma: 'Surg 2' },
+
+  // Scheduling notes: "If the patient has not rolled back to the OR by
+  // 4:30, it can be passed to the call person." A globe that waits for
+  // Surg 2 until this time or later says so on Coverage.
+  callAfter: '16:30',
+
   // Availability rules (chief, 9/2026). A resident whose block text is in
   // freeTexts — or a Surg role / OR block with nothing booked — counts as
   // available to take a case or cover a clinic. CPEC is a clinic, not free

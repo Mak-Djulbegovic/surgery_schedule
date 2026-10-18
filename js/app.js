@@ -60,8 +60,10 @@
   var coverageTime = null;   // minutes; null = default (now if today, else 1 PM)
   var coverageFollowNow = true;
   // Coverage: add-ons to place, each with its own time (null = the planner's
-  // default time: now if today, else 1 PM)
-  var planItems = [{ kind: 'globe', t: null }];
+  // default time: now if today, else 1 PM). Starts empty — no globe until
+  // one is entered (10/18/2026: with no globe, Surg 2 is free for clinic
+  // cover).
+  var planItems = [];
 
   // New-year setup (UISPEC5 §E): the built-in data object is captured at boot
   // so 'Remove imported configuration' can always revert to it; usingOverride
@@ -1729,6 +1731,25 @@
               }
             }, [el('span', { class: 'res-mark', text: '+' }), el('b', { text: sugg.name }), el('span', { class: 'res-via', text: suggVia(sugg) })]));
           }
+          // a globe waits for Surg 2 (data.alwaysTakes): one click starts it
+          // when they are out of the case they are in
+          if (!chk.out && info && info.spans.length && window.Assign.alwaysRole && window.Assign.alwaysRole(c, data())) {
+            var wf = window.Assign.whenFree(assigned, info.spans[0].start, b, c.id);
+            if (wf.start > info.spans[0].start) {
+              badLine.appendChild(el('button', {
+                type: 'button', class: 'btn btn-small',
+                text: 'Start it at ' + window.Status.fmtClock(wf.start),
+                title: assigned + ' is ' + wf.text + ' — ' + window.Assign.alwaysRole(c, data()) + ' always takes it, so it starts when they are free',
+                onclick: function () {
+                  c.start = window.Status.fmtHHMM(wf.start);
+                  touch();
+                  computeBoard();
+                  renderSurgeryTab();
+                  toast(caseLabelOf(c) + ' now starts at ' + window.Status.fmtClock(wf.start) + ', when ' + assigned + ' is free');
+                }
+              }));
+            }
+          }
           sub.appendChild(badLine);
         }
         if (c.done && info && info.done) {
@@ -3142,13 +3163,146 @@
     row.appendChild(el('span', { class: 'plan-n', text: String(idx + 1) }));
     row.appendChild(sel);
     row.appendChild(el('label', { class: 'plan-at' }, ['at ', inp]));
-    if (planItems.length > 1) {
-      row.appendChild(el('button', {
-        type: 'button', class: 'btn-icon danger', title: 'Remove this add-on', text: '×',
-        onclick: function () { planItems.splice(idx, 1); renderCoverageBody(); }
-      }));
-    }
+    row.appendChild(el('button', {
+      type: 'button', class: 'btn-icon danger', title: 'Remove this add-on', text: '×',
+      onclick: function () { planItems.splice(idx, 1); renderCoverageBody(); }
+    }));
     return row;
+  }
+
+  // The role that always takes a globe (data.alwaysTakes — Surg 2), or ''
+  function globeRole() {
+    return window.Assign && window.Assign.alwaysRole ? window.Assign.alwaysRole({ category: 'trauma' }, data()) : '';
+  }
+
+  // Cases of `name` that pull them out of a PM clinic -> [{ c, plan }]
+  function pmPulls(name) {
+    var b = App.board;
+    var out = [];
+    (App.state.cases || []).forEach(function (c) {
+      if (trim(c.assigned) !== name || caseDone(c)) return;
+      var plan = null;
+      try { plan = window.Assign.backupPlan(c, App.roster, data(), App.state.cases, b); } catch (e) { plan = null; }
+      if (plan && plan.window && plan.window.end > b.noon) out.push({ c: c, plan: plan });
+    });
+    return out.sort(function (x, y) { return x.plan.window.start - y.plan.window.start; });
+  }
+
+  // What `role`'s holder is already doing today: their cases and the
+  // clinics they are covering -> ['in Tyson x3 1:00–2:30 PM', …]
+  function roleCommitments(n) {
+    var S = window.Status;
+    var b = App.board;
+    var out = [];
+    ['am', 'pm'].forEach(function (sess) {
+      var a = b.actingSurg(n, sess);
+      if (!a) return;
+      var lo = sess === 'am' ? b.dayStart : b.noon;
+      var hi = sess === 'am' ? b.noon : b.dayEnd;
+      b.segments(a.name).forEach(function (sg) {
+        var st = sg.status || {};
+        if (sg.end <= lo || sg.start >= hi) return;
+        if (!(st.kind === 'case' || (st.kind === 'clinic' && st.viaCase))) return;
+        var from = Math.max(sg.start, lo);
+        var to = Math.min(sg.end, hi);
+        var last = out[out.length - 1];
+        // one case across noon is one entry
+        if (last && last.name === a.name && last.label === st.label && last.to === from) { last.to = to; return; }
+        out.push({ name: a.name, for: a.for, kind: st.kind, label: st.label, from: from, to: to });
+      });
+    });
+    return out.map(function (x) {
+      return (x.for ? x.name + ': ' : '') + (x.kind === 'case' ? 'in ' : '') + x.label + ' ' + shortClock(x.from) + '–' + S.fmtClock(x.to);
+    });
+  }
+
+  // Surg 2 with no globe entered (10/18/2026: "if there is no globe
+  // selected in the coverage tab then surg 2 should be available for
+  // clinic to cover other surgery service … they may be the one to take
+  // over the OR if needed (least redundancy is on Wednesdays)"). Who is
+  // Surg 2, what they already have today, and the Surg 3 / Surg 4 PM
+  // clinics they are first to cover.
+  function surg2Today() {
+    var b = App.board;
+    var r = App.roster || {};
+    var box = el('div', { class: 'surg2-today' });
+    var s2 = (r.surg || {})['2'];
+    if (!s2 || !s2.name || !b.byName[s2.name]) {
+      box.appendChild(el('p', { class: 'empty-note', text: 'No Surg 2 on the block schedule today.' }));
+      return box;
+    }
+    var who = roleWho(s2.name, function (sess) { return b.actingSurg('2', sess); });
+    var nobody = !b.actingSurg('2', 'am') && !b.actingSurg('2', 'pm');
+    // globes already on Surgery today (service, not checked off)
+    var globes = (App.state.cases || []).filter(function (c) {
+      return c.category === 'trauma' && c.serviceCount > 0 && !caseDone(c);
+    }).map(function (c) { return { c: c, info: b.caseInfo[c.id] }; }).filter(function (g) { return g.info && g.info.spans.length; });
+    if (globes.length) {
+      var gl = el('ul', { class: 'surg2-clinics surg2-globes' });
+      globes.sort(function (x, y) { return x.info.start - y.info.start; }).forEach(function (g) {
+        var a = trim(g.c.assigned);
+        var bk = trim(g.c.backup);
+        gl.appendChild(el('li', {}, [
+          el('b', { text: caseLabelOf(g.c) + ' ' + shortClock(g.info.start) + '–' + window.Status.fmtClock(g.info.end) }), ' → ',
+          a ? el('b', { text: a }) : el('span', { class: 'bad-text', text: 'no resident yet' }),
+          bk ? ' · backup ' + (bk === 'NC' ? 'NC' : bk) + (g.c.backupNote ? ' (' + g.c.backupNote + ')' : '') : ''
+        ]));
+      });
+      box.appendChild(el('p', { class: 'surg2-lede' }, [
+        el('b', { text: 'Globe today' }), ' — Surg 2 is ' + who + '. While Surg 2 is in a globe, clinic cover for Surg 3 / Surg 4 goes to the next free on the clinic-coverage chain.'
+      ]));
+      box.appendChild(gl);
+    } else if (nobody) {
+      box.appendChild(el('p', { class: 'warn-line bad' }, [
+        el('b', { text: 'Surg 2 is out with nobody covering' }), ' (' + who + '). Clinic cover starts at Surg 3 on the chain, and a globe goes down the trauma chain (Surg 3 first).'
+      ]));
+    } else {
+      box.appendChild(el('p', { class: 'surg2-lede' }, [
+        el('b', { text: 'No globe, so Surg 2 is free' }), ' — ', el('b', { text: who }), '. First to cover a clinic when Surg 3 or Surg 4 is in a PM case (the clinic-coverage chain), and can take over a case (the remaining-cases chain).'
+      ]));
+      var busy = roleCommitments('2');
+      if (busy.length) box.appendChild(el('p', { class: 'field-hint', text: 'Already today: ' + busy.join(' · ') }));
+    }
+
+    // the Surg 3 / Surg 4 PM clinics Surg 2 is first to cover
+    var rows = [];
+    ['3', '4'].forEach(function (n) {
+      var a = b.actingSurg(n, 'pm');
+      if (!a) return;
+      var bd = b.base[a.name] && b.base[a.name].pm;
+      if (!bd || bd.kind !== 'clinic' || bd.pullFirst) return;
+      rows.push({ n: n, name: a.name, clinic: bd.text, pulls: pmPulls(a.name) });
+    });
+    if (rows.length) {
+      var list = el('ul', { class: 'surg2-clinics' });
+      rows.forEach(function (row) {
+        var bits = [el('b', { text: row.clinic + ' PM' }), ' — ' + row.name + ' (Surg ' + row.n + ')'];
+        if (!row.pulls.length) bits.push(': in clinic — no PM case yet');
+        row.pulls.forEach(function (p, i) {
+          var bk = trim(p.c.backup);
+          bits.push((i ? '; ' : ': ') + caseLabelOf(p.c) + ' ' + shortClock(p.plan.window.start) + '–' + window.Status.fmtClock(p.plan.window.end) + ' → ');
+          if (bk === 'NC') bits.push(el('span', { class: 'bad-text', text: 'NC — the clinic runs short' }));
+          else if (bk) bits.push(el('b', { text: bk + ' covers' }));
+          else bits.push(el('span', { class: 'bad-text', text: 'no backup yet' + (p.plan.primary ? ' (the chain: ' + p.plan.primary.name + ')' : '') }));
+        });
+        list.appendChild(el('li', {}, bits));
+      });
+      box.appendChild(list);
+      if (rows.length === 2) {
+        box.appendChild(el('p', { class: 'warn-line' }, [
+          el('b', { text: 'Both have a PM clinic today' }),
+          ' (' + rows[0].clinic + ', ' + rows[1].clinic + '): ' + (globes.length
+            ? 'while Surg 2 is in the globe, both go to the next free on the clinic-coverage chain when their residents are in cases.'
+            : 'Surg 2 can cover only one at a time — if both are in cases, the other goes to the next free on the clinic-coverage chain.')
+        ]));
+      }
+    } else {
+      box.appendChild(el('p', { class: 'field-hint', text: 'Surg 3 and Surg 4 have no PM clinic today.' }));
+    }
+    if (!nobody && !globes.length && globeRole()) {
+      box.appendChild(el('p', { class: 'field-hint', text: 'A globe: ' + globeRole() + ' always takes it — scrubbed, it starts when they are free. Add it below to see who then covers what they were covering.' }));
+    }
+    return box;
   }
 
   function planCard(t) {
@@ -3156,30 +3310,52 @@
     var b = App.board;
     var many = planItems.length > 1;
     var card = el('div', { class: 'card plan-card' });
-    card.appendChild(el('h2', {}, ['If add-ons come in ', el('span', {
+    card.appendChild(el('h2', {}, ['If a globe or add-on comes in ', el('span', {
       class: 'h-note',
-      text: 'Each at its own time. Assigned in the how-to’s order — add-on glaucoma → Surg 4 and cornea → Surg 3 (Step 6), trauma then plastics (Step 9), anything skipped down the remaining-cases chain in time order (Step 10) — nobody taking two at once. If that order would leave an add-on with nobody while another choice covers it, the plan takes that choice and says so.'
+      text: 'Each at its own time. A globe always goes to ' + (globeRole() || 'its chain') + ' — scrubbed, it starts when they are free. The rest in the how-to’s order — add-on glaucoma → Surg 4 and cornea → Surg 3 (Step 6), plastics (Step 9), anything skipped down the remaining-cases chain in time order (Step 10) — nobody taking two at once. If that order would leave an add-on with nobody while another choice covers it, the plan takes that choice and says so.'
     })]));
+    var hasGlobe = planItems.some(function (it) { return it.kind === 'globe'; });
+    if (!hasGlobe) card.appendChild(surg2Today());
+
+    function addButtons() {
+      var last = planItems[planItems.length - 1];
+      var at = last ? planTimeOf(last, t) : null;
+      return el('div', { class: 'plan-add' }, [
+        hasGlobe ? null : el('button', {
+          type: 'button', class: 'btn btn-small' + (planItems.length ? '' : ' btn-primary'), text: '+ A globe comes in',
+          onclick: function () { planItems.push({ kind: 'globe', t: at }); renderCoverageBody(); }
+        }),
+        el('button', {
+          type: 'button', class: 'btn btn-small', text: planItems.length ? '+ Add another add-on' : '+ Another add-on',
+          onclick: function () { planItems.push({ kind: 'cornea', t: at }); renderCoverageBody(); }
+        }),
+        isToday() && planItems.length ? el('button', {
+          type: 'button', class: 'btn btn-small', text: 'Times → now',
+          title: 'Set every add-on to the current time',
+          onclick: function () { planItems.forEach(function (it) { it.t = null; }); coverageFollowNow = true; coverageTime = null; renderCoverageBody(); }
+        }) : null
+      ]);
+    }
+    if (!planItems.length) {
+      card.appendChild(addButtons());
+      return card;
+    }
     var rows = el('div', { class: 'plan-rows' });
     planItems.forEach(function (item, idx) { rows.appendChild(planRow(item, idx, t)); });
     card.appendChild(rows);
-    card.appendChild(el('div', { class: 'plan-add' }, [
-      el('button', {
-        type: 'button', class: 'btn btn-small', text: '+ Add another add-on',
-        onclick: function () {
-          var last = planItems[planItems.length - 1];
-          planItems.push({ kind: 'globe', t: last ? planTimeOf(last, t) : null });
-          renderCoverageBody();
-        }
-      }),
-      isToday() ? el('button', {
-        type: 'button', class: 'btn btn-small', text: 'Times → now',
-        title: 'Set every add-on to the current time',
-        onclick: function () { planItems.forEach(function (it) { it.t = null; }); coverageFollowNow = true; coverageTime = null; renderCoverageBody(); }
-      }) : null
-    ]));
+    card.appendChild(addButtons());
 
     var list = planItems.map(function (it) { return { kind: it.kind, t: planTimeOf(it, t) }; });
+    var callAfter = S.parseClock(data().callAfter || '16:30');
+    // 'Samuel is in Tyson x3 until 2:30 PM (est.) → starts 2:30 PM' and the
+    // notes that go with a globe that waits
+    function waitNotes(it, who) {
+      var out = [];
+      if (it.waitText) out.push(who + ' is ' + it.waitText + ' → it starts at ' + S.fmtClock(it.start) + ', when they are free (' + it.always + ' always takes it)');
+      if (it.overlap) out.push(who + ' also has ' + it.overlap + ' booked during it — hand one off or move it');
+      if (it.always && callAfter != null && it.start >= callAfter) out.push('Starts at ' + S.fmtClock(it.start) + ' — if the patient has not rolled back by ' + S.fmtClock(callAfter) + ', it can be passed to the call person');
+      return out;
+    }
     if (many) {
       var joint = window.Assign.planAddOns(list, t, App.roster, data(), b);
       if (joint.unfilledByOrder > joint.unfilled) {
@@ -3194,16 +3370,19 @@
         ]));
       }
       var box = el('div', { class: 'plan-joint' });
-      joint.items.slice().sort(function (x, y) { return x.time - y.time; }).forEach(function (it) {
+      joint.items.slice().sort(function (x, y) { return x.start - y.start || x.time - y.time; }).forEach(function (it) {
         var row = el('div', { class: 'plan-joint-row' + (it.pick ? '' : ' bad') });
         row.appendChild(el('span', { class: 'plan-joint-kind' }, [
-          el('span', { class: 'plan-joint-time', text: S.fmtClock(it.time) }), ' ', it.label
+          el('span', { class: 'plan-joint-time', text: S.fmtClock(it.start) }), ' ', it.label,
+          it.start !== it.time ? el('span', { class: 'plan-why', text: ' (in at ' + S.fmtClock(it.time) + ')' }) : null
         ]));
         var skips = skipSummary(it);
+        var notes = it.pick ? waitNotes(it, it.pick.name) : [];
         row.appendChild(el('span', { class: 'plan-joint-who' }, it.pick ? [
           '→ ', el('b', { text: it.pick.name }), el('span', { class: 'plan-via', text: ' ' + it.pick.via }),
-          el('span', { class: 'plan-why', text: ' — ' + statusBrief(it.status) }),
-          skips ? el('span', { class: 'plan-why plan-skips', text: skips }) : null
+          el('span', { class: 'plan-why', text: ' — ' + (it.waitText ? 'free at ' + S.fmtClock(it.start) : statusBrief(it.status)) }),
+          skips ? el('span', { class: 'plan-why plan-skips', text: skips }) : null,
+          notes.length ? el('span', { class: 'plan-why plan-skips', text: notes.join('. ') + '.' }) : null
         ] : [
           '⚠ nobody in the how-to chain is free — Surg 2’s call',
           el('span', { class: 'plan-why plan-skips', text: outsideText(it.outside, it.pullable) + (skips ? '. ' + skips : '') })
@@ -3219,7 +3398,8 @@
             type: 'button', class: 'btn btn-primary',
             text: 'Add ' + (filled.length === 1 ? 'it' : 'all ' + filled.length) + ' as add-on cases',
             onclick: function () {
-              filled.forEach(function (it) { addPlannedCase(it.kind, it.time, it.pick.name, it.handoff); });
+              filled.forEach(function (it) { addPlannedCase(it.kind, it.start, it.pick.name, it.handoff); });
+              planItems = [];
               touch();
               refreshEverything();
               toast(filled.length + ' add-on case' + (filled.length === 1 ? '' : 's') + ' added — fill in the surgeons on Surgery');
@@ -3235,9 +3415,11 @@
     var plan = window.Assign.planAddOn(one.kind, one.t, App.roster, data(), b);
     card.appendChild(el('div', {
       class: 'field-hint plan-chain',
-      text: 'How-to Step ' + plan.step + ': ' + plan.hierLabel +
-        (plan.step < 10 ? ' — if nobody on it can, skip for now and use the remaining-cases chain (Step 10)' : '') +
-        '. Past the chain it’s Surg 2’s call.'
+      text: plan.always
+        ? plan.always + ' always takes a globe — whoever covers them is ' + plan.always + '. Only out with nobody covering, or on the ER, consults or Path, sends it down the trauma chain (how-to Step ' + plan.step + ').'
+        : 'How-to Step ' + plan.step + ': ' + plan.hierLabel +
+          (plan.step < 10 ? ' — if nobody on it can, skip for now and use the remaining-cases chain (Step 10)' : '') +
+          '. Past the chain it’s Surg 2’s call.'
     }));
     var ol = el('ol', { class: 'plan-steps' });
     var shownAlt = 0;
@@ -3252,7 +3434,7 @@
         el('span', { class: 'plan-verdict', text: st.verdict === 'take' ? '✓ takes it' : st.verdict === 'skip' ? 'skip' : 'next' }),
         el('b', { text: st.name }),
         el('span', { class: 'plan-via', text: ' ' + st.via }),
-        el('span', { class: 'plan-why', text: ' — ' + (st.why || statusBrief(st.status)) })
+        el('span', { class: 'plan-why', text: ' — ' + (st.why || (st.always && plan.waitText ? plan.waitText : statusBrief(st.status))) })
       ]));
       return false;
     });
@@ -3262,17 +3444,24 @@
       card.appendChild(el('div', { class: 'warn-line bad', text: '⚠ Nobody in the how-to chain is free — Surg 2’s call: ' + outsideText(plan.outside, plan.pullable) + '.' }));
       return card;
     }
+    waitNotes(plan, plan.pick.name).forEach(function (n, i) {
+      card.appendChild(el('div', { class: 'warn-line' + (i ? '' : ' plan-wait') }, [i ? n : el('b', { text: n })]));
+    });
     var ho = plan.handoff;
     if (ho) card.appendChild(handoffLine(plan.pick.name, ho));
+    else if (plan.always && plan.pickStatus && plan.pickStatus.kind === 'free') {
+      card.appendChild(el('div', { class: 'field-hint', text: plan.pick.name + ' is not covering a clinic then — nothing to hand off.' }));
+    }
     card.appendChild(el('div', { class: 'plan-actions' }, [
       el('button', {
         type: 'button', class: 'btn btn-primary',
-        text: 'Add it as an add-on case → ' + plan.pick.name + (ho && ho.primary ? ' (backup ' + ho.primary.name + ')' : ''),
+        text: 'Add it as an add-on case' + (plan.start !== one.t ? ' at ' + S.fmtClock(plan.start) : '') + ' → ' + plan.pick.name + (ho && ho.primary ? ' (backup ' + ho.primary.name + ')' : ''),
         onclick: function () {
-          var def = addPlannedCase(one.kind, one.t, plan.pick.name, ho);
+          var def = addPlannedCase(one.kind, plan.start, plan.pick.name, ho);
+          planItems = [];
           touch();
           refreshEverything();
-          toast(def.label + ' added at ' + S.fmtClock(one.t) + ' → ' + plan.pick.name + ' — fill in the surgeon on Surgery');
+          toast(def.label + ' added at ' + S.fmtClock(plan.start) + ' → ' + plan.pick.name + ' — fill in the surgeon on Surgery');
         }
       }),
       el('span', { class: 'field-hint', text: 'Adds it to Surgery (Wills) so the board, clinics and the copied schedule all follow.' })
@@ -3436,13 +3625,17 @@
       ]));
     }
     wrap.appendChild(list);
-    wrap.appendChild(el('span', { class: 'field-hint roles-hint', text: 'Whoever covers someone out takes their place in every chain below.' }));
+    wrap.appendChild(el('span', { class: 'field-hint roles-hint' }, [
+      'Whoever covers someone out takes their place in every chain below. ',
+      el('button', { type: 'button', class: 'btn-link roles-rules', text: 'The rules ↓', onclick: showCoverageRules })
+    ]));
     return wrap;
   }
 
   function renderCoverageTab() {
     renderCoverageBody();
     renderAddOnsCard();
+    renderCoverageRules();
   }
 
   function renderCoverageBody() {
@@ -4058,10 +4251,11 @@
     PLASTICS_OR_JUNIOR: 'junior on Plastics OR'
   };
 
-  function chainText(key, fallback) {
+  // `skip`: tokens to leave out
+  function chainText(key, fallback, skip) {
     var h = (data().hierarchy || {})[key];
     if (!h || !(h.chain || []).length) return fallback;
-    return h.chain.map(function (tok) { return CHAIN_TOKEN_LABELS[tok] || tok; }).join(' → ');
+    return h.chain.filter(function (tok) { return (skip || []).indexOf(tok) === -1; }).map(function (tok) { return CHAIN_TOKEN_LABELS[tok] || tok; }).join(' → ');
   }
 
   /* ------------------------------------------------------------------ */
@@ -4110,11 +4304,11 @@
     return ul;
   }
 
-  // A chain as chips: Surg 2 → Surg 3 → …
-  function chainChips(key) {
+  // A chain as chips: Surg 2 → Surg 3 → … (`skip`: tokens to leave out)
+  function chainChips(key, skip) {
     var h = (data().hierarchy || {})[key];
     var wrap = el('span', { class: 'fc-chain' });
-    ((h && h.chain) || []).forEach(function (tok, i) {
+    ((h && h.chain) || []).filter(function (tok) { return (skip || []).indexOf(tok) === -1; }).forEach(function (tok, i) {
       if (i) wrap.appendChild(el('span', { class: 'fc-chain-sep', 'aria-hidden': 'true', text: '→' }));
       wrap.appendChild(el('span', { class: 'fc-chip', text: CHAIN_TOKEN_LABELS[tok] || tok }));
     });
@@ -4150,8 +4344,17 @@
       el('button', { type: 'button', class: 'btn btn-small', text: 'Print / save as PDF', onclick: function () { window.print(); } }),
       el('span', { class: 'field-hint', text: 'Built from the active configuration — the chains below are the ones the app uses.' })
     ]));
+    host.appendChild(dayFlowCard());
+    var cards = flowCards();
+    [cards.surg2, cards.out, cards.cases, cards.clinic].forEach(function (c) { host.appendChild(c); });
+  }
 
-    // 1. the day
+  // The rule cards, for Library → Flow chart and the foot of Coverage.
+  function flowCards() {
+    return { surg2: surg2FlowCard(), out: outFlowCard(), cases: casesFlowCard(), clinic: clinicFlowCard() };
+  }
+
+  function dayFlowCard() {
     var day = refCard('The day, step by step');
     day.appendChild(el('p', { class: 'field-hint flow-lede', text: 'Follow the tabs in order. Each one feeds the live board, and every tab after it reads that board — so what you change on one tab shows up on every tab after it.' }));
     var ol = el('ol', { class: 'flow-steps' });
@@ -4167,9 +4370,10 @@
       el('b', { text: 'One live board' }),
       el('span', { text: ' — every 5 minutes, who is out, in a case, in clinic, on a fixed duty, or free. Steps 1–4 build it; Coverage keeps it current through the day (cases checked off, add-ons, an OR running late).' })
     ]));
-    host.appendChild(day);
+    return day;
+  }
 
-    // 2. someone is out
+  function outFlowCard() {
     var out = refCard('Someone is out');
     out.appendChild(fcFlow([
       fcNode('start', 'Out today: who is out — all day, AM or PM'),
@@ -4181,7 +4385,7 @@
       el('div', { class: 'fc-branches' }, [
         el('div', { class: 'fc-branch' }, [el('div', { class: 'fc-branch-label', text: 'A resident' }),
           fcNode('ok', 'They do that resident’s job for the session', [
-            'Their duty, and their place in every chain. Cover Surg 2 and you are Surg 2: first for trauma, the remaining cases and clinic cover — and the daytime add-on call.',
+            'Their duty, and their place in every chain. Cover Surg 2 and you are Surg 2: every globe, first for the remaining cases and clinic cover — and the daytime add-on call.',
             'Your own clinic is then a gap to cover (unless ' + noCoverWords() + ').'
           ])]),
         el('div', { class: 'fc-branch' }, [el('div', { class: 'fc-branch-label', text: 'NC' }),
@@ -4192,9 +4396,10 @@
       fcArrow(),
       fcNode('end', 'Cases they were already on', 'Show up under Needs coverage on Coverage — “X is out: needs a new resident” — with the how-to’s pick one click away.')
     ]));
-    host.appendChild(out);
+    return out;
+  }
 
-    // 3. who takes a case
+  function casesFlowCard() {
     var cases = refCard('Who takes a case');
     cases.appendChild(el('p', { class: 'field-hint flow-lede', text: 'Every case type has its step of the how-to and its chain. Cases are assigned step by step in this order; within Step 10, in time order.' }));
     var tbl = el('div', { class: 'flow-chains' });
@@ -4231,10 +4436,120 @@
         'No'),
       fcNode('end', 'Done', 'Check the case off on Coverage when it finishes — the resident is free from then.')
     ]));
-    cases.appendChild(el('p', { class: 'field-hint flow-note', text: 'Add-ons on Coverage follow the same steps, each at its own time, nobody taking two at once. If that order would leave an add-on with nobody while another choice covers it, the planner takes that choice and says so.' }));
-    host.appendChild(cases);
+    cases.appendChild(el('p', { class: 'field-hint flow-note', text: (globeRole() ? 'A globe is the exception: ' + globeRole() + ' always takes it (' + globeRole() + ' and the globe). ' : '') + 'Add-ons on Coverage follow the same steps, each at its own time, nobody taking two at once. If that order would leave an add-on with nobody while another choice covers it, the planner takes that choice and says so.' }));
+    return cases;
+  }
 
-    // 4. who covers a clinic
+  // This week's PM clinics for Surg 3 and Surg 4, from the block schedule
+  // alone (no absences, no cases) -> { rows: [{ n, clinic, days }], both:
+  // the days both have one } — the clinics Surg 2 is first to cover.
+  function surgPmClinicWeek() {
+    var E = window.Engine;
+    var S = window.Status;
+    var out = { rows: [], both: [] };
+    if (!E || !S || !App.state || !App.state.date) return out;
+    var d = parseISO(App.state.date);
+    var mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+    var pf = (data().availability || {}).pullFirstTexts || ['Retina', 'Retina Private', 'Uveitis'];
+    var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    var byKey = {};
+    DAYS.forEach(function (label, i) {
+      var r = null;
+      try { r = E.resolveDay(isoOf(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i)), data()); } catch (e) { r = null; }
+      if (!r || r.isWeekend || r.inYear === false) return;
+      var count = 0;
+      ['3', '4'].forEach(function (n) {
+        var s = r.surg && r.surg[n];
+        if (!s || !s.name) return;
+        var res = (r.residents || []).filter(function (x) { return x.name === s.name; })[0];
+        var txt = trim(res && res.pm && res.pm.text);
+        if (!txt || pf.indexOf(txt) !== -1 || S.kindOfClass(S.classifyText(txt, data())) !== 'clinic') return;
+        var k = n + '|' + txt;
+        if (!byKey[k]) { byKey[k] = { n: n, clinic: txt, days: [] }; out.rows.push(byKey[k]); }
+        byKey[k].days.push(label);
+        count++;
+      });
+      if (count === 2) out.both.push(label);
+    });
+    out.rows.sort(function (x, y) { return x.n - y.n; });
+    return out;
+  }
+
+  // Surg 2 and the globe (10/18/2026: "surg 2 is ALWAYS going to take a
+  // globe. where we get into issues is when Surg 2 is in a globe then the
+  // surg 3 person may have a corneal transplant (PKP) while they have
+  // clinic on M, W, or F afternoon … glaucoma cases going during the PM
+  // clinic on T, W, Th"; "if there is no globe … surg 2 should be
+  // available for clinic to cover other surgery service … least
+  // redundancy is on Wednesdays"). The days come from the block schedule.
+  function surg2FlowCard() {
+    var S = window.Status;
+    var role = globeRole();
+    var wk = surgPmClinicWeek();
+    var card = refCard((role || 'Surg 2') + ' and the globe');
+    var clinics = wk.rows.map(function (r) { return r.clinic + ' (Surg ' + r.n + ') ' + r.days.join(', '); });
+    var callAfter = S ? S.parseClock(data().callAfter || '16:30') : null;
+    var freeBody = [
+      'First to cover a clinic when Surg 3 or Surg 4 is in a PM case (first on the clinic-coverage chain), and can take over a case (first on the remaining-cases chain).'
+    ];
+    if (clinics.length) freeBody.push('PM clinics this week: ' + clinics.join(' · ') + '.');
+    if (wk.both.length) freeBody.push('Both on ' + wk.both.join(', ') + ' — the least slack: Surg 2 covers one, and if both are in cases at once the next free on the chain covers the other.');
+    if (!role) {
+      card.appendChild(el('p', { class: 'field-hint flow-lede', text: 'No role always takes a globe in this configuration — a globe walks the trauma chain like any add-on (Who takes a case).' }));
+      card.appendChild(fcFlow([fcNode('ok', 'With no globe, Surg 2 is free', freeBody)]));
+      return card;
+    }
+    card.appendChild(fcFlow([
+      fcDecision('A globe today?', 'No', fcNode('ok', role + ' is free', freeBody), 'Yes'),
+      fcNode('ok', role + ' takes it — always', [
+        'Whoever covers ' + role + ' is ' + role + '. Scrubbed in a case? The globe waits: it starts when they are free (Coverage adds it at that time; Surgery offers “Start it at …”).',
+        el('div', { class: 'fc-text' }, ['Only out with nobody covering, or on the ER, consults or Path: down the trauma chain — ', chainChips('traumaPlasticsAddOn', ['PLASTICS_OR_JUNIOR', role])])
+      ]),
+      fcArrow(),
+      fcDecision('Was ' + role + ' covering a clinic then?', 'No', fcNode('end', 'Nothing to hand off'), 'Yes'),
+      fcNode('check', 'The next free on the clinic-coverage chain covers it', [
+        chainChips('clinicCoverage', [role]),
+        el('div', { class: 'fc-text', text: 'The usual: Surg 3 in a PKP during Cornea clinic, or a glaucoma case during Glaucoma clinic — ' + role + ' was covering, the globe takes them, the clinic passes on.' + (wk.both.length ? ' On ' + wk.both.join(', ') + ' both clinics can need someone at once.' : '') })
+      ]),
+      fcArrow('if it waits late'),
+      fcNode('end', callAfter != null ? 'Starting ' + S.fmtClock(callAfter) + ' or later' : 'Late in the day', 'If the patient has not rolled back to the OR by ' + (callAfter != null ? S.fmtClock(callAfter) : '4:30') + ', it can be passed to the call person.')
+    ]));
+    return card;
+  }
+
+  // The rules on Coverage (10/18/2026: "make the flow chart on the
+  // coverage page to allow the user to know what the rules are"): the
+  // same cards as Library → Flow chart, the ones used on the day first.
+  // Open unless this browser closed it.
+  var COVERAGE_RULES_KEY = 'surgsched:v1:ui:coverageRules';
+
+  function renderCoverageRules() {
+    var host = $('coverageRules');
+    if (!host) return;
+    clearNode(host);
+    if (!App.board || !App.board.order.length) return;
+    var det = el('details', { class: 'cov-rules' });
+    det.open = lsGet(COVERAGE_RULES_KEY) !== 'closed';
+    det.appendChild(el('summary', { class: 'cov-rules-sum' }, [
+      el('span', { class: 'cov-rules-title', text: 'The rules — flow chart' }),
+      el('span', { class: 'h-note', text: 'Who takes a globe, who covers a clinic, who takes a case, someone out. Built from the active configuration — the same as Library → Flow chart.' })
+    ]));
+    det.addEventListener('toggle', function () { lsSet(COVERAGE_RULES_KEY, det.open ? 'open' : 'closed'); });
+    var cards = flowCards();
+    [cards.surg2, cards.clinic, cards.cases, cards.out].forEach(function (c) { det.appendChild(c); });
+    host.appendChild(det);
+  }
+
+  function showCoverageRules() {
+    var host = $('coverageRules');
+    var det = host && host.querySelector('details');
+    if (!det) return;
+    det.open = true;
+    lsSet(COVERAGE_RULES_KEY, 'open');
+    det.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function clinicFlowCard() {
     var cl = refCard('Who covers a clinic');
     cl.appendChild(fcFlow([
       fcNode('start', 'Someone leaves a clinic', 'Pulled into a case, covering someone who is out, or a morning OR running past ' + ((window.Status && App.board) ? window.Status.fmtClock(App.board.pmClinicStart) : '12:30 PM') + '.'),
@@ -4248,7 +4563,7 @@
         'Yes'),
       fcNode('end', 'They cover', 'Printed as the backup on the case line; the clinic shows who stands in.')
     ]));
-    host.appendChild(cl);
+    return cl;
   }
 
   /* ------------------------------------------------------------------ */
@@ -4394,12 +4709,17 @@
       'Scheduled cornea → Surg 3. Scheduled glaucoma → Surg 4.',
       'Add-on glaucoma → Surg 4. Add-on cornea (incl. trauma needing tissue) → Surg 3. Busy in a case? Skip for now.',
       'Scheduled plastics → ' + chainText('scheduledPlastics', 'PGY-2 on Plastics OR → free junior → Surg 4') + '.',
-      'Peds → ' + chainText('peds', 'junior on Peds OR → free junior → Surg 4 → Surg 3') + '.',
-      'Trauma and plastics add-ons → ' + chainText('traumaPlasticsAddOn', 'junior on Plastics OR → Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + ' (the plastics junior only for TABs / outpatient plastics).',
+      'Peds → ' + chainText('peds', 'junior on Peds OR → free junior → Surg 4 → Surg 3') + '.'
+    ].concat(globeRole() ? [
+      'A globe → ' + globeRole() + ', always — whoever covers them is ' + globeRole() + '; scrubbed, it starts when they are free. Only out with nobody covering, or on the ER, consults or Path: ' + chainText('traumaPlasticsAddOn', 'Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5', ['PLASTICS_OR_JUNIOR', globeRole()]) + '.',
+      'Plastics add-ons → ' + chainText('traumaPlasticsAddOn', 'junior on Plastics OR → Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + ' (the plastics junior only for TABs / outpatient plastics).'
+    ] : [
+      'Trauma and plastics add-ons → ' + chainText('traumaPlasticsAddOn', 'junior on Plastics OR → Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + ' (the plastics junior only for TABs / outpatient plastics).'
+    ]).concat([
       'Anything skipped or left, chronologically: ' + chainText('remaining', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + '.',
-      'PM clinic coverage: ' + chainText('clinicCoverage', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 → Wills OR → Retina') + '.',
+      'PM clinic coverage: ' + chainText('clinicCoverage', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 → Wills OR → Retina') + '. With no globe, Surg 2 is the one free to cover Cornea / Glaucoma clinic when Surg 3 / Surg 4 has a PM case — or to take over a case.',
       'Past the end of a chain it is Surg 2’s call — the app shows who else is free but does not pick them.'
-    ], 'howto-rules'));
+    ]), 'howto-rules'));
     rules.appendChild(el('div', { class: 'howto-foot' }, [
       el('span', { class: 'field-hint', text: 'The same rules as a flow chart, and the full chains, notes and block grids, are in the Library.' }),
       el('button', {
@@ -4903,6 +5223,7 @@
     refreshAddOnsForDate(); // untouched add-on rows follow the schedule date
     coverageTime = null;
     coverageFollowNow = true;
+    planItems = [];
     addOnOther = {};
     computeRoster();
     renderAll();
