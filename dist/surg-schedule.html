@@ -1207,7 +1207,7 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
   display: inline-flex; align-items: baseline; gap: 6px; font-size: 13px;
   border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; background: #fff;
 }
-.role-chip .role-k { font-size: 11px; font-weight: 700; color: var(--muted); }
+.role-chip .role-k { font-size: 11px; font-weight: 700; color: var(--muted); white-space: nowrap; }
 .role-chip.changed { border-color: var(--amber-border); background: var(--amber-bg); }
 .role-chip.changed b { color: var(--amber-text); }
 .roles-hint { flex-basis: 100%; }
@@ -1679,6 +1679,7 @@ select.imp-type.unset { border-color: var(--amber-border); background: var(--amb
   .flow-chain-row { padding: 3px 0; }
   .flow-chains { margin-bottom: 10px; }
 }
+.flow-note { margin-top: 12px; max-width: 860px; }
 
 </style>
 </head>
@@ -10670,6 +10671,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         'No'),
       fcNode('end', 'Done', 'Check the case off on Coverage when it finishes — the resident is free from then.')
     ]));
+    cases.appendChild(el('p', { class: 'field-hint flow-note', text: 'Add-ons on Coverage follow the same steps, each at its own time, nobody taking two at once. If that order would leave an add-on with nobody while another choice covers it, the planner takes that choice and says so.' }));
     host.appendChild(cases);
 
     // 4. who covers a clinic

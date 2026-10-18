@@ -4171,6 +4171,7 @@
         'No'),
       fcNode('end', 'Done', 'Check the case off on Coverage when it finishes — the resident is free from then.')
     ]));
+    cases.appendChild(el('p', { class: 'field-hint flow-note', text: 'Add-ons on Coverage follow the same steps, each at its own time, nobody taking two at once. If that order would leave an add-on with nobody while another choice covers it, the planner takes that choice and says so.' }));
     host.appendChild(cases);
 
     // 4. who covers a clinic
