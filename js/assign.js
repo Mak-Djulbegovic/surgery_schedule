@@ -32,6 +32,7 @@
   'use strict';
 
   var FREE_JUNIOR_LABEL = "free junior — Surg 2's discretion";
+  var NOON = 12 * 60; // AM before noon, PM from noon — as on the board (status.js)
 
   function getData(data) {
     if (data) return data;
@@ -219,10 +220,55 @@
     return null;
   }
 
-  // -> { label, names: [..], freeJunior?: true }
+  // -> { label, names: [..], freeJunior?: true, standIn?: { coverer: absent } }
   // `sessions` (optional, e.g. ['pm']) restricts which roster sessions the
   // OR-block / clinic tokens draw from; case chains use both sessions.
-  function resolveToken(token, roster, sessions) {
+  // `ctx` (optional) = { board, sessions }: with a board, each name from the
+  // block schedule is replaced by whoever stands in for them in those
+  // sessions while they are out (board.standIn) — the coverer takes the
+  // absent resident's place in the chain, e.g. Surg 2 c/b Wibbelsman →
+  // "Surg 2" is Wibbelsman. Out and nobody standing in: the name stays, and
+  // the board skips them as out.
+  function resolveToken(token, roster, sessions, ctx) {
+    var r = resolveTokenRaw(token, roster, sessions);
+    var b = ctx && ctx.board;
+    var sess = (ctx && ctx.sessions) || [];
+    if (!b || !b.standIn || r.freeJunior || !r.names.length || !sess.length) return r;
+    var names = [];
+    var standIn = {};
+    r.names.forEach(function (n) {
+      sess.forEach(function (s) {
+        var si = b.standIn(n, s);
+        var who = si || n;
+        if (names.indexOf(who) !== -1) return;
+        names.push(who);
+        if (si) standIn[si] = n;
+      });
+    });
+    return { label: r.label, names: names, standIn: standIn };
+  }
+
+  // The token's label, naming whom a stand-in covers: 'Surg 2 — covering Cheng'
+  function tokenVia(r, name) {
+    return r.standIn && r.standIn[name] ? r.label + ' — covering ' + r.standIn[name] : r.label;
+  }
+
+  // The sessions a set of busy spans touches, in order: ['am'], ['pm'] or
+  // both (AM before noon, PM from noon — as on the board).
+  function sessionsOfSpans(spans) {
+    var am = false;
+    var pm = false;
+    (spans || []).forEach(function (sp) {
+      if (sp.start < NOON) am = true;
+      if (sp.end > NOON || sp.start >= NOON) pm = true;
+    });
+    var out = [];
+    if (am) out.push('am');
+    if (pm) out.push('pm');
+    return out;
+  }
+
+  function resolveTokenRaw(token, roster, sessions) {
     var m = /^Surg (\d)$/.exec(token);
     if (m) {
       var slot = roster && roster.surg && roster.surg[m[1]];
@@ -358,14 +404,20 @@
 
   // One chain, in order, for one case. FREE_JUNIOR ("free and willing 1st
   // or 2nd year at the discretion of Surg 2") resolves to the juniors who
-  // are actually free for the whole case (requireFree).
+  // are actually free for the whole case (requireFree). Everyone else comes
+  // from the block schedule, with stand-ins for whoever is out in the
+  // sessions the case touches (resolveToken).
   function chainCandidates(chain, roster, board, spans, selfId, step) {
     var out = [];
     var seen = {};
-    function push(name, via, token) {
+    var ctx = { board: board, sessions: sessionsOfSpans(spans) };
+    function push(name, via, token, standingFor) {
       if (!name || seen[name]) return;
       seen[name] = true;
-      out.push({ name: name, via: via, token: token, step: step, requireFree: token === 'FREE_JUNIOR', orBlock: !!OR_TOKENS[token] });
+      out.push({
+        name: name, via: via, token: token, step: step, requireFree: token === 'FREE_JUNIOR',
+        orBlock: !!OR_TOKENS[token], standingFor: standingFor || ''
+      });
     }
     (chain || []).forEach(function (token) {
       if (token === 'FREE_JUNIOR') {
@@ -375,8 +427,8 @@
         });
         return;
       }
-      var r = resolveToken(token, roster);
-      r.names.forEach(function (n) { push(n, r.label, token); });
+      var r = resolveToken(token, roster, null, ctx);
+      r.names.forEach(function (n) { push(n, tokenVia(r, n), token, r.standIn && r.standIn[n]); });
     });
     return out;
   }
@@ -487,7 +539,7 @@
     function take(e, w) {
       e.pick = w.primary;
       e.pickStatus = w.primaryStatus;
-      if (!w.primary || trimStr(e.c.assigned)) return; // an assigned case is on the board already
+      if (!w.primary || !e.open) return; // an assigned case is on the board already
       var cl = claimOf(e);
       claims[w.primary.name] = (claims[w.primary.name] || []).concat(e.spans.map(function (sp) {
         return { start: sp.start, end: sp.end, what: cl.what, by: cl.by || null };
@@ -573,7 +625,7 @@
       return {
         caseId: c.id, name: '', status: null, skipped: skipped, alternates: [],
         outside: os.free, pullable: os.pullable,
-        step: e.step, deferred: e.deferred,
+        step: e.step, deferred: e.deferred, replaces: e.replaces,
         reasons: [hier.label + ' — nobody in the how-to chain is free then'],
         warnings: ['Surg 2’s call — ' + outsideWords(os.free, os.pullable)]
       };
@@ -600,10 +652,10 @@
       warnings.push(p.name + ' already has ' + primaryLoad + ' cases — consider next in chain (' + nextName + ')');
     }
     if (board.caseSpansFor(c).unknownStart) warnings.push('No start time — assumed 7:30 AM');
-    if (!trimStr(c.assigned)) load[p.name] = primaryLoad + 1;
+    if (e.open) load[p.name] = primaryLoad + 1;
     return {
       caseId: c.id, name: p.name, status: st, skipped: skipped, outside: [],
-      step: e.step, deferred: e.deferred,
+      step: e.step, deferred: e.deferred, replaces: e.replaces, standingFor: p.standingFor || '',
       reasons: reasons, warnings: warnings, alternates: alternates.slice(0, 6)
     };
   }
@@ -690,15 +742,23 @@
     };
   }
 
+  // With a board: the case's resident is out while it runs (marked out on
+  // Out today after the case was assigned).
+  function assignedOut(c, board) {
+    var a = trimStr(c && c.assigned);
+    if (!a || !board || !board.byName[a]) return false;
+    return board.statusDuringSpans(a, board.caseSpansFor(c).spans, { exclude: c.id }).kind === 'out';
+  }
+
   function suggest(cases, roster, data, board) {
     data = getData(data);
     var hierarchy = (data && data.hierarchy) || {};
 
     // Load = # of cases per resident this pass (pre-existing manual
-    // assignments count from the start).
+    // assignments count from the start — not a case whose resident is out).
     var load = {};
     (cases || []).forEach(function (c) {
-      if (c && c.assigned) load[c.assigned] = (load[c.assigned] || 0) + 1;
+      if (c && c.assigned && !assignedOut(c, board)) load[c.assigned] = (load[c.assigned] || 0) + 1;
     });
 
     var entries = [];
@@ -706,10 +766,13 @@
       if (!c) return;
       var key = classify(c, data);
       var hier = hierarchy[key] || { label: key, chain: [] };
+      var out = assignedOut(c, board);
       entries.push({
         c: c, i: i, key: key, hier: hier, chain: chainFor(key, c, hier),
         step: stepOf(key, hier), sub: subRank(c), private: !needsResident(c),
-        spans: board ? board.caseSpansFor(c).spans : null
+        spans: board ? board.caseSpansFor(c).spans : null,
+        // open = still needs someone: nobody on it, or its resident is out
+        open: !trimStr(c.assigned) || out, replaces: out ? trimStr(c.assigned) : ''
       });
     });
 
@@ -755,7 +818,8 @@
 
   // Who covers `pulled.clinic` over its window — Step 12, the clinic-
   // coverage chain only (Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 →
-  // Surg 5 → Wills OR → Retina, with Uveitis beside Retina). A coverer must
+  // Surg 5 → Wills OR → Retina, with Uveitis beside Retina; whoever stands
+  // in for an absent chain member takes their place). A coverer must
   // be free — not out, in a case, in a clinic, on fixed duty, off-site or on
   // Path — or in a pull-first clinic (Retina / Uveitis: leaving needs no
   // cover). When nobody on the chain can, `outside` / `pullable` list who
@@ -772,13 +836,14 @@
       seen[c.name] = true;
       cands.push({ name: c.name, source: c.source, token: '' });
     });
+    var sess = [pulled.session || 'pm'];
     chain.forEach(function (token) {
       if (token === 'FREE_JUNIOR') return;
-      var r = resolveToken(token, roster, [pulled.session || 'pm']);
+      var r = resolveToken(token, roster, sess, { board: board, sessions: sess });
       r.names.forEach(function (n) {
         if (seen[n]) return;
         seen[n] = true;
-        cands.push({ name: n, source: r.label, token: token });
+        cands.push({ name: n, source: tokenVia(r, n), token: token });
       });
     });
     var steps = [];
@@ -1187,6 +1252,7 @@
     planAddOns: planAddOns,
     lateCover: lateCover,
     stepOf: stepOf,
+    sessionsOfSpans: sessionsOfSpans,
     outsideWords: outsideWords,
     ADDON_KINDS: ADDON_KINDS,
     FREE_JUNIOR_LABEL: FREE_JUNIOR_LABEL

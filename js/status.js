@@ -11,6 +11,12 @@
  *   - the case list: assigned resident, start, service-case times, 'until',
  *   - clinic coverage: a case's backup covers whatever clinic the assigned
  *     resident is pulled out of, for as long as the case runs.
+ *   - stand-ins: whoever covers an absent resident does their job for that
+ *     session — the duty, and their place in every how-to chain
+ *     (board.standIn / actingSurg), so Surg 2 c/b X makes X Surg 2 then.
+ *
+ * board.needs lists what is still open: uncovered absences, clinic gaps,
+ * and service cases with no resident (none yet, or theirs is out).
  *
  * Status kinds (worst first):
  *   out    — vacation / sick / Night Float (post-call); never pulled
@@ -321,6 +327,7 @@
 
     /* absence coverers take over the absent resident's duty that session */
     var coverDuty = {};
+    var standInOf = {}; // 'name|am' -> the resident covering them then
     absences.forEach(function (a) {
       ['am', 'pm'].forEach(function (s) {
         if (!a[s]) return;
@@ -332,6 +339,7 @@
           return;
         }
         map[s] = { for: a.name, text: byName[a.name][s].text, nf: a.reason === 'nightfloat' };
+        standInOf[a.name + '|' + s] = who;
         if (outBy[who] && outBy[who][s]) {
           warnings.push(who + ' is covering ' + a.name + ' ' + s.toUpperCase() + ' but is out too');
         }
@@ -406,6 +414,42 @@
 
     var base = {};
     order.forEach(function (n) { base[n] = { am: baseDutyOf(n, 'am'), pm: baseDutyOf(n, 'pm') }; });
+
+    // Who stands in for `name` in session s: the resident covering them
+    // while they are out. Covering someone is doing their job for that
+    // session — their duty AND their place in every how-to chain, so
+    // "Cheng (Surg 2) c/b Wibbelsman" makes Wibbelsman that session's
+    // Surg 2. Not Day Float standing in for the Night Float resident (Day
+    // Float is never available — chief, 9/2026), and not a coverer who is
+    // out too. '' when nobody stands in (not out, NC, or not decided).
+    function standIn(name, s) {
+      var who = standInOf[name + '|' + s];
+      var cd = who && coverDuty[who] && coverDuty[who][s];
+      if (!cd || cd.for !== name || cd.nf) return '';
+      if (outBy[who] && outBy[who][s]) return '';
+      return who;
+    }
+
+    // Who is Surg n in session s -> { name, for } — the block holder, or
+    // whoever stands in for them while they are out ({ name: 'Wibbelsman',
+    // for: 'Cheng' }). null: the holder is out and nobody stands in.
+    function actingSurg(n, s) {
+      var e = (roster.surg || {})[n];
+      if (!e || !e.name || !byName[e.name]) return null;
+      if (!(outBy[e.name] && outBy[e.name][s])) return { name: e.name, for: '' };
+      var si = standIn(e.name, s);
+      return si ? { name: si, for: e.name } : null;
+    }
+
+    // The Surg roles `name` holds or stands in for in session s -> [{ n, for }]
+    function surgRolesAt(name, s) {
+      var out = [];
+      Object.keys(roster.surg || {}).sort(function (a, b) { return (+a) - (+b); }).forEach(function (n) {
+        var a = actingSurg(n, s);
+        if (a && a.name === name) out.push({ n: n, for: a.for });
+      });
+      return out;
+    }
 
     /* A morning OR running late (live board only — never in the copied
        schedule): the resident stays in the OR from PM clinic start
@@ -759,10 +803,43 @@
       }
     });
 
+    // Service cases left without a resident: nobody on them yet, or their
+    // resident is out while they run — marked out on Out today after the
+    // case was assigned, e.g. Surg 2 calls in sick (why: 'out'). Checked-off
+    // cases are over; private lists need nobody.
+    (day.cases || []).forEach(function (c) {
+      var info = c && c.id && caseInfo[c.id];
+      if (!info || info.done || (parseInt(c.serviceCount, 10) || 0) <= 0) return;
+      var a = info.assigned;
+      var item = { type: 'case', caseId: c.id, label: caseLabel(c), start: info.start, end: info.end, estimated: info.estimated };
+      if (!a) {
+        item.why = 'unassigned';
+        needs.push(item);
+        return;
+      }
+      if (!byName[a]) return;
+      var st = statusDuringSpans(a, info.spans, { exclude: c.id });
+      if (st.kind !== 'out') return;
+      item.why = 'out';
+      item.holder = a;
+      item.outLabel = st.label;
+      needs.push(item);
+    });
+
     // ER first (chief, 9/29/2026: "the ER is sacred, it is the first thing
-    // that needs to be staffed by residents"); the order is otherwise kept.
+    // that needs to be staffed by residents"); then cases whose resident is
+    // out, cases with nobody yet (in time order), absences and clinic gaps —
+    // a case about to start without a resident is the most urgent of the
+    // rest (ASSUMPTION). The order is otherwise kept.
+    function rank(n) {
+      if (n.erFirst) return 0;
+      if (n.type === 'case') return n.why === 'out' ? 1 : 2;
+      return 3;
+    }
     needs.forEach(function (n, i) { n.erFirst = n.type === 'absence' && n.duty === 'ER'; n._i = i; });
-    needs.sort(function (a, b) { return (b.erFirst ? 1 : 0) - (a.erFirst ? 1 : 0) || a._i - b._i; });
+    needs.sort(function (a, b) {
+      return rank(a) - rank(b) || (a.type === 'case' && b.type === 'case' ? a.start - b.start : 0) || a._i - b._i;
+    });
     needs.forEach(function (n) { delete n._i; });
 
     return {
@@ -787,6 +864,9 @@
       pullFirstTexts: pullFirst,
       neverPullTexts: neverPull,
       isOut: function (name, s) { return !!(outBy[name] && outBy[name][s]); },
+      standIn: standIn,
+      actingSurg: actingSurg,
+      surgRolesAt: surgRolesAt,
       caseSpansFor: function (c) { return caseSpans(c, data); },
       dayStart: DAY_START,
       noon: NOON,

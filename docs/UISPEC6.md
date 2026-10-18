@@ -12,10 +12,11 @@ how-to's order. Status: **released as v2 (9/2026)**; v1 is archived in `v1/`.
 | 2 Roster | Step 2 — Surg 1–5 | as before; Surg 3/4 shown as **all day** ("Cornea PM if no case") |
 | 3 Surgery | Steps 3–10 — cases | **one line per attending**, reading like the sent schedule: `Surgeon × # · start · category · svc → resident`. The suggested resident is a dashed pill (one click); an assigned one gets a status dot (green free, amber leaves a clinic, red out/double-booked); the backup line appears under the line only when the case pulls someone out of clinic. Service times / done by / notes / add-on / move / delete sit behind **⋯**. **Enter** adds the next line. The CPEC sheet is a prefill banner (Add all / Choose…) that shrinks to one line once added. The old Assign tab is gone |
 | 4 Clinics | Steps 11–12 — clinics | counts as before; each clinic shows who is out / pulled into a case and who covers; "Needs coverage" list on top |
-| 5 Coverage | the new backup view | needs coverage, available AM / PM (free, then Retina / Uveitis to pull first), "if something comes in at t" (its own time box), a morning OR running late, add-on call names |
+| 5 Coverage | the new backup view | today's roles (with stand-ins for anyone out), needs coverage (everything still open, from every tab), cases to check off, available AM / PM (free, then Retina / Uveitis to pull first), "if add-ons come in" (each at its own time), a morning OR running late, add-on call names |
 | 6 Preview & Copy | — | the document |
 
-How-to, CPEC sheet, block schedules and Setup moved to a **Library** menu.
+How-to, the flow chart (10/18/2026), CPEC sheet, block schedules and Setup
+moved to a **Library** menu.
 
 **Landing page**: a short title only (no greeting, no tagline — the chief:
 "unnecessary for people who have made the schedule before") over a blue
@@ -38,6 +39,93 @@ app bar is two short rows, the free lists fold into one line ("Free AM 13 ·
 PM 9 ▾"), clinic count and note sit side by side, and Available AM /
 PM stack. Preview & Copy lists what is still open
 (cases without a resident, gaps) with links to fix them.
+
+## Coverage follows every tab (10/18/2026)
+
+The request: "the coverage tab does not necessarily correspond to changes
+that were made in prior tabs — if surg 2 is out on vacation, it does not
+account for that in the coverage tab." Reproduced on Mon 10/19 (Surg 2 Cheng
+out, c/b Wibbelsman): a globe went to Surg 3 pulled out of Cornea clinic;
+the daytime add-on call still said Cheng ("Surg 2"); Cheng's 1 PM list was
+still on the check-off list and nowhere under Needs coverage; a morning OR
+running late was covered by Surg 4.
+
+**Root cause.** Every chain resolved "Surg 2" (and Surg 1–5, Cooper, the
+OR-block and Retina tokens) straight from the block schedule. A coverer took
+over the absent resident's clinic slot on the board, never their role.
+
+**The rule now: covering someone is doing their job for that session** —
+their duty AND their place in every how-to chain (`board.standIn`,
+`board.actingSurg`, `Assign` resolves tokens through stand-ins for the
+session(s) a case touches). "Cheng (Surg 2) c/b Wibbelsman" makes Wibbelsman
+that session's Surg 2: first for trauma and the remaining cases, first for
+clinic cover (Step 12) and a morning OR running late, and the daytime add-on
+call. Split cover (X AM, Y PM) → X is Surg 2 in the morning, Y in the
+afternoon. NC → nobody stands in and the chains move on, as before.
+Exception: Day Float covering the Night Float resident takes no chain place
+(Day Float is never available — chief, 9/2026).
+
+What follows from it, tab by tab:
+
+- **Out today**: a Surg role's card says who becomes Surg *n* ("Wibbelsman is
+  Surg 2"), or that with NC its cases go down each chain.
+- **Roster**: the Surg tile says "Out today — Wibbelsman covers"; WER and
+  consult lines show stand-ins.
+- **Surgery**: suggestions use stand-ins; a case whose resident is out is red
+  with the how-to's pick in their place one click away, and counts as needing
+  a resident (toolbar, section headers, tab badge, **Assign all**). A CPEC-sheet
+  list whose cover (Surg 1 / 5, Wills OR, Retina) is out goes to whoever
+  covers them. A backup who cannot cover (out / in a case) shows red.
+  **Done now** checks the case off exactly as Coverage does (it used to type
+  over "Done by", so the two tabs disagreed).
+- **Coverage**: "Today's roles" — Surg 1–5 and the Cooper senior as every plan
+  on the tab resolves them. **Needs coverage** is everything still open, from
+  every tab: ER first, then cases whose resident is out, service cases with
+  nobody yet, uncovered absences, clinic gaps (`board.needs` type `case`).
+  The check-off list leaves out cases whose resident is out (they are under
+  Needs coverage). Add-ons, clinic cover and running late use stand-ins.
+- **Add-on call**: a daytime row the app filled (`row.s2`) follows that day's
+  acting Surg 2 — the coverer when Surg 2 is out all day, empty (with a
+  prompt) when nobody covers; a name someone picked is kept but flagged "out
+  that day". Pasted names are the sender's (`s2: false`).
+  **Start from yesterday** now matches add-on rows by date + period
+  (yesterday's "Tuesday daytime" row is today's "Tuesday daytime" row); it
+  copied row by row, putting Monday night's name on Tuesday night.
+- **Preview & Copy**: the copied schedule agrees with its own Vacation lines —
+  `Surg 2 - **Wibbelsman (for Cheng)**`, `WER: **Djulbegovic AM/PM (for
+  Teng)**`, `Jeff Consults: **Nahar (for DeSimone)**` (the clinic lines' "(for
+  …)" notation); `none (Cheng out)` for NC, `TBD (Cheng out)` while undecided;
+  per session when they differ. The paste reader reads these back (the
+  bracketed name is the block holder). The send-check counts cases whose
+  resident is out.
+
+**Wills and Stadium / Cherry Hill** (chief, 10/18/2026: "Wills can be its own
+thing — ASC/stadium are the same thing, so maybe you turn it into Wills as
+one and Stadium/Cherry Hill as the other"). Sections: Wills · Stadium /
+Cherry Hill (ASC) · JHN/TJUH/JSC · Privates (keys unchanged — `wills`,
+`other` — so saved days keep their cases). The copied schedule prints
+`Wills`, `Stadium/Cherry Hill`, `Privates`, `JHN/TJUH/JSC`, each with `-none`
+when empty. CPEC-sheet lists at SP / CH go to Stadium / Cherry Hill. The
+paste reader takes `Wills`, `ASC`, `Stadium`, `Cherry Hill`, `Stadium/Cherry
+Hill`, the old `Other (Stadium/Cherry Hill)`, and the old `Wills/ASC` — whose
+cases go to Wills unless the line says Stadium / Cherry Hill / ASC or that
+day's CPEC sheet has the attending only at SP / CH.
+
+**Flow chart** (Library → Flow chart; Home and How-to link to it): the six
+steps and what each feeds forward, someone is out, who takes a case (steps
+3–10, chains drawn from `data.hierarchy`), who covers a clinic (step 12).
+HTML boxes and arrows — one column on a phone; prints one panel per page.
+
+**Assumptions (say so if wrong)**
+
+- A coverer inherits every chain place of the person they cover, whatever
+  their year (a senior covering the PGY-2 on Plastics OR is "on Plastics OR").
+- Daytime add-on call with Surg 2 out all day: the AM coverer first. Out half
+  a day: Surg 2 keeps the call.
+- Needs coverage order after the ER: a case without its resident is the most
+  urgent of the rest.
+- Absences are per day: the next day's add-on row uses that day's saved
+  draft, if there is one, else the block schedule.
 
 ## Saving and working at the same time (9/28/2026)
 

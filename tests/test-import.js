@@ -106,7 +106,7 @@ function roundTrip(pasted) {
 [
   'Lectures/Events', 'Night Float: **Perez**', ', x2 service - 1030 & 1300 - **Momenaei**',
   '**Bair; Djulbegovic** to cover cornea clinic', '- ⚠ UNASSIGNED (confirm with Surg 2)',
-  '(backup: Shields if after 1 PM)', 'Other (Stadium/Cherry Hill)', 'Cornea PM (29x3): ',
+  '(backup: Shields if after 1 PM)', 'Stadium/Cherry Hill\n-Gordon', 'Cornea PM (29x3): ',
   'Glaucoma PM (late start): ', 'CPEC PO (12): **Aguwa**', 'Tang PM (Retina Private) — sick NC',
   'Marshall (Neuro) — conference — coverage TBD', 'Djulbegovic at AAO Fri',
   'Monday night (9/28/26): **Calotti**'
@@ -138,12 +138,14 @@ eq(hark.assigned + '|' + hark.backup, 'Bair|Djulbegovic', 'resident; backup spli
 eq(hark.backupNote, 'to cover cornea clinic during case, 2nd backup Calotti (Surg 4)', 'backup note kept whole');
 var marous = r1.day.cases[2];
 eq(marous.serviceCount + '|' + marous.serviceTimes + '|' + marous.notes, '2|1030 & 1300|no Peds OR', 'service count, times and notes');
-eq(r1.day.cases[6].assigned + '|' + r1.day.cases[6].serviceCount, '|1', 'UNASSIGNED service case stays open');
-eq(r1.day.cases[7].backup + '|' + r1.day.cases[7].backupNote, 'Shields|if after 1 PM', 'backup of an unassigned case');
-eq(r1.day.cases[5].serviceCount, 0, 'private list has no service case');
+function bySurgeon(list, s) { return list.filter(function (c) { return c.surgeon === s; })[0] || {}; }
+eq(bySurgeon(r1.day.cases, 'Bilyk').assigned + '|' + bySurgeon(r1.day.cases, 'Bilyk').serviceCount, '|1', 'UNASSIGNED service case stays open');
+eq(bySurgeon(r1.day.cases, 'Sieber').backup + '|' + bySurgeon(r1.day.cases, 'Sieber').backupNote, 'Shields|if after 1 PM', 'backup of an unassigned case');
+eq(bySurgeon(r1.day.cases, 'Pericic').serviceCount, 0, 'private list has no service case');
+eq(bySurgeon(r1.day.cases, 'Gordon').section, 'other', 'the Stadium/Cherry Hill section reads back as its own section');
 
 /* ---------- categories are guessed ---------- */
-eq(r1.day.cases.map(function (c) { return c.category; }).join(),
+eq(['Abendroth', 'DiDomenico', 'Marous', 'Hark', 'Globe/trauma', 'Pericic', 'Bilyk', 'Sieber', 'Gordon'].map(function (s) { return bySurgeon(r1.day.cases, s).category; }).join(),
   'cataract,cataract,other,cornea,trauma,cataract,plastics,plastics,cataract',
   'category guesses: CPEC surgeons cataract, backup note cornea, globe trauma, privates cataract, JHN plastics, Surg 1 cataract');
 
@@ -265,6 +267,34 @@ eq(Status.fmtClock(ab.start) + '–' + Status.fmtClock(ab.end), '7:30 AM–11:00
   var pc = ImportFmt.parse('Wills/ASC\n- ' + t[0], { names: names, clinics: roster.clinics }).cases[0] || {};
   eq([pc.serviceCount, pc.serviceTimes, pc.start].join(' | '), [t[1], t[2], t[3]].join(' | '), 'service time read from "' + t[0] + '"');
 });
+
+/* ---------- Wills is its own section; the ASC is Stadium (10/18/2026) ---------- */
+function sectionsOf(pasted, opts) {
+  var p = ImportFmt.parse(pasted, { names: names, clinics: roster.clinics });
+  return ImportFmt.toDay(p, base(), roster, DATA, ExportFmt, opts || OPTS).cases.map(function (c) { return c.surgeon + ':' + c.section; }).join(' ');
+}
+eq(sectionsOf('Wills\n-Hark x1 - Bair\nStadium/Cherry Hill\n-Gordon x2 - Cheng'), 'Hark:wills Gordon:other', 'the new headings: Wills, Stadium/Cherry Hill');
+eq(sectionsOf('ASC\n-Gordon x2 - Cheng\nStadium / ASC\n-Harris x2 - Cheng\nCherry Hill\n-Lee x1 - Cheng'), 'Gordon:other Harris:other Lee:other', '"ASC", "Stadium / ASC", "Cherry Hill" are all the Stadium/Cherry Hill section');
+eq(sectionsOf('Other (Stadium/Cherry Hill)\n-Gordon x2 - Cheng'), 'Gordon:other', 'the old "Other (Stadium/Cherry Hill)" heading still reads');
+eq(sectionsOf('Wills/ASC\n-Hark x1 - Bair\n-Gordon x2 (AM TF start) - Cheng (Cherry Hill)\n-Ang x3 - Cheng (Stadium)'), 'Hark:wills Gordon:other Ang:other',
+  'old "Wills/ASC" heading: Wills, unless the line says Stadium / Cherry Hill');
+eq(sectionsOf('Wills/ASC\n-Markovitz x7 (7:30 start) - Wibbelsman\n-Wisner x4 (7:30 start) - Cheng', { cpecSites: { markovitz: ['SP'], wisner: ['W'] } }),
+  'Markovitz:other Wisner:wills', '…or when that day’s CPEC sheet lists the attending only at Stadium (SP)');
+eq(sectionsOf('Wills\n-Markovitz x7 (7:30 start) - Wibbelsman', { cpecSites: { markovitz: ['SP'] } }), 'Markovitz:wills', 'a case put under the new "Wills" heading stays there — the sender chose it');
+
+/* ---------- a Surg role covered on Out today reads back (10/18/2026) ---------- */
+var dc = base();
+dc.absences = [
+  { id: 'a1', name: 'Djulbegovic', am: true, pm: true, reason: 'vacation', coverAM: 'Aguwa', coverPM: 'Aguwa' },
+  { id: 'a2', name: 'Calotti', am: true, pm: true, reason: 'sick', coverAM: 'Shields', coverPM: 'NC' }
+];
+var tc = ExportFmt.buildText(withRoster(dc));
+ok(tc.indexOf('Surg 2 - **Aguwa (for Djulbegovic)**') !== -1, 'copied schedule: Surg 2 line names who stands in — got ' + tc.split('\n').filter(function (l) { return /^Surg 2/.test(l); })[0]);
+ok(tc.indexOf('Surg 4 - **Shields AM (for Calotti)** | none PM (Calotti out)') !== -1, 'split: covered AM, NC PM — got ' + tc.split('\n').filter(function (l) { return /^Surg 4/.test(l); })[0]);
+var rc = roundTrip(tc);
+eq(rc.text, tc, 'round trip with covered Surg roles');
+eq(rc.parsed.surg['2'] + ' / ' + rc.parsed.surg['4'], 'Djulbegovic / Calotti', 'the Surg lines read back as the block schedule’s holders (no false "check the date" flag)');
+eq(rc.day.addOns.every(function (a) { return a.s2 !== true; }), true, 'pasted add-on names are the sender’s — never marked as app-filled');
 
 if (failures) {
   console.error(failures + ' failure(s) of ' + checks);

@@ -334,5 +334,59 @@ ok(['Teng', 'Williamson', 'Alvarez', 'DeSimone'].every(function (n) { return avA
 var lcEr = Assign.lateCover('Nahar', 'Glaucoma', 750, 810, roster, DATA, x.b, [], null);
 ok(lcEr.steps.every(function (s) { return ['Teng', 'Williamson', 'Alvarez', 'DeSimone'].indexOf(s.name) === -1 || s.verdict === 'skip'; }), 'late-OR cover never uses ER or consults');
 
+/* ---------- whoever covers an absent resident takes their place in the chains (10/18/2026) ---------- */
+// "Surg 2 out on vacation is not accounted for on Coverage": the coverer
+// does the absent resident's job for that session — their duty AND their
+// place in every how-to chain. Mon 9/28: Surg 2 Djulbegovic c/b Aguwa (CPEC).
+var s2out = { absences: [{ id: 'a1', name: 'Djulbegovic', am: true, pm: true, reason: 'vacation', coverAM: 'Aguwa', coverPM: 'Aguwa' }] };
+x = board(s2out);
+eq(x.b.standIn('Djulbegovic', 'am'), 'Aguwa', 'board: Aguwa stands in for Djulbegovic AM');
+eq(JSON.stringify(x.b.actingSurg('2', 'pm')), '{"name":"Aguwa","for":"Djulbegovic"}', 'board: Aguwa is the acting Surg 2 PM');
+eq(JSON.stringify(x.b.surgRolesAt('Aguwa', 'am')), '[{"n":"2","for":"Djulbegovic"}]', 'board: Aguwa holds Surg 2 (for Djulbegovic)');
+plan = Assign.planAddOn('globe', 870, roster, DATA, x.b);
+eq(plan.pick && plan.pick.name + ' / ' + plan.pick.via, 'Aguwa / Surg 2 — covering Djulbegovic', 'globe: the acting Surg 2 takes it — not Surg 3 pulled from Cornea clinic');
+eq(plan.handoff, null, '…the acting Surg 2 is free — no clinic to hand off');
+res = Assign.suggest([{ id: 'r1', section: 'wills', surgeon: 'X', count: 1, serviceCount: 1, start: '1000', category: 'other', addOn: false, assigned: '' }], roster, DATA, x.b);
+eq(res[0].name, 'Aguwa', 'remaining cases (Step 10): the acting Surg 2 first');
+ok(/Surg 2 — covering Djulbegovic/.test(res[0].reasons[0]), '…and the reason says whom they cover — got ' + res[0].reasons[0]);
+x = board({ absences: s2out.absences, cases: [hark('')] });
+bp = Assign.backupPlan(x.day.cases[0], roster, DATA, x.day.cases, x.b);
+eq(bp && bp.primary && bp.primary.name + ' / ' + bp.primary.source, 'Aguwa / Surg 2 — covering Djulbegovic', 'clinic cover (Step 12): the acting Surg 2 first');
+eq(Assign.lateCover('Nahar', 'Glaucoma', 750, 810, roster, DATA, board(s2out).b, [], null).primary.name, 'Aguwa', 'a morning OR running late: the acting Surg 2 covers');
+j = Assign.planAddOns(['globe', 'glaucoma', 'cornea'], 600, roster, DATA, board(s2out).b);
+eq(names(j), 'Globe:Aguwa Glaucoma:Calotti Cornea:Bair', 'several add-ons: the globe goes to the acting Surg 2');
+// covered for the morning only: the stand-in is Surg 2 only then
+x = board({ absences: [{ id: 'a1', name: 'Djulbegovic', am: true, pm: false, reason: 'sick', coverAM: 'Aguwa', coverPM: '' }] });
+eq(Assign.planAddOn('globe', 600, roster, DATA, x.b).pick.name, 'Aguwa', 'out AM c/b Aguwa: a 10 AM globe → Aguwa');
+eq(Assign.planAddOn('globe', 870, roster, DATA, x.b).pick.name, 'Djulbegovic', '…a 2:30 PM globe → Djulbegovic, back for the PM');
+// split cover: Aguwa AM, Shields PM
+x = board({ absences: [{ id: 'a1', name: 'Djulbegovic', am: true, pm: true, reason: 'vacation', coverAM: 'Aguwa', coverPM: 'Shields' }] });
+eq(Assign.planAddOn('globe', 600, roster, DATA, x.b).pick.name + ' / ' + Assign.planAddOn('globe', 870, roster, DATA, x.b).pick.name,
+  'Aguwa / Shields', 'split cover: the AM globe → Aguwa, the PM globe → Shields');
+// NC: nobody stands in — the chain moves on, as before (see "Surg 2 out" above)
+x = board({ absences: [{ id: 'a1', name: 'Djulbegovic', am: true, pm: true, reason: 'vacation', coverAM: 'NC', coverPM: 'NC' }] });
+eq(x.b.standIn('Djulbegovic', 'am') + '|' + JSON.stringify(x.b.actingSurg('2', 'am')), '|null', 'NC: no stand-in, no acting Surg 2');
+// a case already given to the absent resident is open again: its replacement
+// is walked AND claimed, so no other case gets the same person then
+x = board({ absences: [{ id: 'a1', name: 'Cheng', am: true, pm: true, reason: 'sick', coverAM: 'NC', coverPM: 'NC' }] });
+res = Assign.suggest([
+  { id: 'w1', section: 'wills', surgeon: 'Wisner', count: 4, serviceCount: 4, start: '0730', category: 'cataract', addOn: false, assigned: 'Cheng' },
+  { id: 'w2', section: 'wills', surgeon: 'Markovitz', count: 7, serviceCount: 7, start: '0730', category: 'cataract', addOn: false, assigned: '' }
+], roster, DATA, x.b);
+eq(byId(res, 'w1').name + ' (replaces ' + byId(res, 'w1').replaces + ')', 'Wibbelsman (replaces Cheng)', 'Surg 1 Cheng out, already on Wisner: Surg 5 is suggested in their place');
+eq(byId(res, 'w2').name, 'Samuel', '…and the other 7:30 list moves on to Wills OR — Surg 5 is claimed');
+// Day Float standing in for the Night Float resident takes no chain place
+// (Day Float is never available — chief, 9/2026). Tue 10/20: Cotton (NF) is
+// the PGY-3 on Wills OR; Camacho is Day Float.
+var r1020 = Engine.resolveDay('2026-10-20', DATA);
+var b1020 = Status.build(r1020, { nightFloat: 'Cotton', absences: [], clinicStaffOverrides: {}, cases: [
+  { id: 'a', section: 'wills', surgeon: 'A', count: 4, serviceCount: 4, start: '0730', category: 'cataract', assigned: r1020.surg['1'].name, backup: '' },
+  { id: 'b', section: 'wills', surgeon: 'B', count: 4, serviceCount: 4, start: '0730', category: 'cataract', assigned: r1020.surg['5'].name, backup: '' }
+] }, DATA);
+eq(b1020.standIn('Cotton', 'am'), '', 'Day Float does not stand in for the NF resident in the chains');
+res = Assign.suggest(b1020 && [{ id: 'c', section: 'wills', surgeon: 'C', count: 2, serviceCount: 2, start: '0800', category: 'cataract', addOn: false, assigned: '' }], r1020, DATA, b1020);
+ok(res[0].skipped.some(function (s) { return s.name === 'Cotton'; }) && res[0].name === 'Williamson', 'Wills OR: Cotton (Night Float) skipped, Williamson (also on Wills OR that morning) takes the cataracts — got ' + res[0].name);
+ok(!res[0].skipped.concat(res[0].alternates.map(function (n) { return { name: n }; })).some(function (s) { return s.name === 'Camacho'; }) && res[0].name !== 'Camacho', '…Camacho (Day Float) is never in the chain');
+
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures) process.exitCode = 1; else console.log('OK');

@@ -54,21 +54,26 @@
       .toLowerCase();
   }
 
+  // Wills is its own section; the ASC is Stadium, filed with Cherry Hill
+  // (10/18/2026). 'Wills/ASC' — the heading sent schedules used before —
+  // mixes both: its cases are read as Wills, then any with a Stadium /
+  // Cherry Hill sign move over (toDay, `mixed`).
+  var ASC_WORD = '(?:asc|stadium|cherry\\s*hill)';
   var HEADS = [
     [/^lectures?\s*(?:\/|&|and)\s*events?:?$/i, 'lectures'],
     [/^(?:lectures?|events?):?$/i, 'lectures'],
     [/^assignments:?$/i, 'assignments'],
-    [/^wills\s*\/\s*asc:?$/i, 'wills'],
-    [/^(?:wills|asc):?$/i, 'wills'],
+    [/^wills\s*(?:\/|&|and)\s*asc:?$/i, 'willsAsc'],
+    [/^wills:?$/i, 'wills'],
     [/^privates?:?$/i, 'private'],
     [/^jhn\s*\/\s*tjuh\s*\/\s*jsc:?$/i, 'jhn'],
     [/^other\s*\(\s*stadium\s*\/\s*cherry\s*hill\s*\):?$/i, 'other'],
-    [/^(?:stadium\s*\/\s*cherry\s*hill|stadium|cherry\s*hill):?$/i, 'other'],
+    [new RegExp('^' + ASC_WORD + '(?:\\s*(?:\\/|&|and)\\s*' + ASC_WORD + ')*(?:\\s*\\(\\s*' + ASC_WORD + '\\s*\\))?:?$', 'i'), 'other'],
     [/^clinics?:?$/i, 'clinics'],
     [/^(?:vacations?|vacation\s*\/\s*out|who'?s\s+out|out):?$/i, 'vacation'],
     [/^add[-\s]?ons?(?:\s*call)?:?$/i, 'addons']
   ];
-  var CASE_SECTIONS = { wills: true, private: true, jhn: true, other: true };
+  var CASE_SECTIONS = { wills: true, willsAsc: true, private: true, jhn: true, other: true };
   var REASONS = { sick: 'sick', conference: 'conference', out: 'other' };
   // Lines that belong to the schedule but hold nothing the app stores
   // (computed from the block schedule, or informational).
@@ -421,6 +426,14 @@
       if (!line) return;
       var sg = /^surg\s*(\d+)\s*[-–—:]\s*(.*)$/i.exec(line);
       if (sg) {
+        // 'Wibbelsman (for Cheng)' / 'none (Cheng out)': the block schedule's
+        // holder is the name in brackets (who covers is in the Vacation lines)
+        var held = /\(\s*for\s+([^()]+?)\s*\)/i.exec(sg[2]) || /\(\s*([^()]+?)\s+out\s*\)/i.exec(sg[2]);
+        if (held) {
+          out.surg[sg[1]] = nameAt(trim(held[1]), names) || trim(held[1]);
+          out.read++;
+          return;
+        }
         var nm = trim(sg[2].replace(/\bnone\s+(?:AM|PM)\b/gi, ' ').replace(/[|]/g, ' ').replace(/\b(?:AM|PM)\b/g, ' ').replace(/\s+/g, ' '));
         out.surg[sg[1]] = /^none$/i.test(nm) ? '' : (nameAt(nm, names) || nm);
         out.read++;
@@ -438,8 +451,9 @@
       if (section === 'lectures') { out.lectures.push(raw); out.read++; return; }
       if (CASE_SECTIONS[section]) {
         var unkC = [];
-        var c = parseCase(line, section, names, unkC);
+        var c = parseCase(line, section === 'willsAsc' ? 'wills' : section, names, unkC);
         if (c && c.none) { out.read++; return; }
+        if (c && section === 'willsAsc') c.mixed = true; // Wills or the ASC — toDay decides
         if (c) { out.cases.push(c); addUnknown(unkC); out.read++; return; }
         out.unknown.push(raw);
         return;
@@ -523,6 +537,18 @@
     return 'other';
   }
 
+  // A case read under the old 'Wills/ASC' heading: Stadium / Cherry Hill
+  // (the ASC) when it says so — its note names Stadium, Cherry Hill or the
+  // ASC — or when that day's CPEC sheet lists the attending only at Stadium
+  // / Cherry Hill (opts.cpecSites: surgeonKey → ['SP' | 'CH' | 'W', …]);
+  // otherwise Wills.
+  function mixedSection(c, opts) {
+    if (/\b(?:stadium|cherry\s*hill|asc)\b/i.test(c.notes || '')) return 'other';
+    var sites = (opts && opts.cpecSites && opts.cpecSites[surgeonKey(c.surgeon)]) || [];
+    if (sites.length && sites.every(function (s) { return s === 'SP' || s === 'CH'; })) return 'other';
+    return 'wills';
+  }
+
   // 'Hamou (for Ransone)' → { shown: 'Hamou', base: 'Ransone' }
   function person(s) {
     var m = /^(.*?)\s*\(for\s+(.+)\)$/i.exec(s);
@@ -545,7 +571,7 @@
     day.vacation = parsed.vacationNote.join('\n');
     day.cases = parsed.cases.map(function (c, i) {
       return {
-        id: 'c' + (i + 1), section: c.section, surgeon: c.surgeon, count: c.count,
+        id: 'c' + (i + 1), section: c.mixed ? mixedSection(c, opts) : c.section, surgeon: c.surgeon, count: c.count,
         serviceCount: c.serviceCount, start: c.start, serviceTimes: c.serviceTimes,
         category: inferCategory(c, opts), addOn: false, notes: c.notes, assigned: c.assigned,
         backup: c.backup, backupNote: c.backupNote, until: ''
@@ -591,8 +617,10 @@
       for (var i = 0; i < day.addOns.length; i++) {
         if (a.label && labelOf(day.addOns[i]) === a.label && !trim(day.addOns[i].name)) { row = day.addOns[i]; break; }
       }
-      if (row) { row.name = a.name; row.auto = false; }
-      else day.addOns.push({ date: '', period: 'night', label: a.label, name: a.name, auto: false });
+      // s2: false — whoever sent the schedule chose these names; the app
+      // never swaps them for that day's Surg 2
+      if (row) { row.name = a.name; row.auto = false; row.s2 = false; }
+      else day.addOns.push({ date: '', period: 'night', label: a.label, name: a.name, auto: false, s2: false });
     });
     return day;
   }

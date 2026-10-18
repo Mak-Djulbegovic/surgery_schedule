@@ -310,6 +310,30 @@ ok(!av(avPM, 'Patel'), 'Patel (Glaucoma PM) is not available PM');
 ok(!av(avAM, 'Momenaei') && !av(avPM, 'Momenaei'), 'Momenaei (Path, then ER) is never listed');
 ok(!av(avAM, 'Aguwa'), 'CPEC is a clinic — not available');
 
+/* ---------- service cases left without a resident (10/18/2026) ---------- */
+// Cheng (Surg 1) calls in sick after being put on Wisner; Hark has nobody
+// yet; Garg is private. Needs: Wisner (resident out) first, then Hark.
+var cn = [
+  { id: 'w1', section: 'wills', surgeon: 'Wisner', count: 4, serviceCount: 4, start: '0730', category: 'cataract', assigned: 'Cheng', backup: '' },
+  { id: 'h1', section: 'wills', surgeon: 'Hark', count: 1, serviceCount: 1, start: '1300', category: 'cornea', assigned: '', backup: '' },
+  { id: 'p1', section: 'private', surgeon: 'Garg', count: 5, serviceCount: 0, start: '0730', category: 'cataract', assigned: '', backup: '' }
+];
+b = Status.build(roster, day({ absences: [{ id: 'a1', name: 'Cheng', am: true, pm: true, reason: 'sick', coverAM: 'NC', coverPM: 'NC' }], cases: cn }), DATA);
+eq(b.needs.map(function (n) { return n.type + ':' + (n.why || '') + ':' + (n.caseId || ''); }).join(' | '), 'case:out:w1 | case:unassigned:h1',
+  'a case whose resident is out, then a service case with nobody — the private list needs no one');
+eq(b.needs[0].holder + ' — ' + b.needs[0].outLabel, 'Cheng — Sick', '…naming who is out and why');
+cn[0].done = true; cn[0].doneAt = '0900';
+b = Status.build(roster, day({ absences: [{ id: 'a1', name: 'Cheng', am: true, pm: true, reason: 'sick', coverAM: 'NC', coverPM: 'NC' }], cases: cn }), DATA);
+ok(!b.needs.some(function (n) { return n.caseId === 'w1'; }), 'a checked-off case is over — no need');
+b = Status.build(roster, day({ absences: [{ id: 'a1', name: 'Cheng', am: false, pm: true, reason: 'sick', coverAM: '', coverPM: 'NC' }],
+  cases: [{ id: 'w2', section: 'wills', surgeon: 'Wisner', count: 2, serviceCount: 2, start: '0730', category: 'cataract', assigned: 'Cheng', backup: '' }] }), DATA);
+eq(b.needs.length, 0, 'out only in the afternoon: a morning list is still theirs');
+b = Status.build(roster, day({ absences: [
+  { id: 't', name: 'Teng', am: true, pm: true, reason: 'sick', coverAM: '', coverPM: 'NC' },
+  { id: 'c', name: 'Cheng', am: true, pm: true, reason: 'sick', coverAM: 'NC', coverPM: 'NC' }
+], cases: [{ id: 'w3', section: 'wills', surgeon: 'Wisner', count: 2, serviceCount: 2, start: '0730', category: 'cataract', assigned: 'Cheng', backup: '' }] }), DATA);
+eq(b.needs.map(function (n) { return n.type; }).join(' '), 'absence case', 'the ER is still staffed first, then the case');
+
 /* ---------- weekend ---------- */
 b = Status.build(Engine.resolveDay('2026-09-26', DATA), day({}), DATA);
 eq(b.order.length, 0, 'weekend: nobody on the board');
