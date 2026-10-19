@@ -61,36 +61,41 @@ eq(Status.fmtClock(450), '7:30 AM', 'fmtClock 7:30 AM');
 eq(Status.fmtClock(720), '12:00 PM', 'fmtClock noon');
 eq(Status.fmtHHMM(810), '1330', 'fmtHHMM');
 
-/* ---------- case spans ---------- */
+/* ---------- case spans: no estimates (10/18/2026) ---------- */
+// "estimating may confuse things because things can run short or long" — a
+// list counts for the session it starts in, until checked off
 var sp = Status.caseSpans({ category: 'cataract', count: 4, serviceCount: 4, start: '0730' }, DATA);
-same(sp.spans, [{ start: 450, end: 570 }], 'x4 cataracts at 7:30 -> 7:30–9:30 (30 min each)');
-eq(sp.estimated, true, 'no until -> estimated');
+same(sp.spans, [{ start: 450, end: 720 }], 'x4 cataracts at 7:30 -> the morning (7:30–noon), no estimated end');
+eq(sp.openEnded, true, 'no until -> open-ended (no time to show)');
 sp = Status.caseSpans({ category: 'cataract', count: 7, serviceCount: 2, start: '0730', serviceTimes: '1030 & 1300' }, DATA);
-same(sp.spans, [{ start: 450, end: 660 }], 'cataracts: part of that OR until the list is done, service and private (chief 9/28) — 7:30–11:00');
+same(sp.spans, [{ start: 450, end: 1020 }], 'cataracts: part of that OR until done, service and private (chief 9/28) — a 1 PM service case carries it through the afternoon');
 sp = Status.caseSpans({ category: 'other', count: 7, serviceCount: 2, start: '0730', serviceTimes: '1030 & 1300' }, DATA);
-same(sp.spans, [{ start: 630, end: 690 }, { start: 780, end: 840 }], 'any other list: service times -> busy only for the service cases');
+same(sp.spans, [{ start: 630, end: 720 }, { start: 780, end: 1020 }], 'any other list: from each service time to the end of its session');
 sp = Status.caseSpans({ category: 'cornea', count: 1, serviceCount: 1, start: '1300', until: '1500' }, DATA);
-same(sp.spans, [{ start: 780, end: 900 }], "'until' replaces the estimated end");
-eq(sp.estimated, false, 'typed until -> not estimated');
+same(sp.spans, [{ start: 780, end: 900 }], "a typed 'until' (Done by) ends it then");
+eq(sp.openEnded, false, 'typed until -> not open-ended');
 sp = Status.caseSpans({ category: 'cataract', count: 2, serviceCount: 2, start: 'AM TF' }, DATA);
 eq(sp.unknownStart, true, "'AM TF' -> unknown start");
 eq(sp.start, 450, "'AM TF' assumed 7:30");
 sp = Status.caseSpans({ category: 'cataract', count: 3, serviceCount: 3, start: '1:00' }, DATA);
-same(sp.spans, [{ start: 780, end: 870 }], "CPEC sheet '1:00' x3 -> 1:00–2:30 PM");
+same(sp.spans, [{ start: 780, end: 1020 }], "CPEC sheet '1:00' x3 -> the afternoon from 1:00");
+sp = Status.caseSpans({ category: 'cataract', count: 10, serviceCount: 10, start: 'All day 7:30' }, DATA);
+same(sp.spans, [{ start: 450, end: 1020 }], "'All day 7:30' -> 7:30 to the end of the day");
+eq(sp.allDay, true, '…flagged all day');
 // chief 9/28: outside cataracts, a resident is only needed for the service case(s) of a list
 sp = Status.caseSpans({ category: 'other', count: 10, serviceCount: 1, start: '0730', serviceTimes: '1015' }, DATA);
-same(sp.spans, [{ start: 615, end: 675 }], 'Henry x10, 1 service at 10:15 -> busy 10:15–11:15 only');
+same(sp.spans, [{ start: 615, end: 720 }], 'Henry x10, 1 service at 10:15 -> from 10:15 for the morning');
 eq(sp.svcAssumed, false, '…at a given time');
 sp = Status.caseSpans({ category: 'other', count: 10, serviceCount: 1, start: '1015' }, DATA);
-same(sp.spans, [{ start: 615, end: 675 }], 'Henry x10, 1 service, only a time typed -> one case at that time (not the whole list)');
+same(sp.spans, [{ start: 615, end: 720 }], 'Henry x10, 1 service, only a time typed -> from that time');
 eq(sp.svcAssumed, true, '…flagged: service time assumed at the list start');
 sp = Status.caseSpans({ category: 'glaucoma', count: 6, serviceCount: 2, start: '0730' }, DATA);
-same(sp.spans, [{ start: 450, end: 630 }], 'x6 glaucoma with 2 service, no service time -> the 2 service cases, assumed first');
+same(sp.spans, [{ start: 450, end: 720 }], 'x6 glaucoma with 2 service, no service time -> from the list start');
 sp = Status.caseSpans({ category: 'cataract', count: 6, serviceCount: 2, start: '0730' }, DATA);
-same(sp.spans, [{ start: 450, end: 630 }], 'x6 cataracts with 2 service -> the whole list (part of that OR until done)');
+same(sp.spans, [{ start: 450, end: 720 }], 'x6 cataracts with 2 service -> the whole list (part of that OR until done)');
 eq(sp.svcAssumed, false, '…nothing assumed for cataracts');
 sp = Status.caseSpans({ category: 'other', count: 6, serviceCount: 6, start: '0730' }, DATA);
-same(sp.spans, [{ start: 450, end: 810 }], 'all service -> the whole list');
+same(sp.spans, [{ start: 450, end: 720 }], 'all service -> the whole list, for the morning');
 
 /* ---------- classification (chief's rule: PT, idle OR/Surg = free; CPEC = clinic, 9/28) ---------- */
 eq(Status.kindOfClass(Status.classifyText('CPEC', DATA)), 'clinic', 'CPEC is a clinic (chief, 9/28/2026)');
@@ -117,6 +122,15 @@ function kinds(board, t) {
   return out;
 }
 
+// one resident's lists run back to back: the first ends when the next starts
+var bb = Status.build(roster, day({ cases: [
+  { id: 'l1', surgeon: 'Wisner', count: 3, serviceCount: 3, start: '0730', category: 'cataract', assigned: 'Cheng' },
+  { id: 'l2', surgeon: 'Markovitz', count: 4, serviceCount: 4, start: '1000', category: 'cataract', assigned: 'Cheng' }
+] }), DATA);
+same(bb.caseInfo.l1.spans, [{ start: 450, end: 600 }], 'two morning lists: the first ends when the second starts (10:00)');
+same(bb.caseInfo.l2.spans, [{ start: 600, end: 720 }], '…the second runs to noon');
+same(bb.caseSpansFor(bb.caseInfo.l1.c).spans, [{ start: 450, end: 600 }], 'caseSpansFor gives the board’s spans for a case on it');
+eq(bb.statusDuringSpans('Cheng', bb.caseInfo.l2.spans, { exclude: 'l2' }).kind, 'free', 'the second list is not double-booked by the first');
 var b = Status.build(roster, day({}), DATA);
 var k1330 = kinds(b, 810);
 eq(k1330.Bair, 'clinic', 'Bair (Surg 3, no case) is in Cornea clinic PM');
@@ -134,12 +148,17 @@ b = Status.build(roster, day({ cases: [
   { id: 'c1', surgeon: 'Hark', count: 1, serviceCount: 1, start: '1300', category: 'cornea', assigned: 'Bair', backup: '' }
 ] }), DATA);
 eq(b.statusAt('Bair', 810).kind, 'case', 'Bair in the case at 1:30');
-eq(b.statusAt('Bair', 900).kind, 'clinic', 'Bair back in Cornea clinic at 3:00 (case est. 1:00–2:30)');
+eq(b.statusAt('Bair', 900).kind, 'case', 'still operating at 3:00 — no estimate; until checked off');
 var gaps = b.needs.filter(function (n) { return n.type === 'clinic'; });
 eq(gaps.length, 1, 'one clinic gap');
 eq(gaps[0] && gaps[0].clinic, 'Cornea', 'gap is Cornea');
 eq(gaps[0] && gaps[0].start, 780, 'gap from 1:00');
-eq(gaps[0] && gaps[0].end, 870, 'gap to 2:30');
+eq(gaps[0] && gaps[0].end, 1020, '…for the rest of the afternoon');
+b = Status.build(roster, day({ cases: [
+  { id: 'c1', surgeon: 'Hark', count: 1, serviceCount: 1, start: '1300', category: 'cornea', assigned: 'Bair', backup: '', done: true, doneAt: '1430' }
+] }), DATA);
+eq(b.statusAt('Bair', 900).kind, 'clinic', 'checked off at 2:30: Bair is back in Cornea clinic at 3:00');
+eq(b.needs.filter(function (n) { return n.type === 'clinic'; })[0].end, 870, '…and the gap ended at 2:30');
 
 // Surg 2 backs up: covering Cornea for Bair, gap closed
 var cases = [
@@ -150,7 +169,7 @@ var dj = b.statusAt('Djulbegovic', 810);
 eq(dj.kind, 'clinic', 'Surg 2 is in clinic while covering');
 eq(dj.covering, 'Bair', 'Surg 2 is covering Bair');
 eq(dj.clinic, 'Cornea', 'Surg 2 is covering Cornea');
-eq(b.statusAt('Djulbegovic', 900).kind, 'free', 'Surg 2 free again after the case');
+eq(b.statusAt('Djulbegovic', 900).kind, 'clinic', 'Surg 2 covers until Bair is checked off');
 eq(b.needs.length, 0, 'no needs once Surg 2 covers');
 
 // A globe at 1:30 goes to Surg 2 (who leaves clinic): gap until a new cover
@@ -159,7 +178,7 @@ b = Status.build(roster, day({ cases: cases }), DATA);
 gaps = b.needs.filter(function (n) { return n.type === 'clinic'; });
 eq(gaps.length, 1, 'globe on Surg 2 re-opens the Cornea gap');
 eq(gaps[0] && gaps[0].start, 810, 'gap starts when Surg 2 leaves (1:30)');
-eq(gaps[0] && gaps[0].end, 870, 'gap ends when Bair is back (2:30)');
+eq(gaps[0] && gaps[0].end, 1020, 'gap runs until Bair is back (checked off) — the rest of the afternoon');
 eq(gaps[0] && gaps[0].owner, 'Bair', "it is Bair's clinic");
 // …and the globe's backup covers Bair's clinic (chain resolves to the owner)
 cases[1].backup = 'Calotti';
@@ -239,7 +258,7 @@ ok(!!ch, 'Cheng is partly free AM');
 eq(ch && ch.full, false, 'not the whole AM');
 eq(ch && ch.ranges[0].start, 420, 'free from 7:00…');
 eq(ch && ch.ranges[0].end, 450, '…until the 7:30 list');
-eq(ch && ch.ranges[1] && ch.ranges[1].start, 510, 'free again at 8:30 (x2 est. 30 min each)');
+eq(ch && ch.ranges.length, 1, 'operating the rest of the morning (no estimate) — until the list is checked off');
 ok(!am.some(function (x) { return x.name === 'Aguwa'; }), 'Aguwa (CPEC) is in clinic, not on the free list');
 
 /* ---------- Retina / Uveitis: pull first, no cover; never Path (chief, 9/28/2026) ---------- */
@@ -278,14 +297,14 @@ eq(b.statusAt('Djulbegovic', 840).neverPull, true, 'Surg 2 covering Teng’s ER 
 
 /* ---------- checked off as done (chief, 9/29/2026) ---------- */
 sp = Status.caseSpans({ category: 'cataract', count: 7, serviceCount: 2, start: '0730', done: true, doneAt: '1005' }, DATA);
-same(sp.spans, [{ start: 450, end: 605 }], 'done at 10:05: the list is over then (estimate was 11:00)');
-eq(sp.done && !sp.estimated, true, '…flagged done, not an estimate');
-sp = Status.caseSpans({ category: 'cataract', count: 2, serviceCount: 2, start: '0730', done: true, doneAt: '0915' }, DATA);
-same(sp.spans, [{ start: 450, end: 555 }], 'done at 9:15, later than the 8:30 estimate: busy until 9:15');
+same(sp.spans, [{ start: 450, end: 605 }], 'done at 10:05: the list is over then');
+eq(sp.done && !sp.openEnded, true, '…flagged done, with an end');
+sp = Status.caseSpans({ category: 'cataract', count: 2, serviceCount: 2, start: '1300', done: true, doneAt: '1715' }, DATA);
+same(sp.spans, [{ start: 780, end: 1035 }], 'done at 5:15, after the board’s day: busy until 5:15');
 sp = Status.caseSpans({ category: 'cataract', count: 2, serviceCount: 2, start: '1300', done: true, doneAt: '1000' }, DATA);
 eq(sp.spans[0].end - sp.spans[0].start, 0, 'checked off before it started (cancelled): no busy time');
 sp = Status.caseSpans({ category: 'cataract', count: 2, serviceCount: 2, start: '0730', done: false, doneAt: '0800' }, DATA);
-same(sp.spans, [{ start: 450, end: 510 }], 'unchecked: the doneAt left behind is ignored');
+same(sp.spans, [{ start: 450, end: 720 }], 'unchecked: the doneAt left behind is ignored');
 b = Status.build(roster, day({ cases: [
   { id: 'w1', section: 'wills', surgeon: 'Wisner', count: 7, serviceCount: 7, start: '0730', category: 'cataract', assigned: 'Cheng', backup: '', done: true, doneAt: '0930' }
 ] }), DATA);
@@ -301,7 +320,7 @@ var avPM = b.availableInSession('pm');
 function av(list, n) { return list.filter(function (x) { return x.name === n; })[0]; }
 var ch2 = av(avAM, 'Cheng');
 eq(ch2 && ch2.group, 'free', 'Cheng (Surg 1, Henry x10) is available AM…');
-same(ch2 && ch2.ranges.map(function (r) { return [r.start, r.end]; }), [[450, 615], [675, 720]], '…except 10:15–11:15, his one service case (the AM counts from 7:30, the OR start)');
+same(ch2 && ch2.ranges.map(function (r) { return [r.start, r.end]; }), [[450, 615]], '…until 10:15, his one service case (the AM counts from 7:30, the OR start)');
 ok(ch2 && ch2.gaps.some(function (g) { return g.start === 615 && /Henry x10/.test(g.label); }), '…and the gap is labelled with the case');
 eq(av(avPM, 'Cheng') && av(avPM, 'Cheng').full, true, 'Cheng is available all afternoon');
 eq(av(avAM, 'Tang') && av(avAM, 'Tang').group, 'pull', 'Tang (Retina Private) is listed to pull first');
@@ -309,6 +328,41 @@ eq(av(avAM, 'Patel') && av(avAM, 'Patel').group, 'pull', 'Patel (Uveitis AM) is 
 ok(!av(avPM, 'Patel'), 'Patel (Glaucoma PM) is not available PM');
 ok(!av(avAM, 'Momenaei') && !av(avPM, 'Momenaei'), 'Momenaei (Path, then ER) is never listed');
 ok(!av(avAM, 'Aguwa'), 'CPEC is a clinic — not available');
+
+/* ---------- service cases left without a resident (10/18/2026) ---------- */
+// Cheng (Surg 1) calls in sick after being put on Wisner; Hark has nobody
+// yet; Garg is private. Needs: Wisner (resident out) first, then Hark.
+var cn = [
+  { id: 'w1', section: 'wills', surgeon: 'Wisner', count: 4, serviceCount: 4, start: '0730', category: 'cataract', assigned: 'Cheng', backup: '' },
+  { id: 'h1', section: 'wills', surgeon: 'Hark', count: 1, serviceCount: 1, start: '1300', category: 'cornea', assigned: '', backup: '' },
+  { id: 'p1', section: 'private', surgeon: 'Garg', count: 5, serviceCount: 0, start: '0730', category: 'cataract', assigned: '', backup: '' }
+];
+b = Status.build(roster, day({ absences: [{ id: 'a1', name: 'Cheng', am: true, pm: true, reason: 'sick', coverAM: 'NC', coverPM: 'NC' }], cases: cn }), DATA);
+eq(b.needs.map(function (n) { return n.type + ':' + (n.why || '') + ':' + (n.caseId || ''); }).join(' | '), 'case:out:w1 | case:unassigned:h1',
+  'a case whose resident is out, then a service case with nobody — the private list needs no one');
+eq(b.needs[0].holder + ' — ' + b.needs[0].outLabel, 'Cheng — Sick', '…naming who is out and why');
+cn[0].done = true; cn[0].doneAt = '0900';
+b = Status.build(roster, day({ absences: [{ id: 'a1', name: 'Cheng', am: true, pm: true, reason: 'sick', coverAM: 'NC', coverPM: 'NC' }], cases: cn }), DATA);
+ok(!b.needs.some(function (n) { return n.caseId === 'w1'; }), 'a checked-off case is over — no need');
+b = Status.build(roster, day({ absences: [{ id: 'a1', name: 'Cheng', am: false, pm: true, reason: 'sick', coverAM: '', coverPM: 'NC' }],
+  cases: [{ id: 'w2', section: 'wills', surgeon: 'Wisner', count: 2, serviceCount: 2, start: '0730', category: 'cataract', assigned: 'Cheng', backup: '' }] }), DATA);
+eq(b.needs.length, 0, 'out only in the afternoon: a morning list is still theirs');
+b = Status.build(roster, day({ absences: [
+  { id: 't', name: 'Teng', am: true, pm: true, reason: 'sick', coverAM: '', coverPM: 'NC' },
+  { id: 'c', name: 'Cheng', am: true, pm: true, reason: 'sick', coverAM: 'NC', coverPM: 'NC' }
+], cases: [{ id: 'w3', section: 'wills', surgeon: 'Wisner', count: 2, serviceCount: 2, start: '0730', category: 'cataract', assigned: 'Cheng', backup: '' }] }), DATA);
+eq(b.needs.map(function (n) { return n.type; }).join(' '), 'absence case', 'the ER is still staffed first, then the case');
+
+/* ---------- Day Float out: the Night Float resident is uncovered (audit 10/18/2026) ---------- */
+var r1021 = Engine.resolveDay('2026-10-21', DATA);
+b = Status.build(r1021, day({ nightFloat: 'Cotton', absences: [{ id: 'x', name: 'Camacho', am: true, pm: true, reason: 'vacation', coverAM: '', coverPM: '' }] }), DATA);
+var nfNeeds = b.needs.filter(function (n) { return n.type === 'absence' && n.auto; });
+eq(nfNeeds.length, 2, 'Day Float on vacation: Cotton’s (Night Float) AM and PM are open needs, not covered by someone who is away');
+eq(nfNeeds[0] && nfNeeds[0].dayFloat, 'Camacho', '…naming the Day Float who is out');
+ok(!b.warnings.some(function (w) { return /Camacho is covering Cotton/.test(w); }), '…and no "covering but out too" warning in its place');
+b = Status.build(r1021, day({ nightFloat: 'Cotton', absences: [{ id: 'x', name: 'Camacho', am: false, pm: true, reason: 'sick', coverAM: '', coverPM: '' }] }), DATA);
+eq(b.statusAt('Camacho', 540).covering, 'Cotton', 'Day Float out only PM: still covers Cotton in the morning');
+eq(b.needs.filter(function (n) { return n.type === 'absence' && n.auto; }).map(function (n) { return n.session; }).join(), 'pm', '…the afternoon is the open need');
 
 /* ---------- weekend ---------- */
 b = Status.build(Engine.resolveDay('2026-09-26', DATA), day({}), DATA);

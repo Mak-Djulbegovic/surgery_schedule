@@ -308,13 +308,16 @@ ok(text.indexOf('none PM') === -1, 'text: no "none PM" for all-day Surg roles');
 contains(html, 'Surg 3 - <b>Aguwa</b></div>', 'html: Surg 3 all day');
 contains(html, 'Surg 4 - <b>Bair</b></div>', 'html: Surg 4 all day');
 
-// Section headers in SPEC order
-var headers = ['Lectures/Events', 'Assignments', 'WER: ', 'Wills/ASC', 'Privates',
+// Section headers in SPEC order — Wills on its own, then Stadium/Cherry
+// Hill (the ASC is Stadium — 10/18/2026; they used to print as 'Wills/ASC'
+// and, only when used, 'Other (Stadium/Cherry Hill)' last)
+var headers = ['Lectures/Events', 'Assignments', 'WER: ', 'Wills', 'Stadium/Cherry Hill', 'Privates',
   'JHN/TJUH/JSC', 'Clinics', 'Vacation', 'Add-ons'];
 var lastIdx = -1;
 var orderOK = true;
 for (var h = 0; h < headers.length; h++) {
-  var idx = text.indexOf(headers[h]);
+  // a heading is a line of its own ('Wills', not 'Wills OR')
+  var idx = headers[h] === 'WER: ' ? text.indexOf(headers[h]) : ('\n' + text + '\n').indexOf('\n' + headers[h] + '\n');
   if (idx === -1 || idx <= lastIdx) { orderOK = false; break; }
   lastIdx = idx;
 }

@@ -393,6 +393,22 @@ const SCHED_DATA = {
     clinicCoverage: { step: 12, label: 'Clinic coverage', chain: ['Surg 2', 'Surg 3', 'Surg 4', 'COOPER', 'Surg 1', 'Surg 5', 'WILLS_OR', 'RETINA'], note: 'Step 12: if a PM clinic needs coverage. The PM clinic manager is helpful with clinic assignments.' }
   },
 
+  // A case type one role always takes (10/18/2026: "surg 2 is ALWAYS going
+  // to take a globe"). Operating then → it follows their cases, with no
+  // estimated start ("no need to estimate how long it will take … check in
+  // on them manually"); two globes go one after the other ("typically the
+  // same attending who does both"). Only Surg 2 out with nobody covering
+  // sends it down its chain (also, as a guard, a holder on the ER,
+  // consults or Path — "surg 2 would never cover the ER"). Whoever covers
+  // Surg 2 is Surg 2. {} turns this off (left out, as in a configuration
+  // saved before 10/18/2026, it is on).
+  alwaysTakes: { trauma: 'Surg 2' },
+
+  // Scheduling notes: "If the patient has not rolled back to the OR by
+  // 4:30, it can be passed to the call person." Shown with a globe that
+  // follows Surg 2's cases, or comes in this late (confirmed 10/18/2026).
+  callAfter: '16:30',
+
   // Availability rules (chief, 9/2026). A resident whose block text is in
   // freeTexts — or a Surg role / OR block with nothing booked — counts as
   // available to take a case or cover a clinic. CPEC is a clinic, not free
@@ -423,16 +439,16 @@ const SCHED_DATA = {
 
   // When PM clinics actually start (chief, 9/28/2026: "if the morning
   // plastics OR goes past 12:30, who will cover the person until they get to
-  // glaucoma?"). Used for "running late" coverage on the Coverage tab; the
-  // AM/PM session split everywhere else stays at noon.
+  // glaucoma?"). Shown on Coverage beside whoever goes from a morning OR to
+  // an afternoon clinic (10/18/2026: "we need to be aware of the people on
+  // any day that they go from OR in the morning and are in clinic in PM");
+  // the AM/PM session split everywhere else stays at noon.
   pmClinicStart: '12:30',
 
-  // Minutes per case, turnover included — ESTIMATES the app uses to guess
-  // when a resident is free again when no 'until' time is typed. Calibrate.
-  caseMinutes: {
-    cataract: 30, cornea: 90, glaucoma: 90, plastics: 60,
-    peds: 60, retina: 90, trauma: 120, other: 60
-  },
+  // No case-length estimates (10/18/2026: "estimating may confuse things
+  // because things can run short or long"): a list counts for the session it
+  // starts in until it is checked off (js/status.js caseSpans). The old
+  // minutes-per-case table (caseMinutes) is no longer read.
 
   schedulingNotes: [
     'Surg 2 is the boss. Give them some grace when things get busy.',

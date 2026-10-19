@@ -12,10 +12,11 @@ how-to's order. Status: **released as v2 (9/2026)**; v1 is archived in `v1/`.
 | 2 Roster | Step 2 — Surg 1–5 | as before; Surg 3/4 shown as **all day** ("Cornea PM if no case") |
 | 3 Surgery | Steps 3–10 — cases | **one line per attending**, reading like the sent schedule: `Surgeon × # · start · category · svc → resident`. The suggested resident is a dashed pill (one click); an assigned one gets a status dot (green free, amber leaves a clinic, red out/double-booked); the backup line appears under the line only when the case pulls someone out of clinic. Service times / done by / notes / add-on / move / delete sit behind **⋯**. **Enter** adds the next line. The CPEC sheet is a prefill banner (Add all / Choose…) that shrinks to one line once added. The old Assign tab is gone |
 | 4 Clinics | Steps 11–12 — clinics | counts as before; each clinic shows who is out / pulled into a case and who covers; "Needs coverage" list on top |
-| 5 Coverage | the new backup view | needs coverage, available AM / PM (free, then Retina / Uveitis to pull first), "if something comes in at t" (its own time box), a morning OR running late, add-on call names |
+| 5 Coverage | the new backup view | today's roles (with stand-ins for anyone out), needs coverage (everything still open, from every tab), the day at a glance — morning OR → afternoon clinic, then AM / PM: who is operating (lists to check off), free, pull first (Retina / Uveitis), out — "if a globe or add-on comes in", add-on call names, the rules (flow chart) |
 | 6 Preview & Copy | — | the document |
 
-How-to, CPEC sheet, block schedules and Setup moved to a **Library** menu.
+How-to, the flow chart (10/18/2026), CPEC sheet, block schedules and Setup
+moved to a **Library** menu.
 
 **Landing page**: a short title only (no greeting, no tagline — the chief:
 "unnecessary for people who have made the schedule before") over a blue
@@ -38,6 +39,232 @@ app bar is two short rows, the free lists fold into one line ("Free AM 13 ·
 PM 9 ▾"), clinic count and note sit side by side, and Available AM /
 PM stack. Preview & Copy lists what is still open
 (cases without a resident, gaps) with links to fix them.
+
+## Coverage follows every tab (10/18/2026)
+
+The request: "the coverage tab does not necessarily correspond to changes
+that were made in prior tabs — if surg 2 is out on vacation, it does not
+account for that in the coverage tab." Reproduced on Mon 10/19 (Surg 2 Cheng
+out, c/b Wibbelsman): a globe went to Surg 3 pulled out of Cornea clinic;
+the daytime add-on call still said Cheng ("Surg 2"); Cheng's 1 PM list was
+still on the check-off list and nowhere under Needs coverage; a morning OR
+running late was covered by Surg 4.
+
+**Root cause.** Every chain resolved "Surg 2" (and Surg 1–5, Cooper, the
+OR-block and Retina tokens) straight from the block schedule. A coverer took
+over the absent resident's clinic slot on the board, never their role.
+
+**The rule now: covering someone is doing their job for that session** —
+their duty AND their place in every how-to chain (`board.standIn`,
+`board.actingSurg`, `Assign` resolves tokens through stand-ins for the
+session(s) a case touches). "Cheng (Surg 2) c/b Wibbelsman" makes Wibbelsman
+that session's Surg 2: first for trauma and the remaining cases, first for
+clinic cover (Step 12) and a morning OR running late, and the daytime add-on
+call. Split cover (X AM, Y PM) → X is Surg 2 in the morning, Y in the
+afternoon. NC → nobody stands in and the chains move on, as before.
+Exception: Day Float covering the Night Float resident takes no chain place
+(Day Float is never available — chief, 9/2026).
+
+What follows from it, tab by tab:
+
+- **Out today**: a Surg role's card says who becomes Surg *n* ("Wibbelsman is
+  Surg 2"), or that with NC its cases go down each chain.
+- **Roster**: the Surg tile says "Out today — Wibbelsman covers"; WER and
+  consult lines show stand-ins.
+- **Surgery**: suggestions use stand-ins; a case whose resident is out is red
+  with the how-to's pick in their place one click away, and counts as needing
+  a resident (toolbar, section headers, tab badge, **Assign all**). A CPEC-sheet
+  list whose cover (Surg 1 / 5, Wills OR, Retina) is out goes to whoever
+  covers them. A backup who cannot cover (out / in a case) shows red.
+  **Done now** checks the case off exactly as Coverage does (it used to type
+  over "Done by", so the two tabs disagreed).
+- **Coverage**: "Today's roles" — Surg 1–5 and the Cooper senior as every plan
+  on the tab resolves them. **Needs coverage** is everything still open, from
+  every tab: ER first, then cases whose resident is out, service cases with
+  nobody yet, uncovered absences, clinic gaps (`board.needs` type `case`).
+  The check-off list leaves out cases whose resident is out (they are under
+  Needs coverage). Add-ons, clinic cover and running late use stand-ins.
+- **Add-on call**: a daytime row the app filled (`row.s2`) follows that day's
+  acting Surg 2 — the coverer when Surg 2 is out all day, empty (with a
+  prompt) when nobody covers; a name someone picked is kept but flagged "out
+  that day". Pasted names are the sender's (`s2: false`).
+  **Start from yesterday** now matches add-on rows by date + period
+  (yesterday's "Tuesday daytime" row is today's "Tuesday daytime" row); it
+  copied row by row, putting Monday night's name on Tuesday night.
+- **Preview & Copy**: the copied schedule agrees with its own Vacation lines —
+  `Surg 2 - **Wibbelsman (for Cheng)**`, `WER: **Djulbegovic AM/PM (for
+  Teng)**`, `Jeff Consults: **Nahar (for DeSimone)**` (the clinic lines' "(for
+  …)" notation); `none (Cheng out)` for NC, `TBD (Cheng out)` while undecided;
+  per session when they differ. The paste reader reads these back (the
+  bracketed name is the block holder). The send-check counts cases whose
+  resident is out.
+
+**Wills and Stadium / Cherry Hill** (chief, 10/18/2026: "Wills can be its own
+thing — ASC/stadium are the same thing, so maybe you turn it into Wills as
+one and Stadium/Cherry Hill as the other"). Sections: Wills · Stadium /
+Cherry Hill (ASC) · JHN/TJUH/JSC · Privates (keys unchanged — `wills`,
+`other` — so saved days keep their cases). The copied schedule prints
+`Wills`, `Stadium/Cherry Hill`, `Privates`, `JHN/TJUH/JSC`, each with `-none`
+when empty. CPEC-sheet lists at SP / CH go to Stadium / Cherry Hill. The
+paste reader takes `Wills`, `ASC`, `Stadium`, `Cherry Hill`, `Stadium/Cherry
+Hill`, the old `Other (Stadium/Cherry Hill)`, and the old `Wills/ASC` — whose
+cases go to Wills unless the line says Stadium / Cherry Hill / ASC or that
+day's CPEC sheet has the attending only at SP / CH.
+
+**Flow chart** (Library → Flow chart; Home and How-to link to it): the six
+steps and what each feeds forward, someone is out, who takes a case (steps
+3–10, chains drawn from `data.hierarchy`), who covers a clinic (step 12).
+HTML boxes and arrows — one column on a phone; prints one panel per page.
+
+**From the second audit pass** (docs/AUDIT.md, 19–28): Day Float out → the
+Night Float resident's sessions are open needs and print uncovered; a
+CPEC-sheet list starts as all service (it was 0 — a list whose cover was
+out became "private"); a checked-off case is never open; the Clinics tab's
+notes follow the board's no-cover rules; Roster's Day Float line follows the
+Night Float field; an absence that needs no cover prints without "coverage
+TBD" (`Calotti (Retina)`); a case across noon gets one backup for every
+clinic it pulls from (`CPEC / Cornea`); the paste reader reads every
+Vacation line the app prints, merges two lines for one resident, and keeps
+bracketed notes and block names ("Stadium OR (Abendroth)") as they were.
+
+**Assumptions (say so if wrong)**
+
+- A coverer inherits every chain place of the person they cover, whatever
+  their year (a senior covering the PGY-2 on Plastics OR is "on Plastics OR").
+- Daytime add-on call with Surg 2 out all day: the AM coverer first. Out half
+  a day: Surg 2 keeps the call.
+- Needs coverage order after the ER: a case without its resident is the most
+  urgent of the rest.
+- Absences are per day: the next day's add-on row uses that day's saved
+  draft, if there is one, else the block schedule.
+
+## Coverage revamped; no case-time estimates (10/18/2026, latest)
+
+The asks: "i think estimating may confuse things because things can run
+short or long. just have it listed who is operating that day so there can be
+a birds eye view"; "the 'if a morning OR is running late' can be dropped. we
+need to be aware of the people on any day that they go from OR in the
+morning and are in clinic in PM. example block 3 on Tuesday and block 6 on
+tuesday for first years"; the "needs cover only if an urgent cornea case
+pulls them" line — "this should just be built in bc this is just
+understood"; "there needs to be a major revamp". Nomenclature: PGY-1s are
+interns and on none of this; the first years are the PGY-2s, second years
+PGY-3, third years PGY-4.
+
+**No estimates (js/status.js `caseSpans`).** A list counts for the session
+it starts in — from its start to noon (AM) or to the end of the day (PM) —
+until it is checked off. A typed "Done by" ends it then; "All day" in the
+start runs it to the end of the day; a cataract list with a PM service time
+runs into the afternoon. One resident's lists run back to back: an
+open-ended list ends when their next one starts, so two lists in one
+morning are not a double booking. `data.caseMinutes` is no longer read.
+Consequences: a clinic someone leaves for an afternoon list needs cover
+from the list's start for the rest of the afternoon (until the list is
+checked off), so a backup must be free that long; a morning list never
+pulls anyone from an afternoon clinic — that risk is what the morning OR →
+afternoon clinic list is for; and a resident with a morning list is not
+offered for anything else that morning until it is checked off.
+
+**The Coverage tab now**: today's roles (and "The rules ↓"); Needs coverage;
+**Today at a glance** — first who goes from a morning OR (their OR block, or
+a list of theirs that morning) to an afternoon clinic, from the block
+schedule (e.g. Tue 10/20: Williamson, second year — Wills OR → Glaucoma;
+Patel, first year — Plastics OR → Plastics; Surg 4 → Glaucoma whenever they
+have a morning list; Illiano's block 3 Peds OR → CPEC on the 4th Tuesday), then AM
+| PM: who is operating (their lists with the typed start and a check-off box,
+third years first), who is free, whom to pull first, who is out and who
+covers; **If a globe or add-on comes in** (one line on Surg 2 — free, or the
+globe already on — then the plan); Add-ons; the rules (flow chart, folded).
+Gone: the running-late card (and saved `overruns`, dropped on load), the
+separate Operating today and Available cards (now the board), and the
+spelled-out rules (the CPEC urgent-case line, the Surg 3 / Surg 4 clinic
+list, the "both clinics" warning) — the logic is unchanged, the words are
+gone. Elsewhere: Surgery says "Operating from 7:30 AM, for the morning —
+until it is checked off", Clinics and backup lines say "from 1:00 PM", and
+the Free AM / PM strip has no guessed windows.
+
+## Surg 2 and the globe (10/18/2026, later)
+
+The rule as given: "surg 2 is ALWAYS going to take a globe. where we get
+into issues is when Surg 2 is in a globe then the surg 3 person may have a
+corneal transplant (PKP) while they have clinic on M, W, or F afternoon.
+then there is the consideration that there is glaucoma cases going during
+the PM clinic on T, W, Th"; "if there is no globe selected in the coverage
+tab then surg 2 should be available for clinic to cover other surgery
+service. ofc they may the one to take over the OR if needed (least
+redundency is on Wednesdays)"; "make the flow chart on the coverage page to
+allow the user to know what the rules are".
+
+**Before.** A globe walked the trauma chain like any add-on, so a Surg 2
+scrubbed at the globe's time was passed over: on Wed 10/21, with Surg 2 in a
+1 PM cataract list, a 1:30 globe went to the Cooper senior pulled out of
+CPEC. The Coverage planner always held a globe ("a globe at now", and the
+last row could not be removed), so there was no way to say "no globe".
+
+**Now.** `data.alwaysTakes = { trauma: 'Surg 2' }`: a globe goes to whoever
+holds Surg 2 when it comes in — the block holder or their stand-in. If they
+are operating then, it still goes to them and **follows their cases**, with
+no estimated start ("no need to estimate how long it will take … good to
+visualize who is operating so we can check in on them manually"): the
+Coverage planner says "Samuel is operating today — Tyson ×3 (3 cases): the
+globe follows their cases. Check in with them.", and the case keeps the time
+it came in. On Surgery the suggestion says the same, and once assigned the
+line is amber ("operating — the globe follows their cases"), not red
+double-booked. A second globe follows the first ("typically the same
+attending who does both"). A globe goes down the trauma chain (Surg 3 →
+Surg 4 → Cooper → Surg 1 → Surg 5) only when Surg 2 is out with nobody
+covering ("surg 2 would never cover the ER"; a holder on a never-pulled duty
+or off-site still falls through, as a guard). A globe that follows Surg 2's
+cases, or comes in at 4:30 or later, carries the scheduling note — "if the
+patient has not rolled back to the OR by 4:30, it can be passed to the call
+person" (`data.callAfter`, confirmed); it is not reassigned. A configuration
+without `alwaysTakes` gets the rule; `{}` turns it off.
+
+**Operating today** (superseded the same day by the day at a glance, and
+the estimates underneath it removed — see "Coverage revamped"). A clinic
+handed on is covered "from 1:30 PM until Djulbegovic is back".
+
+**Coverage, with no globe.** The planner starts empty. Its card says Surg 2
+is free — first on the clinic-coverage chain (Step 12) and first on the
+remaining-cases chain (Step 10) — lists what Surg 2 already has today, and
+the Surg 3 / Surg 4 PM clinics with each PM case and its backup. When both
+have a PM clinic that can pull them that day (Wednesday: Cornea and
+Glaucoma) it says Surg 2 can cover only one at a time. Surg 3's Thursday PM
+CPEC "would theoretically need coverage if surg 3 has an urgent cornea
+case" — built in: a Surg 3 PM case on Thursday asks for CPEC cover, and
+nothing is said otherwise. (The Surg 3 / Surg 4 list and the warning were
+removed in the revamp.) A globe
+already on Surgery turns the card into "Globe today". After **Add it as an
+add-on case** the planner empties (it used to keep the globe, ready to be
+added twice); a new date starts empty.
+
+**The rules on Coverage.** The flow chart's cards sit at the foot of
+Coverage (open unless this browser closed it; "The rules ↓" at the top
+jumps there), led by a new **Surg 2 and the globe** chart — also in Library
+→ Flow chart. Its weekdays come from the block schedule for the selected
+week, not from text: Cornea (Surg 3) Mon / Wed / Fri, Glaucoma (Surg 4)
+Tue / Wed / Thu — both on Wednesday, the least slack — and CPEC (Surg 3)
+Thu, which needs cover only for an urgent cornea case.
+
+Checked for the week of 10/19 (`tests/test-coverage.js`; a PKP for Surg 3
+and a glaucoma case for Surg 4 at 1 PM whenever they have a PM clinic, each
+backup as the app suggests it, then a 1:30 globe):
+
+| Day | Surg 2 | No globe — the clinics | Globe at 1:30 — the clinic Surg 2 was covering |
+|---|---|---|---|
+| Mon 10/19 | Cheng | Cornea: Cheng | Cornea → Shields (Surg 4) |
+| Tue 10/20 | Cheng | Glaucoma: Cheng | Glaucoma → Djulbegovic (Surg 3) |
+| Wed 10/21 | Samuel | Cornea: Samuel · Glaucoma: Wibbelsman (Surg 1) | Cornea → Cheng (Surg 5) |
+| Thu 10/22 | Samuel | CPEC: Samuel · Glaucoma: Aguwa (Surg 1) | CPEC → Cheng (Surg 5) |
+| Fri 10/23 | Samuel | Cornea: Samuel | Cornea → Shields (Surg 4) |
+
+With Surg 2 in a 1 PM cataract list instead, every day's globe still goes
+to Surg 2, following their cases.
+
+Decided (10/18/2026): Thursday CPEC needs cover only if an urgent cornea
+case pulls Surg 3; two globes go one after the other to Surg 2 (usually the
+same attending); Surg 2 never covers the ER; the 4:30 call-person note
+stands.
 
 ## Saving and working at the same time (9/28/2026)
 
@@ -72,7 +299,9 @@ automatic save in case they X out of the tab."
   check off when the cases are done and who clears up. again, the goal is to
   have a list of who is available"). Coverage → "Cases — check off when
   done": every case with a resident, in time order, with when the resident
-  clears. Checking one sets `case.done` / `case.doneAt` — now, today; the
+  clears. (10/18/2026: now **Operating today**, one row per resident with
+  their lists and case count, and no estimated times — see "Surg 2 and the
+  globe".) Checking one sets `case.done` / `case.doneAt` — now, today; the
   estimated end on another day — and the time can be corrected. The case is
   over at that minute (earlier or later than the estimate), so the resident
   is free from then and Available updates. Unchecking puts the case back as
@@ -114,7 +343,8 @@ automatic save in case they X out of the tab."
   says so, e.g. "Globe 1:00 PM: Calotti (the order alone: nobody); Glaucoma
   add-on 1:30 PM: Cheng (the order alone: Calotti)". The Surgery tab still
   uses the plain order (it is the doc's procedure for the whole list).
-- **A junior running late: free juniors first** (chief: "if there are free
+- (Removed with the running-late card, 10/18/2026.) **A junior running
+  late: free juniors first** (chief: "if there are free
   juniors (PGY2 and 3), they can be the default to help take over if the
   PGY2 is running later in the OR with Carrasco … will have Parekh cover if
   Patel goes past 12:30"). `Assign.lateCover`: for a PGY-2/3, free juniors
@@ -186,7 +416,9 @@ automatic save in case they X out of the tab."
   who was passed over and why. Coverage tab: pick several kinds; "Add all as
   add-on cases". (The first version, 9/28, chose jointly by lowest total chain
   position with an urgency tie-break I made up — replaced by the doc's order.)
-- **A morning OR running late** (chief: "if the morning plastics OR goes past
+- (Removed 10/18/2026 — Coverage now lists who goes from a morning OR to an
+  afternoon clinic instead; see "Coverage revamped".) **A morning OR running
+  late** (chief: "if the morning plastics OR goes past
   12:30, who will cover the person until they get to glaucoma? … surg 2
   would cover in glaucoma clinic until the PGY2 is done in the OR"). Coverage
   lists everyone in an OR this morning (an OR block, or a case they are on)
@@ -281,9 +513,11 @@ Rules and where they come from:
   is never listed as free, whatever session they stand in for.
 - **Surg 3 and 4 are all day even with clinic** — how-to Step 2. Their
   clinic is where they are when they have no case.
-- **A case's busy span**: service-case times if given (one case-length each),
-  else the whole list: start + count × minutes-per-case. `Done by` (typed, or
-  **Done now** on the day) replaces the estimate. No start ("AM TF") → 7:30.
+- **A case's busy span** (10/18/2026: no estimates): the session it starts
+  in, until checked off — from each service time if given (not cataracts),
+  else from the list start; to noon (AM) or the end of the day (PM). A typed
+  `Done by`, **Done now** / the check-off, or "All day" sets the end; the
+  resident's next list ends an open-ended one. No start ("AM TF") → 7:30.
 - **Clinic backup**: a case's backup covers whatever clinic the assigned
   resident is pulled from, for the length of the case. Chains resolve to the
   original owner (Surg 2 covering Bair, then Surg 2 takes a globe and Surg 4
@@ -376,9 +610,10 @@ Mechanics, with a board:
 
 ## Assumptions to calibrate
 
-- `data.caseMinutes` (turnover included): cataract 30, cornea 90,
-  glaucoma 90, plastics 60, peds 60, retina 90, trauma 120, other 60 —
-  **estimates, not measured**.
+- A list counts for the session it starts in (10/18/2026): a morning list
+  that runs into the afternoon is not counted for the afternoon unless its
+  start says "All day" or a Done by time is typed — the morning OR →
+  afternoon clinic list on Coverage is the reminder.
 - A non-cataract list with private and service cases but no service time:
   the service cases are assumed to open the list (the row asks for the
   time). Cataract lists always take the whole list.
@@ -411,7 +646,7 @@ Mechanics, with a board:
 - **Off-site**: Cooper Clinic / Cooper OR are at Cooper, so a chain never
   pulls those residents into a Wills case or clinic (they stay pickable by
   hand). `data.availability.offsiteTexts` — empty it to turn this off.
-- Case lengths (`data.caseMinutes`) and the whole-list rule above.
+- The half-day rule above (no case lengths since 10/18/2026).
 - Day-of use on other devices: data lives in one browser (localStorage).
 
 ## Tests

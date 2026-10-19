@@ -46,19 +46,53 @@
   /* section builders                                                    */
   /* ------------------------------------------------------------------ */
 
+  // Who does `name`'s duty in session s, as the copied schedule writes it:
+  // { who: 'Teng' } — or, with Teng out (Out today), { who: 'Djulbegovic',
+  // paren: 'for Teng' }, { who: 'none', paren: 'Teng out' } (NC) or
+  // { who: 'TBD', paren: 'Teng out' } (not decided yet).
+  // b: a resident's name (printed bold)
+  function dutyPart(day, roster, name, s) {
+    var oc = outCover(day, roster, name, s);
+    if (!oc) return { who: name, b: true };
+    if (oc.who) return { who: oc.who, paren: 'for ' + name, b: true };
+    return { who: oc.nc ? 'none' : 'TBD', paren: name + ' out', b: false };
+  }
+
+  function partText(p, sess) {
+    return p.who + (sess ? ' ' + sess : '') + (p.paren ? ' (' + p.paren + ')' : '');
+  }
+
+  // One resident's duty over the sessions they hold it: 'Teng AM/PM',
+  // 'Djulbegovic AM/PM (for Teng)', 'Djulbegovic AM (for Teng), Teng PM'.
+  // `label`: print the sessions (WER does; consult lines do not).
+  function dutyText(day, roster, name, sessions, label) {
+    var parts = sessions.map(function (s) { return dutyPart(day, roster, name, s); });
+    var same = parts.length === 2 && partText(parts[0]) === partText(parts[1]);
+    if (parts.length === 1 || same) {
+      var sess = !label ? '' : (parts.length === 2 ? 'AM/PM' : sessions[0].toUpperCase());
+      return partText(parts[0], sess);
+    }
+    return parts.map(function (p, i) { return partText(p, sessions[i].toUpperCase()); }).join(', ');
+  }
+
   // WER collapses per-resident sessions: 'Nahar AM/PM, Hamou AM/PM, Patel PM'
-  function collapseWer(wer) {
-    wer = wer || {};
+  // — with whoever covers anyone out ('Djulbegovic AM/PM (for Teng)'), so the
+  // line agrees with the Vacation section.
+  function werText(day, roster) {
+    var wer = (roster && roster.wer) || {};
     var am = wer.am || [];
     var pm = wer.pm || [];
-    var parts = [];
-    am.forEach(function (n) {
-      parts.push(n + (pm.indexOf(n) !== -1 ? ' AM/PM' : ' AM'));
-    });
-    pm.forEach(function (n) {
-      if (am.indexOf(n) === -1) parts.push(n + ' PM');
-    });
-    return parts.join(', ');
+    var people = [];
+    am.concat(pm).forEach(function (n) { if (people.indexOf(n) === -1) people.push(n); });
+    return people.map(function (n) {
+      var sessions = ['am', 'pm'].filter(function (s) { return (s === 'am' ? am : pm).indexOf(n) !== -1; });
+      return dutyText(day || {}, roster, n, sessions, true);
+    }).join(', ');
+  }
+
+  // A consult list ('Cotton'), with whoever covers anyone out
+  function consultText(day, roster, list) {
+    return (list || []).map(function (n) { return dutyText(day || {}, roster, n, ['am', 'pm'], false); }).join(', ');
   }
 
   function buddyPart(b, sess) {
@@ -72,7 +106,7 @@
   function cooperText(roster, day) {
     var cooper = (roster.cooperConsults || []);
     if (!cooper.length) return '';
-    var t = cooper.join(', ');
+    var t = consultText(day, roster, cooper);
     var a = buddyPart(day.cooperBuddyAM, 'AM');
     var p = buddyPart(day.cooperBuddyPM, 'PM');
     var buddies = [a, p].filter(function (x) { return !!x; });
@@ -119,12 +153,20 @@
     var reason = REASON_SUFFIX[a.reason];
     if (reason) head += ' — ' + reason;
 
+    // A session whose duty needs no cover (Retina / Uveitis, PT, Day Float —
+    // the board's rule) and has no cover picked says nothing: 'Calotti
+    // (Retina)', not '— coverage TBD'.
     var parts = sess.map(function (s) {
       return { s: s, who: trim(s === 'am' ? a.coverAM : a.coverPM) };
-    });
+    }).filter(function (p) { return p.who || !needsNoCover(cellText(res, p.s)); });
+    if (!parts.length) return head;
     function coverParen(who, sessions) {
       var own = uniq(sessions.map(function (s) { return cellText(byName[who], s); }));
       return own.length ? ' (' + own.join('/') + ')' : '';
+    }
+    if (parts.length === 1 && sess.length === 2) {
+      // the other session needs no cover: name the session this one is
+      return head + ' ' + sessionPart(parts[0], null, coverParen);
     }
     if (parts.length === 2 && parts[0].who === parts[1].who) {
       var w = parts[0].who;
@@ -138,14 +180,33 @@
       if (!w1) return head + ' — coverage TBD';
       return head + ' c/b ' + w1 + coverParen(w1, sess);
     }
-    return head + ' ' + parts.map(function (p, i) {
-      var S = p.s.toUpperCase();
-      if (p.who === 'NC') return 'NC ' + S;
-      if (!p.who) return S + ' coverage TBD';
-      var prev = parts[i - 1];
-      var prefix = (!prev || !prev.who || prev.who === 'NC') ? 'c/b ' : '';
-      return prefix + p.who + ' ' + S + coverParen(p.who, [p.s]);
-    }).join(' | ');
+    return head + ' ' + parts.map(function (p, i) { return sessionPart(p, parts[i - 1], coverParen); }).join(' | ');
+  }
+
+  // One session of a split Vacation line: 'NC AM', 'PM coverage TBD',
+  // 'c/b Hamou PM (CPEC)' — 'c/b' unless the previous part already said it.
+  function sessionPart(p, prev, coverParen) {
+    var S = p.s.toUpperCase();
+    if (p.who === 'NC') return 'NC ' + S;
+    if (!p.who) return S + ' coverage TBD';
+    var prefix = (!prev || !prev.who || prev.who === 'NC') ? 'c/b ' : '';
+    return prefix + p.who + ' ' + S + coverParen(p.who, [p.s]);
+  }
+
+  function getData() {
+    if (typeof window !== 'undefined' && window.SCHED_DATA) return window.SCHED_DATA;
+    if (typeof require !== 'undefined') {
+      try { return require('./data.js'); } catch (e) { return {}; }
+    }
+    return {};
+  }
+
+  // Duties that need no cover when their resident is out — as the board
+  // decides it: noCoverTexts plus the pull-first clinics (Retina / Uveitis).
+  function needsNoCover(text) {
+    var av = getData().availability || {};
+    var list = (av.noCoverTexts || ['PT', 'Day Float']).concat(av.pullFirstTexts || ['Retina', 'Retina Private', 'Uveitis']);
+    return !!text && list.indexOf(text) !== -1;
   }
 
   // Vacation section: one line per absence; with nobody out, the free-text
@@ -188,11 +249,73 @@
     });
     var nf = trim(day.nightFloat);
     if (nf && byName[nf] && !explicit[nf]) {
-      var df = ((roster && roster.dayFloat) || []).filter(function (n) { return n !== nf; })[0] || '';
-      add(nf, 'am', df);
-      add(nf, 'pm', df);
+      add(nf, 'am', dayFloatIn(day, roster, nf, 'am'));
+      add(nf, 'pm', dayFloatIn(day, roster, nf, 'pm'));
     }
     return { out: out, covering: covering };
+  }
+
+  // The Day Float covering the Night Float resident in session s — '' when
+  // there is none, or they are out then themselves (Out today): then nobody
+  // covers the Night Float resident, as on the board.
+  function dayFloatIn(day, roster, nf, s) {
+    var df = ((roster && roster.dayFloat) || []).filter(function (n) { return n !== nf; })[0] || '';
+    var away = (day.absences || []).some(function (a) { return trim(a && a.name) === df && a[s]; });
+    return df && !away ? df : '';
+  }
+
+  // What Out today says for `name` in session s -> null (not out) |
+  // { who } (covered by who) | { nc: true } (NC) | { tbd: true } (not
+  // decided yet). The first absence on the roster counts, as in standIns;
+  // the Night Float resident is out all day, covered by Day Float.
+  function outCover(day, roster, name, s) {
+    var byName = residentMap(roster);
+    var abs = null;
+    (day.absences || []).some(function (a) {
+      if (trim(a && a.name) !== name || !byName[name]) return false;
+      abs = a;
+      return true;
+    });
+    if (abs) {
+      if (!abs[s]) return null;
+      var w = trim(s === 'am' ? abs.coverAM : abs.coverPM);
+      if (w === 'NC') return { nc: true };
+      return (w && byName[w]) ? { who: w } : { tbd: true };
+    }
+    var nf = trim(day.nightFloat);
+    if (nf && nf === name && byName[nf]) {
+      var df = dayFloatIn(day, roster, nf, s);
+      return df ? { who: df } : { nc: true };
+    }
+    return null;
+  }
+
+  // 'Surg 2 - **Cheng**' — or, with Cheng out (Out today), whoever stands in
+  // for them, as the clinic lines write it: 'Surg 2 - **Wibbelsman (for
+  // Cheng)**'; 'none (Cheng out)' for NC, 'TBD (Cheng out)' while
+  // undecided; per session when they differ ('**Wibbelsman AM (for Cheng)**
+  // | **Cheng PM**'). allDay (Surg 3/4 — how-to Step 2): all day even with a
+  // clinic.
+  function surgLine(n, s, day, roster) {
+    var line = [seg('Surg ' + n + ' - ')];
+    var all = (s.am && s.pm) || (s.allDay && (s.am || s.pm));
+    var held = all ? ['am', 'pm'] : (s.am ? ['am'] : (s.pm ? ['pm'] : []));
+    if (!s.name || !held.length) { line.push(seg('none')); return line; }
+    var parts = held.map(function (sess) { return dutyPart(day, roster, s.name, sess); });
+    if (all && partText(parts[0]) === partText(parts[1])) {
+      line.push(seg(partText(parts[0]), parts[0].b));
+    } else if (all) {
+      line.push(seg(partText(parts[0], 'AM'), parts[0].b));
+      line.push(seg(' | '));
+      line.push(seg(partText(parts[1], 'PM'), parts[1].b));
+    } else if (held[0] === 'am') {
+      line.push(seg(partText(parts[0], 'AM'), parts[0].b));
+      line.push(seg(' | none PM'));
+    } else {
+      line.push(seg('none AM | '));
+      line.push(seg(partText(parts[0], 'PM'), parts[0].b));
+    }
+    return line;
   }
 
   // '-Marous x7 (730 start), x1 service - **Momenaei** (no Peds OR)'
@@ -324,46 +447,34 @@
     var surgKeys = Object.keys(surg).sort(function (a, b) { return (+a) - (+b); });
     if (surgKeys.length) {
       var aLines = ['Assignments'];
-      surgKeys.forEach(function (n) {
-        var s = surg[n] || {};
-        var line = [seg('Surg ' + n + ' - ')];
-        // allDay (Surg 3/4 — how-to Step 2): all day even with a clinic
-        if ((s.am && s.pm) || (s.allDay && (s.am || s.pm))) {
-          line.push(seg(s.name, true));
-        } else if (s.am) {
-          line.push(seg(s.name + ' AM', true));
-          line.push(seg(' | none PM'));
-        } else if (s.pm) {
-          line.push(seg('none AM | '));
-          line.push(seg(s.name + ' PM', true));
-        } else {
-          line.push(seg('none'));
-        }
-        aLines.push(line);
-      });
+      surgKeys.forEach(function (n) { aLines.push(surgLine(n, surg[n] || {}, day, roster)); });
       sections.push(aLines);
     }
 
     // WER / Night Float / Jeff Consults / Cooper Consults
     var cLines = [];
-    var wer = collapseWer(roster.wer);
+    var wer = werText(day, roster);
     if (wer) cLines.push([seg('WER: '), seg(wer, true)]);
     var nf = trim(day.nightFloat);
     if (nf) cLines.push([seg('Night Float: '), seg(nf, true)]);
     var jeff = roster.jeffConsults || [];
-    if (jeff.length) cLines.push([seg('Jeff Consults: '), seg(jeff.join(', '), true)]);
+    if (jeff.length) cLines.push([seg('Jeff Consults: '), seg(consultText(day, roster, jeff), true)]);
     var cooper = cooperText(roster, day);
     if (cooper) cLines.push([seg('Cooper Consults: '), seg(cooper, true)]);
     if (cLines.length) sections.push(cLines);
 
-    // Case sections. The three core sections always print (with '-none' when
-    // empty, matching the target document); 'Other' only prints when used.
+    // Case sections, each printed with '-none' when empty (as the target
+    // document does). Wills is its own section and the ASC is Stadium, so
+    // Stadium/Cherry Hill follows it (10/18/2026: "ASC/stadium are the same
+    // thing … Wills as one and Stadium/Cherry Hill as the other") — they
+    // used to print as 'Wills/ASC' and, only when used, 'Other (Stadium/
+    // Cherry Hill)' last. The paste reader takes both forms.
     var cases = day.cases || [];
     var defs = [
-      { key: 'wills', label: 'Wills/ASC', always: true },
+      { key: 'wills', label: 'Wills', always: true },
+      { key: 'other', label: 'Stadium/Cherry Hill', always: true },
       { key: 'private', label: 'Privates', always: true },
-      { key: 'jhn', label: 'JHN/TJUH/JSC', always: true },
-      { key: 'other', label: 'Other (Stadium/Cherry Hill)', always: false }
+      { key: 'jhn', label: 'JHN/TJUH/JSC', always: true }
     ];
     defs.forEach(function (def) {
       var list = cases.filter(function (c) { return c && c.section === def.key; });
@@ -574,6 +685,8 @@
 
   var ExportFmt = {
     absenceLine: function (a, roster) { return absenceLine(a || {}, residentMap(roster)); },
+    werText: werText,
+    consultText: consultText,
     vacationLines: vacationLines,
     clinicStaff: clinicStaff,
     buildSections: buildSections,

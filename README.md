@@ -32,13 +32,19 @@ The six tabs follow the "How to Surgical Schedule" order:
 1. **Out today** — "No one out — 24 strong", or who is out (all day / AM /
    PM) and who covers each session, or NC. Prints as
    `Ransone (CPEC/Plastics) c/b Patel AM (Uveitis) | Hamou PM (CPEC)`.
-   Anyone out disappears from every dropdown.
+   Anyone out disappears from every dropdown, and whoever covers them does
+   their job for that session — their duty and their place in every chain:
+   cover Surg 2 and you are Surg 2 (trauma, remaining cases, clinic cover,
+   the daytime add-on call), on every tab and in the copied schedule
+   (`Surg 2 - Wibbelsman (for Cheng)`).
 2. **Roster** — Surg 1–5 (Surg 3 and 4 all day), WER, consults, Night Float
    and the Day Float covering them.
-3. **Surgery** — the CPEC-sheet cataracts, then the case list, with the
+3. **Surgery** — the CPEC-sheet cataracts, then the case list (Wills ·
+   Stadium / Cherry Hill — the ASC · JHN/TJUH/JSC · Privates), with the
    resident picked on each case: a one-click suggestion that follows the
    how-to doc step by step (scheduled cornea → Surg 3, add-on glaucoma →
-   Surg 4, …, trauma → Surg 2; anything skipped waits for Step 10, the
+   Surg 4, …, a globe → Surg 2 always — operating, it follows their
+   cases; anything skipped waits for Step 10, the
    remaining cases Surg 2 → 3 → 4 → Cooper → 1 → 5, in time order). It skips
    anyone out or already in a case then, never suggests anyone off the doc's
    chains (past the end it's Surg 2's call, and it shows who else is free),
@@ -47,18 +53,25 @@ The six tabs follow the "How to Surgical Schedule" order:
    Nothing is assigned until you click.
 4. **Clinics** — counts, plus who is out or pulled into a case and who
    covers; anything left short is listed on top.
-5. **Coverage** — the day's cases to check off as they finish, then who is
-   available AM and PM (free, or done with their cases; then Retina /
-   Uveitis, the first to pull from — no cover needed; never ER, consults or
-   Path), what happens if add-ons come in — one or several,
-   each at its own time, placed in the doc's step order and searched
-   exactly so none is left without a resident when some choice covers it
-   (docs/OPTIMIZATION.md) — who covers a clinic if a morning OR runs late
-   (free juniors first for a junior), add-on call names.
+5. **Coverage** — today's roles (Surg 1–5 and Cooper, with whoever covers
+   anyone out), everything still open from every tab (a case whose resident
+   is out, a service case with nobody, an uncovered absence, a clinic gap —
+   each with its fix), then the day at a glance: who goes from a morning OR
+   to an afternoon clinic (every year, from the block schedule), and AM | PM —
+   who is operating (their lists, checked off as they finish; no case times
+   are guessed), who is free, whom to pull first (Retina / Uveitis), who is
+   out. Then if a globe or add-ons come in (a globe always goes to Surg 2 —
+   following their cases when they are operating — and the clinic they were
+   covering passes down the chain; the rest in the doc's step order, searched
+   so none is left without a resident when some choice covers it —
+   docs/OPTIMIZATION.md), add-on call names, and the rules as a flow chart.
 6. **Preview & Copy** — the day in the standard document format, copied
    with formatting for Google Docs, Word, or email.
 
-A Free AM / Free PM strip stays under the tabs; How-to, the CPEC sheet, the
+A Free AM / Free PM strip stays under the tabs; How-to, a printable **flow
+chart** (the six steps, Surg 2 and the globe, someone out, who takes a case,
+who covers a clinic — drawn from the active chains and this week's block
+schedule; the same rules sit at the foot of Coverage), the CPEC sheet, the
 block grids and Setup live in the **Library** menu. The rules the app
 encodes — and the assumptions still to calibrate — are listed in
 [docs/UISPEC6.md](docs/UISPEC6.md).
@@ -66,10 +79,22 @@ encodes — and the assumptions still to calibrate — are listed in
 ![Out today](docs/screenshots/out.png)
 ![Surgery](docs/screenshots/surgery.png)
 ![Coverage](docs/screenshots/coverage.png)
+![Flow chart](docs/screenshots/flow.png)
 
 ## Versions
 
-- **v2** (this version, 9/2026) — the flow follows the how-to (Out today →
+- **v2, 10/2026 update** — Coverage follows every tab: a coverer takes the
+  absent resident's place in every chain (Surg 2 on vacation c/b X → X is
+  Surg 2), cases whose resident is out are listed to reassign, the daytime
+  add-on call follows the acting Surg 2, and the copied schedule's
+  Assignments / WER / consult lines show who stands in. Wills and Stadium /
+  Cherry Hill are separate sections. A flow chart in the Library and on
+  Coverage. Surg 2 always takes the globe (operating, it follows their
+  cases). No case times are guessed: a list counts for its half-day until
+  checked off. Coverage is one AM | PM board — who is operating, who goes
+  from a morning OR to an afternoon clinic, who is free, who is out. What
+  was audited and what changed: [docs/AUDIT.md](docs/AUDIT.md).
+- **v2** (9/2026) — the flow follows the how-to (Out today →
   Roster → Surgery → Clinics → Coverage → Preview), the app knows who is
   free at any minute, the Surgery tab is one line per attending with the
   resident on the line, and the Coverage tab answers "a globe comes in —
@@ -139,7 +164,7 @@ js/app.js             UI controller and per-date persistence
 tests/                plain-Node test suites (no dependencies)
 tools/bundle.js       builds the single-file dist/surg-schedule.html
 v1/                   the archived v1 app (one file) — see v1/README.md
-docs/                 architecture & UI specs, screenshots
+docs/                 architecture & UI specs, the audit (AUDIT.md), screenshots
 .github/workflows/    GitHub Pages deployment
 ```
 
@@ -163,9 +188,7 @@ object the Setup page exports:
 - `nfSchedule`: weekly Night Float ranges from the call sheet
 - `cpecSheet`: the CPEC surgical block schedule
 - `hierarchy`, `schedulingNotes`, `specialClinics`, reference content
-- `availability` (which assignments count as free / fixed duty) and
-  `caseMinutes` (estimated minutes per case, used to guess when a resident
-  is free again)
+- `availability` (which assignments count as free / fixed duty)
 
 Transcribe the new year's PDFs into that one file and the whole app follows.
 Run the tests afterwards to catch typos:

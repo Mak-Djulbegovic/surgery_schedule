@@ -782,6 +782,8 @@ table.tbl { border-collapse: collapse; width: 100%; }
   flex: none; font-size: 11px; font-weight: 700; color: var(--accent);
   background: var(--accent-soft); border-radius: 999px; padding: 1px 8px;
 }
+.addon-hint.warn { color: var(--amber-text); background: var(--amber-bg); flex: 0 1 auto; white-space: normal; }
+.addon-hint.bad { color: var(--red-text); background: var(--red-bg); }
 .addon-preview {
   flex: 1 1 150px;
   min-width: 0;
@@ -1127,6 +1129,7 @@ select.s-pick { width: 100%; max-width: 100%; min-width: 0; }
 .s-sub { display: flex; flex-direction: column; gap: 3px; padding: 5px 0 1px 10px; }
 .s-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12.5px; color: var(--muted); }
 .s-note.bad { color: var(--red-text); font-weight: 600; }
+.s-note.amber { color: var(--amber-text); font-weight: 600; }
 .s-note.backup { color: var(--text); }
 .s-note.backup.needs .s-note-text { color: var(--amber-text); font-weight: 600; }
 .s-note-warn { color: var(--red-text); font-size: 12px; font-weight: 600; }
@@ -1166,6 +1169,9 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .need-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .need-row.er-first .need-text b { color: var(--red-text); }
 .er-flag { font-weight: 700; color: var(--red-text); }
+/* a service case with nobody, or whose resident is out */
+.need-row.case-need .need-text b { color: var(--red-text); }
+.s-note.done-note { color: var(--green-text); font-weight: 600; }
 
 /* cases to check off when done */
 .done-row {
@@ -1180,11 +1186,48 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .done-row.done .done-who { color: var(--faint); }
 .done-row.done .done-who .plan-via { text-decoration: line-through; }
 .done-time { border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12.5px; }
+/* Today at a glance: who goes from a morning OR to clinic, then AM | PM */
+.db-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); margin-bottom: 4px; }
+.db-band { border: 1px solid var(--amber-border); background: var(--amber-bg); border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; }
+.db-band .db-h { color: var(--amber-text); }
+.db-moves { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 3px 22px; font-size: 13px; }
+.db-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 28px; }
+.db-col > .avail-h { margin-bottom: 6px; padding-bottom: 4px; border-bottom: 2px solid var(--border-soft); }
+.db-sec { margin-bottom: 12px; }
+.db-op { display: grid; grid-template-columns: minmax(118px, 165px) minmax(0, 1fr); gap: 2px 10px; padding: 6px 0; border-bottom: 1px solid var(--border-soft); }
+.db-op:last-child { border-bottom: none; }
+.db-who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; }
+.db-tag { font-size: 11.5px; color: var(--muted); margin-left: 4px; }
+.db-count { flex-basis: 100%; font-size: 11.5px; font-weight: 600; color: var(--accent); }
+.db-op.done .db-count { color: var(--green-text); }
+.db-op.done .db-who b { color: var(--faint); }
+.db-list { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 13px; padding: 1px 0; }
+.db-list.done .db-list-text { color: var(--faint); text-decoration: line-through; }
+.db-outs { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+@media (max-width: 800px) {
+  .db-cols { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .db-op { grid-template-columns: minmax(0, 1fr); }
+}
 .avail-now { padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px dashed var(--border); }
 .ok-card { color: var(--green-text); font-weight: 600; background: var(--green-bg); border-color: var(--green-border); }
 .ok-mark { font-weight: 800; }
 
 /* ---------------- Coverage ---------------- */
+
+/* today's chain roles, with stand-ins for anyone out */
+.roles-card { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 16px; }
+.roles-key { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.roles-list { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 420px; min-width: 0; }
+.role-chip {
+  display: inline-flex; align-items: baseline; gap: 6px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; background: #fff;
+}
+.role-chip .role-k { font-size: 11px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.role-chip.changed { border-color: var(--amber-border); background: var(--amber-bg); }
+.role-chip.changed b { color: var(--amber-text); }
+.roles-hint { flex-basis: 100%; }
 
 .time-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
 /* add-ons to place, each at its own time */
@@ -1198,6 +1241,10 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .plan-at { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
 .plan-when { border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13.5px; }
 .plan-add { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+/* Surg 2 when no globe is entered */
+.surg2-lede { margin: 0 0 10px; font-size: 13px; }
+.bad-text { color: var(--red-text); font-weight: 600; }
+.plan-wait { margin-bottom: 6px; }
 .plan-joint-time { font-weight: 600; color: var(--muted); font-size: 12px; }
 .plan-changed { margin-bottom: 8px; }
 /* available AM | PM */
@@ -1255,21 +1302,6 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .plan-joint-kind { font-weight: 700; }
 .plan-joint + .plan-actions { margin-top: 4px; }
 
-/* a morning OR running late */
-.late-row {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
-  padding: 9px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px;
-}
-.late-row:last-child { border-bottom: none; }
-.late-row.on { background: linear-gradient(90deg, var(--amber-bg), transparent 70%); padding-left: 8px; border-radius: 8px; }
-.late-who { flex: 1 1 280px; min-width: 0; }
-.late-flag { color: var(--amber-text); font-weight: 600; }
-.late-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
-.late-state { font-weight: 700; color: var(--amber-text); }
-.late-sugg { color: var(--muted); }
-.late-until { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12.5px; }
-.late-time { border: 1px solid var(--border); border-radius: 7px; padding: 4px 6px; font: inherit; font-size: 13px; }
-select.late-pick { max-width: 240px; }
 
 /* ---------------- preview ---------------- */
 
@@ -1530,3 +1562,139 @@ select.imp-type.unset { border-color: var(--amber-border); background: var(--amb
 .btn:disabled, .btn[disabled] { opacity: 0.5; cursor: default; }
 .btn-primary:disabled:hover { background: var(--accent); border-color: var(--accent); }
 .needs-card.heads-up { border-color: var(--border); }
+
+/* ---------------- Library: flow chart ----------------
+   Boxes and arrows in HTML, so the chart reflows to one column on a phone
+   and prints; the chains come from the active configuration. */
+
+.flow-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 14px; }
+.flow-lede { margin: -6px 0 12px; }
+
+/* the six steps, left to right */
+.flow-steps { list-style: none; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
+.flow-step {
+  position: relative; display: flex; flex-direction: column; gap: 6px;
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 11px; background: #fff;
+}
+.flow-step + .flow-step::before {
+  content: '→'; position: absolute; left: -7px; top: 12px; transform: translateX(-50%);
+  color: var(--faint); font-weight: 800; font-size: 13px;
+}
+.flow-step-head { display: flex; align-items: center; gap: 7px; }
+.flow-num {
+  width: 22px; height: 22px; flex: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; font-size: 12px; font-weight: 800;
+}
+.flow-line { font-size: 12.5px; line-height: 1.4; }
+.flow-k {
+  display: inline-block; margin-right: 6px; font-size: 10px; font-weight: 800;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+}
+.flow-k.app { color: var(--accent); }
+.flow-board {
+  margin-top: 14px; padding: 10px 14px; border-radius: 10px; font-size: 13px;
+  background: var(--accent-soft); border: 1px solid var(--accent-border);
+}
+
+/* decision flows */
+.fc { display: flex; flex-direction: column; max-width: 860px; }
+.fc-node { border: 1.5px solid var(--border); border-radius: 10px; padding: 9px 13px; background: #fff; }
+.fc-title { font-weight: 700; font-size: 13.5px; }
+.fc-text { font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.fc-start { border-color: var(--accent-border); background: var(--accent-soft); }
+.fc-start .fc-title { color: var(--accent); }
+.fc-q { border-color: var(--amber-border); background: var(--amber-bg); }
+.fc-q .fc-title::before {
+  content: '?'; display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; margin-right: 7px; border-radius: 50%;
+  background: var(--amber-text); color: #fff; font-size: 11.5px; font-weight: 800; vertical-align: 1px;
+}
+.fc-ok { border-color: var(--green-border); background: var(--green-bg); }
+.fc-ok .fc-title { color: var(--green-text); }
+.fc-warn { border-color: var(--amber-border); }
+.fc-auto { border-style: dashed; }
+.fc-end { border-color: var(--green-border); }
+.fc-list { margin: 5px 0 0 18px; font-size: 12.5px; }
+.fc-list li { padding: 1px 0; }
+
+.fc-arrow { position: relative; height: 24px; margin-left: 26px; border-left: 2px solid #b4bfcb; }
+.fc-arrow::after {
+  content: ''; position: absolute; left: -6px; bottom: -1px; width: 0; height: 0;
+  border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 7px solid #b4bfcb;
+}
+.fc-arrow-label { position: absolute; left: 9px; top: 4px; font-size: 11px; font-weight: 800; color: var(--muted); }
+
+.fc-decision { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 0 12px; align-items: center; }
+.fc-side { display: flex; align-items: center; gap: 8px; }
+.fc-side-label { flex: none; font-size: 11px; font-weight: 800; color: var(--muted); white-space: nowrap; }
+.fc-side-label::after { content: ' →'; }
+.fc-side .fc-node { flex: 1; min-width: 0; }
+
+.fc-branches { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.fc-branch { display: flex; flex-direction: column; gap: 6px; }
+.fc-branch .fc-node { flex: 1; }
+.fc-branch-label { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.fc-branch-label::after { content: ' ↓'; }
+
+/* the how-to's chains */
+.flow-chains { margin-bottom: 18px; }
+.flow-chain-row {
+  display: grid; grid-template-columns: 60px minmax(150px, 240px) minmax(0, 1fr); gap: 4px 12px; align-items: baseline;
+  padding: 6px 0; border-bottom: 1px solid var(--border-soft);
+}
+.flow-chain-row:last-child { border-bottom: none; }
+.flow-chain-step { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); }
+.flow-chain-label { font-size: 13px; font-weight: 600; }
+.fc-chain { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.fc-check .fc-chain { margin-top: 6px; }
+.fc-chip {
+  font-size: 12px; font-weight: 600; white-space: nowrap; border-radius: 999px; padding: 1px 8px;
+  border: 1px solid var(--pgy4-border); background: var(--pgy4-bg); color: var(--pgy4);
+}
+.fc-chain-sep { color: var(--faint); font-size: 12px; }
+
+@media (max-width: 1100px) {
+  .flow-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .flow-step:nth-child(3n + 1)::before { display: none; }
+}
+@media (max-width: 640px) {
+  .flow-steps { grid-template-columns: 1fr; gap: 20px; }
+  .flow-step + .flow-step::before,
+  .flow-step:nth-child(3n + 1)::before { display: block; content: '↓'; left: 22px; top: -18px; transform: none; }
+  .fc-decision { grid-template-columns: 1fr; gap: 6px; }
+  .fc-side { padding-left: 14px; border-left: 2px dashed var(--border); margin-left: 12px; }
+  .fc-branches { grid-template-columns: 1fr; }
+  .flow-chain-row { grid-template-columns: 1fr; }
+}
+
+/* Printing: only the page in view — no app bar, tabs or free strip; a
+   card never splits across pages (the flow chart prints for the wall). */
+@media print {
+  body { background: #fff; }
+  .app-header, .tabbar, .avail-strip, .toast, .flow-tools, .step-foot, .banner { display: none !important; }
+  .app-main { padding: 0; max-width: none; }
+  .card { box-shadow: none; border-color: #cfd6de; break-inside: avoid; page-break-inside: avoid; }
+  .flow-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .flow-step:nth-child(3n + 1)::before { display: none; }
+  /* tighter, so each flow-chart card fits on one page */
+  .card { padding: 12px 14px; margin-bottom: 10px; }
+  .fc-arrow { height: 14px; }
+  .fc-arrow-label { top: 0; }
+  .fc-node { padding: 6px 11px; }
+  .flow-chain-row { padding: 3px 0; }
+  .flow-chains { margin-bottom: 10px; }
+}
+.flow-note { margin-top: 12px; max-width: 860px; }
+/* the rules at the foot of Coverage (the flow chart's cards) */
+.cov-rules { margin: 18px 0 8px; }
+.cov-rules-sum {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+  cursor: pointer; list-style: none; padding: 10px 14px; margin-bottom: 12px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.cov-rules-sum::-webkit-details-marker { display: none; }
+.cov-rules-sum::before { content: '▸'; color: var(--accent); font-size: 12px; }
+.cov-rules[open] > .cov-rules-sum::before { content: '▾'; }
+.cov-rules-title { font-size: 15px; font-weight: 700; }
+.roles-rules { font-size: 12px; padding: 0; vertical-align: baseline; }

@@ -8,9 +8,17 @@
  *     for the day and covered by Day Float (Day Float covers ONLY the Night
  *     Float resident; it is never a general floater),
  *   - clinic staffing edits (day.clinicStaffOverrides),
- *   - the case list: assigned resident, start, service-case times, 'until',
+ *   - the case list: assigned resident, start, service-case times, 'until'
+ *     — no estimated case lengths: a list counts for the session it starts
+ *     in until it is checked off (see caseSpans),
  *   - clinic coverage: a case's backup covers whatever clinic the assigned
  *     resident is pulled out of, for as long as the case runs.
+ *   - stand-ins: whoever covers an absent resident does their job for that
+ *     session — the duty, and their place in every how-to chain
+ *     (board.standIn / actingSurg), so Surg 2 c/b X makes X Surg 2 then.
+ *
+ * board.needs lists what is still open: uncovered absences, clinic gaps,
+ * and service cases with no resident (none yet, or theirs is out).
  *
  * Status kinds (worst first):
  *   out    — vacation / sick / Night Float (post-call); never pulled
@@ -38,12 +46,6 @@
   var SLOT = 5;
   var NSLOTS = (DAY_END - DAY_START) / SLOT;
 
-  // Minutes per case, turnover included — ESTIMATES used only when no
-  // 'until' time is entered. Override per program in data.caseMinutes.
-  var DEFAULT_CASE_MINUTES = {
-    cataract: 30, cornea: 90, glaucoma: 90, plastics: 60,
-    peds: 60, retina: 90, trauma: 120, other: 60
-  };
   // Block-assignment texts that count as available / fixed duty / needing no
   // coverage when the resident is out. Override in data.availability.
   var DEFAULT_FREE = ['PT'];
@@ -122,11 +124,6 @@
   /* cases → busy spans                                                  */
   /* ------------------------------------------------------------------ */
 
-  function perCaseMinutes(category, data) {
-    var cm = (data && data.caseMinutes) || {};
-    return cm[category] || DEFAULT_CASE_MINUTES[category] || cm.other || DEFAULT_CASE_MINUTES.other;
-  }
-
   function mergeSpans(spans) {
     var list = spans.slice().sort(function (a, b) { return a.start - b.start; });
     var out = [];
@@ -138,72 +135,77 @@
     return out;
   }
 
-  // When the assigned resident is scrubbed for this case.
+  // The end of the session minute t falls in: noon for the AM, the end of
+  // the board's day for the PM.
+  function sessionEnd(t) { return t < NOON ? NOON : DAY_END; }
+
+  // When the assigned resident is operating on this case. No estimated case
+  // lengths (10/18/2026: "estimating may confuse things because things can
+  // run short or long. just have it listed who is operating that day"): a
+  // list counts for the session it starts in — from its start to noon (AM)
+  // or to the end of the day (PM) — until it is checked off.
+  //   - 'until' ("Done by", typed) ends it then; "all day" in the start
+  //     runs it to the end of the day.
+  //   - Checked off (done / doneAt): it ends then.
   //   - Cataracts: the whole list, service and private — the resident is
-  //     part of that OR until it is done (chief, 9/28/2026: "when anyone is
-  //     in cataract cases, they are part of that OR until they are done
-  //     (both service and private cases)").
+  //     part of that OR until it is done (chief, 9/28/2026) — through the
+  //     session of its last service time.
   //   - Any other list with private and service cases: the resident is
-  //     needed only for the service cases (chief, 9/28/2026: "he is only
-  //     responsible for his case when it is listed as a service case …
-  //     available to leave for an emergent add-on after that case or to go
-  //     to clinic"). One case-length block at each service time; extra
-  //     service cases stack on the last. No service time: the service cases
-  //     are assumed to open the list (flagged svcAssumed, so the row asks).
-  //   - All service (or a private list someone was put on anyway): the
-  //     whole list, start + count × minutes-per-case, flagged as an estimate.
-  //   - 'until' (typed end time, or 'Done' day-of) replaces the last end.
+  //     needed only from each service time on, to the end of its session
+  //     (chief, 9/28/2026: "he is only responsible for his case when it is
+  //     listed as a service case"). No service time: from the list start,
+  //     flagged svcAssumed, so the row asks.
   //   - No start ('AM TF', blank): assume 7:30, flagged unknownStart.
+  // The same resident's next list ends an open-ended one (Status.build).
+  // `openEnded`: the end is only the session's end — no time to show.
   function caseSpans(c, data) {
     c = c || {};
-    var per = perCaseMinutes(c.category, data);
     var count = Math.max(1, parseInt(c.count, 10) || 1);
     var svc = Math.max(0, parseInt(c.serviceCount, 10) || 0);
     var starts = clockTokens(c.start);
     var unknownStart = !starts.length;
     var start = unknownStart ? DAY_START + 30 : starts[0];
+    var allDay = /\ball[\s-]*day\b/i.test(String(c.start || ''));
     var svcTimes = clockTokens(c.serviceTimes).sort(function (a, b) { return a - b; });
     var spans = [];
     var svcAssumed = false;
     var partial = svc > 0 && svc < count && c.category !== 'cataract';
     if (partial && svcTimes.length) {
-      svcTimes.forEach(function (t, i) {
-        var n = i === svcTimes.length - 1 ? Math.max(1, svc - (svcTimes.length - 1)) : 1;
-        spans.push({ start: t, end: t + n * per });
-      });
-    } else if (partial) {
-      spans.push({ start: start, end: start + svc * per });
-      svcAssumed = true;
+      svcTimes.forEach(function (t) { spans.push({ start: t, end: allDay ? DAY_END : sessionEnd(t) }); });
     } else {
-      spans.push({ start: start, end: start + count * per });
+      // the whole list: to the end of the session of its last typed time (a
+      // cataract list with a 1 PM service case runs into the afternoon)
+      var lastT = svcTimes.length ? Math.max(start, svcTimes[svcTimes.length - 1]) : start;
+      spans.push({ start: start, end: allDay ? DAY_END : sessionEnd(lastT) });
+      svcAssumed = partial;
     }
-    var estimated = true;
+    var openEnded = true;
     var until = parseClock(c.until);
     if (until != null) {
       var last = spans[spans.length - 1];
-      if (until > last.start) { last.end = until; estimated = false; }
+      if (until > last.start) { last.end = until; openEnded = false; }
     }
     spans = mergeSpans(spans);
     // Checked off as done at doneAt (chief, 9/29/2026: "check off when the
     // cases are done and who clears up"): the case is over then and the
-    // resident is free from that minute, whatever the estimate said. Done
-    // before it began (cancelled): no busy time at all.
+    // resident is free from that minute. Done before it began (cancelled):
+    // no busy time at all.
     var doneAt = c.done ? parseClock(c.doneAt) : null;
     if (doneAt != null) {
       var kept = spans.filter(function (sp) { return sp.start < doneAt; });
       if (kept.length) kept[kept.length - 1].end = doneAt;
       spans = kept.length ? kept : [{ start: doneAt, end: doneAt }];
-      estimated = false;
+      openEnded = false;
     }
     return {
       spans: spans,
       start: spans[0].start,
       end: spans[spans.length - 1].end,
-      estimated: estimated,
+      openEnded: openEnded,
+      allDay: allDay,
       unknownStart: unknownStart,
       svcAssumed: svcAssumed,
-      done: doneAt != null,
-      perCase: per
+      done: doneAt != null
     };
   }
 
@@ -254,7 +256,6 @@
   function reasonLabel(r) { return REASON_LABELS[r] || REASON_LABELS.other; }
 
   function caseLabel(c) {
-    if (c && c.late) return trim(c.surgeon);
     var who = trim(c && c.surgeon) || (c && c.category) || 'case';
     return who + ' x' + (Math.max(1, parseInt(c && c.count, 10) || 1));
   }
@@ -307,7 +308,12 @@
     });
     if (nf && !explicit[nf]) {
       var df = dayFloats.filter(function (n) { return n !== nf; })[0] || '';
-      absences.push({ id: 'nf', name: nf, am: true, pm: true, reason: 'nightfloat', coverAM: df, coverPM: df, auto: true });
+      // Day Float out that session (Out today): nobody covers the Night
+      // Float resident then — an open need, not a cover who is away
+      function dfIn(s) {
+        return df && !absences.some(function (a) { return a.name === df && a[s]; }) ? df : '';
+      }
+      absences.push({ id: 'nf', name: nf, am: true, pm: true, reason: 'nightfloat', coverAM: dfIn('am'), coverPM: dfIn('pm'), auto: true, dayFloat: df });
     }
     if (nf && dayFloats.indexOf(nf) !== -1 && dayFloats.length === 1) {
       warnings.push(nf + ' is both Day Float and Night Float this week — no Day Float today');
@@ -321,6 +327,7 @@
 
     /* absence coverers take over the absent resident's duty that session */
     var coverDuty = {};
+    var standInOf = {}; // 'name|am' -> the resident covering them then
     absences.forEach(function (a) {
       ['am', 'pm'].forEach(function (s) {
         if (!a[s]) return;
@@ -332,6 +339,7 @@
           return;
         }
         map[s] = { for: a.name, text: byName[a.name][s].text, nf: a.reason === 'nightfloat' };
+        standInOf[a.name + '|' + s] = who;
         if (outBy[who] && outBy[who][s]) {
           warnings.push(who + ' is covering ' + a.name + ' ' + s.toUpperCase() + ' but is out too');
         }
@@ -407,44 +415,82 @@
     var base = {};
     order.forEach(function (n) { base[n] = { am: baseDutyOf(n, 'am'), pm: baseDutyOf(n, 'pm') }; });
 
-    /* A morning OR running late (live board only — never in the copied
-       schedule): the resident stays in the OR from PM clinic start
-       (data.pmClinicStart, 12:30) until `until`, and `cover` stands in at
-       their clinic meanwhile. Modelled as a case whose backup is the cover,
-       so gaps, cover and 'NC' work exactly as for any case. */
+    // Who stands in for `name` in session s: the resident covering them
+    // while they are out. Covering someone is doing their job for that
+    // session — their duty AND their place in every how-to chain, so
+    // "Cheng (Surg 2) c/b Wibbelsman" makes Wibbelsman that session's
+    // Surg 2. Not Day Float standing in for the Night Float resident (Day
+    // Float is never available — chief, 9/2026), and not a coverer who is
+    // out too. '' when nobody stands in (not out, NC, or not decided).
+    function standIn(name, s) {
+      var who = standInOf[name + '|' + s];
+      var cd = who && coverDuty[who] && coverDuty[who][s];
+      if (!cd || cd.for !== name || cd.nf) return '';
+      if (outBy[who] && outBy[who][s]) return '';
+      return who;
+    }
+
+    // Who is Surg n in session s -> { name, for } — the block holder, or
+    // whoever stands in for them while they are out ({ name: 'Wibbelsman',
+    // for: 'Cheng' }). null: the holder is out and nobody stands in.
+    function actingSurg(n, s) {
+      var e = (roster.surg || {})[n];
+      if (!e || !e.name || !byName[e.name]) return null;
+      if (!(outBy[e.name] && outBy[e.name][s])) return { name: e.name, for: '' };
+      var si = standIn(e.name, s);
+      return si ? { name: si, for: e.name } : null;
+    }
+
+    // The Surg roles `name` holds or stands in for in session s -> [{ n, for }]
+    function surgRolesAt(name, s) {
+      var out = [];
+      Object.keys(roster.surg || {}).sort(function (a, b) { return (+a) - (+b); }).forEach(function (n) {
+        var a = actingSurg(n, s);
+        if (a && a.name === name) out.push({ n: n, for: a.for });
+      });
+      return out;
+    }
+
+    // When PM clinics start (data.pmClinicStart) — shown with whoever goes
+    // from a morning OR to an afternoon clinic
     var pmClinicStart = parseClock(data.pmClinicStart);
     if (pmClinicStart == null) pmClinicStart = NOON + 30;
-    var lateCases = [];
-    (day.overruns || []).forEach(function (o, idx) {
-      var who = trim(o && o.name);
-      var until = parseClock(o && o.until);
-      if (!who || !byName[who] || until == null || until <= pmClinicStart) return;
-      lateCases.push({
-        id: 'late:' + String((o && o.id) || idx), late: true, overrunId: String((o && o.id) || idx),
-        surgeon: (trim(o && o.label) || 'OR') + ' running late', count: 1, serviceCount: 1,
-        start: fmtHHMM(pmClinicStart), until: fmtHHMM(until), category: 'other',
-        assigned: who, backup: trim(o && o.cover)
-      });
-    });
-    var allCases = (day.cases || []).concat(lateCases);
+    var allCases = day.cases || [];
 
     /* cases → busy spans for the assigned resident */
     var caseInfo = {};
     var casesBy = {};
+    var listsOf = {};
     allCases.forEach(function (c) {
       if (!c || !c.id) return;
       var cs = caseSpans(c, data);
       var a = trim(c.assigned);
       caseInfo[c.id] = {
         c: c, spans: cs.spans, start: cs.start, end: cs.end,
-        estimated: cs.estimated, unknownStart: cs.unknownStart, svcAssumed: cs.svcAssumed,
+        openEnded: cs.openEnded, allDay: cs.allDay, unknownStart: cs.unknownStart, svcAssumed: cs.svcAssumed,
         done: cs.done, assigned: a, backup: trim(c.backup)
       };
-      if (a && byName[a]) {
-        cs.spans.forEach(function (sp) {
-          (casesBy[a] || (casesBy[a] = [])).push({ start: sp.start, end: sp.end, caseId: c.id });
+      if (a && byName[a]) (listsOf[a] || (listsOf[a] = [])).push(caseInfo[c.id]);
+    });
+    // A resident's lists run one after another: an open-ended list ends
+    // when their next one starts.
+    Object.keys(listsOf).forEach(function (a) {
+      var list = listsOf[a].sort(function (x, y) { return x.start - y.start; });
+      list.forEach(function (info, i) {
+        if (!info.openEnded) return;
+        var next = null;
+        for (var j = i + 1; j < list.length && !next; j++) if (list[j].start > info.start) next = list[j];
+        if (!next || next.start >= info.end) return;
+        info.spans = info.spans.filter(function (sp) { return sp.start < next.start; })
+          .map(function (sp) { return { start: sp.start, end: Math.min(sp.end, next.start) }; });
+        info.end = info.spans[info.spans.length - 1].end;
+        info.endsAtNext = true;
+      });
+      list.forEach(function (info) {
+        info.spans.forEach(function (sp) {
+          (casesBy[a] || (casesBy[a] = [])).push({ start: sp.start, end: sp.end, caseId: info.c.id });
         });
-      }
+      });
     });
 
     function slotIdx(t) { return Math.floor((t - DAY_START) / SLOT); }
@@ -507,7 +553,7 @@
         var inf = caseInfo[ca.caseId];
         return {
           kind: 'case', label: caseLabel(inf.c), caseId: ca.caseId, session: s,
-          start: ca.start, until: ca.end, estimated: inf.estimated
+          start: ca.start, until: ca.end, openEnded: !!inf.openEnded
         };
       }
       var i = slotIdx(t);
@@ -675,7 +721,7 @@
         if (!trim(text) || noCover.indexOf(text) !== -1 || who === 'NC' || who) return;
         needs.push({
           type: 'absence', name: a.name, session: s, duty: text,
-          absenceId: a.id, auto: a.auto, reason: a.reason
+          absenceId: a.id, auto: a.auto, reason: a.reason, dayFloat: a.dayFloat || ''
         });
       });
     });
@@ -759,10 +805,43 @@
       }
     });
 
+    // Service cases left without a resident: nobody on them yet, or their
+    // resident is out while they run — marked out on Out today after the
+    // case was assigned, e.g. Surg 2 calls in sick (why: 'out'). Checked-off
+    // cases are over; private lists need nobody.
+    (day.cases || []).forEach(function (c) {
+      var info = c && c.id && caseInfo[c.id];
+      if (!info || info.done || (parseInt(c.serviceCount, 10) || 0) <= 0) return;
+      var a = info.assigned;
+      var item = { type: 'case', caseId: c.id, label: caseLabel(c), start: info.start, end: info.end, openEnded: !!info.openEnded };
+      if (!a) {
+        item.why = 'unassigned';
+        needs.push(item);
+        return;
+      }
+      if (!byName[a]) return;
+      var st = statusDuringSpans(a, info.spans, { exclude: c.id });
+      if (st.kind !== 'out') return;
+      item.why = 'out';
+      item.holder = a;
+      item.outLabel = st.label;
+      needs.push(item);
+    });
+
     // ER first (chief, 9/29/2026: "the ER is sacred, it is the first thing
-    // that needs to be staffed by residents"); the order is otherwise kept.
+    // that needs to be staffed by residents"); then cases whose resident is
+    // out, cases with nobody yet (in time order), absences and clinic gaps —
+    // a case about to start without a resident is the most urgent of the
+    // rest (ASSUMPTION). The order is otherwise kept.
+    function rank(n) {
+      if (n.erFirst) return 0;
+      if (n.type === 'case') return n.why === 'out' ? 1 : 2;
+      return 3;
+    }
     needs.forEach(function (n, i) { n.erFirst = n.type === 'absence' && n.duty === 'ER'; n._i = i; });
-    needs.sort(function (a, b) { return (b.erFirst ? 1 : 0) - (a.erFirst ? 1 : 0) || a._i - b._i; });
+    needs.sort(function (a, b) {
+      return rank(a) - rank(b) || (a.type === 'case' && b.type === 'case' ? a.start - b.start : 0) || a._i - b._i;
+    });
     needs.forEach(function (n) { delete n._i; });
 
     return {
@@ -787,12 +866,23 @@
       pullFirstTexts: pullFirst,
       neverPullTexts: neverPull,
       isOut: function (name, s) { return !!(outBy[name] && outBy[name][s]); },
-      caseSpansFor: function (c) { return caseSpans(c, data); },
+      standIn: standIn,
+      actingSurg: actingSurg,
+      surgRolesAt: surgRolesAt,
+      // a case on the board: its spans there (after back-to-back lists);
+      // any other (a draft add-on): from its own start and session
+      caseSpansFor: function (c) {
+        var info = c && c.id && caseInfo[c.id];
+        if (!info || info.c !== c) return caseSpans(c, data);
+        return {
+          spans: info.spans, start: info.start, end: info.end, openEnded: info.openEnded, allDay: info.allDay,
+          unknownStart: info.unknownStart, svcAssumed: info.svcAssumed, done: info.done
+        };
+      },
       dayStart: DAY_START,
       noon: NOON,
       dayEnd: DAY_END,
-      pmClinicStart: pmClinicStart,
-      lateCases: lateCases
+      pmClinicStart: pmClinicStart
     };
   }
 
@@ -806,7 +896,7 @@
     fmtClock: fmtClock,
     fmtHHMM: fmtHHMM,
     sessionOf: sessionOf,
-    perCaseMinutes: perCaseMinutes,
+    sessionEnd: sessionEnd,
     caseSpans: caseSpans,
     overlaps: overlaps,
     classifyText: classifyText,

@@ -106,7 +106,7 @@ function roundTrip(pasted) {
 [
   'Lectures/Events', 'Night Float: **Perez**', ', x2 service - 1030 & 1300 - **Momenaei**',
   '**Bair; Djulbegovic** to cover cornea clinic', '- ⚠ UNASSIGNED (confirm with Surg 2)',
-  '(backup: Shields if after 1 PM)', 'Other (Stadium/Cherry Hill)', 'Cornea PM (29x3): ',
+  '(backup: Shields if after 1 PM)', 'Stadium/Cherry Hill\n-Gordon', 'Cornea PM (29x3): ',
   'Glaucoma PM (late start): ', 'CPEC PO (12): **Aguwa**', 'Tang PM (Retina Private) — sick NC',
   'Marshall (Neuro) — conference — coverage TBD', 'Djulbegovic at AAO Fri',
   'Monday night (9/28/26): **Calotti**'
@@ -138,12 +138,14 @@ eq(hark.assigned + '|' + hark.backup, 'Bair|Djulbegovic', 'resident; backup spli
 eq(hark.backupNote, 'to cover cornea clinic during case, 2nd backup Calotti (Surg 4)', 'backup note kept whole');
 var marous = r1.day.cases[2];
 eq(marous.serviceCount + '|' + marous.serviceTimes + '|' + marous.notes, '2|1030 & 1300|no Peds OR', 'service count, times and notes');
-eq(r1.day.cases[6].assigned + '|' + r1.day.cases[6].serviceCount, '|1', 'UNASSIGNED service case stays open');
-eq(r1.day.cases[7].backup + '|' + r1.day.cases[7].backupNote, 'Shields|if after 1 PM', 'backup of an unassigned case');
-eq(r1.day.cases[5].serviceCount, 0, 'private list has no service case');
+function bySurgeon(list, s) { return list.filter(function (c) { return c.surgeon === s; })[0] || {}; }
+eq(bySurgeon(r1.day.cases, 'Bilyk').assigned + '|' + bySurgeon(r1.day.cases, 'Bilyk').serviceCount, '|1', 'UNASSIGNED service case stays open');
+eq(bySurgeon(r1.day.cases, 'Sieber').backup + '|' + bySurgeon(r1.day.cases, 'Sieber').backupNote, 'Shields|if after 1 PM', 'backup of an unassigned case');
+eq(bySurgeon(r1.day.cases, 'Pericic').serviceCount, 0, 'private list has no service case');
+eq(bySurgeon(r1.day.cases, 'Gordon').section, 'other', 'the Stadium/Cherry Hill section reads back as its own section');
 
 /* ---------- categories are guessed ---------- */
-eq(r1.day.cases.map(function (c) { return c.category; }).join(),
+eq(['Abendroth', 'DiDomenico', 'Marous', 'Hark', 'Globe/trauma', 'Pericic', 'Bilyk', 'Sieber', 'Gordon'].map(function (s) { return bySurgeon(r1.day.cases, s).category; }).join(),
   'cataract,cataract,other,cornea,trauma,cataract,plastics,plastics,cataract',
   'category guesses: CPEC surgeons cataract, backup note cornea, globe trauma, privates cataract, JHN plastics, Surg 1 cataract');
 
@@ -249,7 +251,7 @@ ok(!d921.clinicStaffOverrides['CPEC|am'] && !d921.clinicStaffOverrides['CPEC|pm'
   'the sent CPEC line matches the block schedule + who is out exactly (Patel for Ransone AM) — no edits needed');
 var Status = require(path.join(__dirname, '..', 'js', 'status.js'));
 var ab = Status.caseSpans(d921.cases[0], DATA);
-eq(Status.fmtClock(ab.start) + '–' + Status.fmtClock(ab.end), '7:30 AM–11:00 AM', 'Abendroth x7 cataracts: Cheng is part of that OR from 7:30 until all 7 are done (chief 9/28)');
+eq(Status.fmtClock(ab.start) + '–' + Status.fmtClock(ab.end), '7:30 AM–12:00 PM', 'Abendroth x7 cataracts: Cheng is part of that OR from 7:30 for the morning, until checked off (chief 9/28; no estimates)');
 
 // Hand-typed ways of giving the one service case's time (chief, 9/28: the
 // resident is only responsible for the service case — "it was 1015").
@@ -265,6 +267,80 @@ eq(Status.fmtClock(ab.start) + '–' + Status.fmtClock(ab.end), '7:30 AM–11:00
   var pc = ImportFmt.parse('Wills/ASC\n- ' + t[0], { names: names, clinics: roster.clinics }).cases[0] || {};
   eq([pc.serviceCount, pc.serviceTimes, pc.start].join(' | '), [t[1], t[2], t[3]].join(' | '), 'service time read from "' + t[0] + '"');
 });
+
+/* ---------- Wills is its own section; the ASC is Stadium (10/18/2026) ---------- */
+function sectionsOf(pasted, opts) {
+  var p = ImportFmt.parse(pasted, { names: names, clinics: roster.clinics });
+  return ImportFmt.toDay(p, base(), roster, DATA, ExportFmt, opts || OPTS).cases.map(function (c) { return c.surgeon + ':' + c.section; }).join(' ');
+}
+eq(sectionsOf('Wills\n-Hark x1 - Bair\nStadium/Cherry Hill\n-Gordon x2 - Cheng'), 'Hark:wills Gordon:other', 'the new headings: Wills, Stadium/Cherry Hill');
+eq(sectionsOf('ASC\n-Gordon x2 - Cheng\nStadium / ASC\n-Harris x2 - Cheng\nCherry Hill\n-Lee x1 - Cheng'), 'Gordon:other Harris:other Lee:other', '"ASC", "Stadium / ASC", "Cherry Hill" are all the Stadium/Cherry Hill section');
+eq(sectionsOf('Other (Stadium/Cherry Hill)\n-Gordon x2 - Cheng'), 'Gordon:other', 'the old "Other (Stadium/Cherry Hill)" heading still reads');
+eq(sectionsOf('Wills/ASC\n-Hark x1 - Bair\n-Gordon x2 (AM TF start) - Cheng (Cherry Hill)\n-Ang x3 - Cheng (Stadium)'), 'Hark:wills Gordon:other Ang:other',
+  'old "Wills/ASC" heading: Wills, unless the line says Stadium / Cherry Hill');
+eq(sectionsOf('Wills/ASC\n-Markovitz x7 (7:30 start) - Wibbelsman\n-Wisner x4 (7:30 start) - Cheng', { cpecSites: { markovitz: ['SP'], wisner: ['W'] } }),
+  'Markovitz:other Wisner:wills', '…or when that day’s CPEC sheet lists the attending only at Stadium (SP)');
+eq(sectionsOf('Wills\n-Markovitz x7 (7:30 start) - Wibbelsman', { cpecSites: { markovitz: ['SP'] } }), 'Markovitz:wills', 'a case put under the new "Wills" heading stays there — the sender chose it');
+
+/* ---------- a Surg role covered on Out today reads back (10/18/2026) ---------- */
+var dc = base();
+dc.absences = [
+  { id: 'a1', name: 'Djulbegovic', am: true, pm: true, reason: 'vacation', coverAM: 'Aguwa', coverPM: 'Aguwa' },
+  { id: 'a2', name: 'Calotti', am: true, pm: true, reason: 'sick', coverAM: 'Shields', coverPM: 'NC' }
+];
+var tc = ExportFmt.buildText(withRoster(dc));
+ok(tc.indexOf('Surg 2 - **Aguwa (for Djulbegovic)**') !== -1, 'copied schedule: Surg 2 line names who stands in — got ' + tc.split('\n').filter(function (l) { return /^Surg 2/.test(l); })[0]);
+ok(tc.indexOf('Surg 4 - **Shields AM (for Calotti)** | none PM (Calotti out)') !== -1, 'split: covered AM, NC PM — got ' + tc.split('\n').filter(function (l) { return /^Surg 4/.test(l); })[0]);
+var rc = roundTrip(tc);
+eq(rc.text, tc, 'round trip with covered Surg roles');
+eq(rc.parsed.surg['2'] + ' / ' + rc.parsed.surg['4'], 'Djulbegovic / Calotti', 'the Surg lines read back as the block schedule’s holders (no false "check the date" flag)');
+eq(rc.day.addOns.every(function (a) { return a.s2 !== true; }), true, 'pasted add-on names are the sender’s — never marked as app-filled');
+
+/* ---------- the app's own Vacation lines all read back (audit 10/18/2026) ---------- */
+[
+  { name: 'Ransone', am: true, pm: true, reason: 'vacation', coverAM: 'NC', coverPM: 'Hamou' },
+  { name: 'Ransone', am: true, pm: true, reason: 'vacation', coverAM: '', coverPM: 'Hamou' },
+  { name: 'Ransone', am: true, pm: true, reason: 'vacation', coverAM: 'NC', coverPM: '' },
+  { name: 'Ransone', am: true, pm: true, reason: 'sick', coverAM: '', coverPM: 'NC' },
+  { name: 'Patel', am: true, pm: true, reason: 'vacation', coverAM: '', coverPM: '' }
+].forEach(function (a) {
+  var dv = base();
+  dv.absences = [{ id: 'a1', name: a.name, am: a.am, pm: a.pm, reason: a.reason, coverAM: a.coverAM, coverPM: a.coverPM }];
+  var tv = ExportFmt.buildText(withRoster(dv));
+  var rv = roundTrip(tv);
+  var ln = tv.split('\n').filter(function (l) { return l.indexOf(a.name + ' (') === 0; })[0];
+  eq(rv.text, tv, 'round trip of "' + ln + '"');
+  eq(rv.day.absences.length, 1, '…read as an absence, not a note: "' + ln + '"');
+});
+// block assignments with brackets of their own ('Stadium OR (Abendroth)',
+// 3rd Wed for PGY-2 block 3) nest inside the Vacation line's brackets
+var r1021i = Engine.resolveDay('2026-10-21', DATA);
+var n1021 = r1021i.residents.map(function (r) { return r.name; });
+eq(r1021i.residents.filter(function (r) { return r.name === 'Illiano'; })[0].am.text, 'Stadium OR (Abendroth)', 'fixture: Illiano on Stadium OR (Abendroth) Wed 10/21 AM');
+[
+  { name: 'Illiano', am: true, pm: true, reason: 'sick', coverAM: 'Samuel', coverPM: 'Samuel' },
+  { name: 'DeSimone', am: true, pm: false, reason: 'other', coverAM: 'Illiano', coverPM: '' }
+].forEach(function (a) {
+  var ln = ExportFmt.absenceLine(a, r1021i);
+  var pa = ImportFmt.parse('Vacation\n' + ln, { names: n1021, clinics: r1021i.clinics }).absences[0];
+  eq(pa ? ExportFmt.absenceLine(pa, r1021i) : '(read as a note)', ln, 'nested brackets read back: "' + ln + '"');
+});
+// a list with nobody on it and a bracketed note was not read at all
+var pr = ImportFmt.parse('JHN/TJUH/JSC\n-Bilyk x1 (0900 start) (confirm (Surg 2))', { names: names, clinics: roster.clinics });
+eq(pr.cases.length + ' | ' + (pr.cases[0] && pr.cases[0].notes), '1 | confirm (Surg 2)', 'a note in brackets of its own, on a line with no resident, is read');
+// two lines for one resident (as typed) → one row with both sessions
+var p2 = ImportFmt.parse('Vacation\nRansone AM (CPEC) c/b NC\nRansone PM (Plastics) c/b Hamou', { names: names, clinics: roster.clinics });
+var d2r = ImportFmt.toDay(p2, base(), roster, DATA, ExportFmt, OPTS);
+eq(JSON.stringify(d2r.absences.map(function (a) { return [a.name, a.am, a.pm, a.coverAM, a.coverPM]; })), JSON.stringify([['Ransone', true, true, 'NC', 'Hamou']]),
+  'two lines for one resident merge into one row (the board reads only the first)');
+// a note with its own brackets is stable across pastes (it gained a pair each time)
+var dn = base();
+dn.cases = [kase({ section: 'jhn', surgeon: 'Bilyk', count: 1, start: '0900', category: 'plastics', notes: 'confirm (Surg 2)' }),
+  kase({ surgeon: 'Hark', count: 1, start: '1300', category: 'cornea', assigned: 'Bair', notes: 'tissue (Lions)' })];
+var tn = ExportFmt.buildText(withRoster(dn));
+var rn = roundTrip(tn);
+eq(roundTrip(rn.text).text, tn, 'notes with brackets come back unchanged, paste after paste');
+eq(bySurgeon(rn.day.cases, 'Hark').notes + ' | ' + bySurgeon(rn.day.cases, 'Hark').backupNote, 'tissue (Lions) | ', '…and stay notes, not a backup note');
 
 if (failures) {
   console.error(failures + ' failure(s) of ' + checks);
