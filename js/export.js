@@ -156,8 +156,13 @@
     // A session whose duty needs no cover (Retina / Uveitis, PT, Day Float —
     // the board's rule) and has no cover picked says nothing: 'Calotti
     // (Retina)', not '— coverage TBD'.
+    // as the board has it while writing the schedule: a cover who cannot
+    // (out too, or covering someone else then) is TBD; a Day Float filling
+    // in for the Night Float resident is named
     var parts = sess.map(function (s) {
-      return { s: s, who: trim(s === 'am' ? a.coverAM : a.coverPM) };
+      var raw = trim(s === 'am' ? a.coverAM : a.coverPM);
+      if (BOARD && BOARD.byName[name]) raw = BOARD.coverOf(name, s) || (raw === 'NC' ? 'NC' : '');
+      return { s: s, who: raw };
     }).filter(function (p) { return p.who || !needsNoCover(cellText(res, p.s)); });
     if (!parts.length) return head;
     function coverParen(who, sessions) {
@@ -201,6 +206,37 @@
     return {};
   }
 
+  function getStatus() {
+    if (typeof window !== 'undefined' && window.Status) return window.Status;
+    if (typeof require !== 'undefined') {
+      try { return require('./status.js'); } catch (e) { return null; }
+    }
+    return null;
+  }
+
+  // The board for the day being written (set for one buildSections call):
+  // who covers whom is read from it, so the copied schedule never names a
+  // cover the board does not have — one who is out too, or already covering
+  // someone else then (review 10/19/2026). null: the raw Out today covers.
+  var BOARD = null;
+  function boardFor(day, roster) {
+    var S = getStatus();
+    if (!S || !S.build || !roster || !(roster.residents || []).length) return null;
+    try { return S.build(roster, day, getData()); } catch (e) { return null; }
+  }
+
+  // The resident on a case is out (Out today) in the session the case starts
+  // in -> their name, else ''. The line then says 'TBD (Cheng out)', as the
+  // Surg lines do, instead of naming someone who is not there.
+  function outOnCase(c, day, roster) {
+    var a = trim(c && c.assigned);
+    var S = getStatus();
+    if (!a || !day || !S) return '';
+    var sp = S.caseSpans(c, getData()).spans;
+    var s = sp.length && sp[0].start >= 12 * 60 ? 'pm' : 'am';
+    return outCover(day, roster, a, s) ? a : '';
+  }
+
   // Duties that need no cover when their resident is out — as the board
   // decides it: noCoverTexts plus the pull-first clinics (Retina / Uveitis).
   function needsNoCover(text) {
@@ -232,6 +268,19 @@
   // Float resident (out for the day, covered by Day Float).
   // -> { out: { 'name|am': coverer|'' }, covering: { 'coverer|am': name } }
   function standIns(day, roster) {
+    if (BOARD) {
+      var bOut = {};
+      var bCovering = {};
+      (BOARD.absences || []).forEach(function (a) {
+        ['am', 'pm'].forEach(function (s) {
+          if (!a[s]) return;
+          var w = BOARD.coverOf(a.name, s);
+          bOut[a.name + '|' + s] = w;
+          if (w) bCovering[w + '|' + s] = a.name;
+        });
+      });
+      return { out: bOut, covering: bCovering };
+    }
     var byName = residentMap(roster);
     var out = {};
     var covering = {};
@@ -269,6 +318,13 @@
   // decided yet). The first absence on the roster counts, as in standIns;
   // the Night Float resident is out all day, covered by Day Float.
   function outCover(day, roster, name, s) {
+    if (BOARD && BOARD.byName[name]) {
+      if (!BOARD.isOut(name, s)) return null;
+      var bw = BOARD.coverOf(name, s);
+      if (bw) return { who: bw };
+      var ba = (BOARD.base[name][s] && BOARD.base[name][s].absence) || {};
+      return trim(s === 'am' ? ba.coverAM : ba.coverPM) === 'NC' ? { nc: true } : { tbd: true };
+    }
     var byName = residentMap(roster);
     var abs = null;
     (day.absences || []).some(function (a) {
@@ -323,7 +379,7 @@
   // The times belong to the ', x{svc} service' clause (UISPEC3 §B) — when that
   // clause is suppressed (all-service case, svc === count), the times are too,
   // so they never dangle unlabeled before the assignee.
-  function caseLine(c) {
+  function caseLine(c, day, roster) {
     var count = num(c.count);
     var svc = num(c.serviceCount);
     var t = '-' + (trim(c.surgeon) || '?') + ' x' + count;
@@ -337,7 +393,14 @@
     var backup = trim(c.backup);
     if (backup === 'NC') backup = ''; // clinic knowingly left uncovered
     var backupNote = trim(c.backupNote);
-    if (assigned) {
+    if (backup && backup === trim(c.assigned)) { backup = ''; backupNote = ''; } // never "Cheng; Cheng"
+
+    var gone = assigned ? outOnCase(c, day, roster) : '';
+    if (gone) {
+      // '- **TBD (Cheng out)**' — needs a new resident (Coverage lists it)
+      line.push(seg(' - '));
+      line.push(seg('TBD (' + gone + ' out)', true));
+    } else if (assigned) {
       // '- **Bair; Calotti** to cover glaucoma clinic during case if after 1 PM, …'
       line.push(seg(' - '));
       line.push(seg(assigned + (backup ? '; ' + backup : ''), true));
@@ -401,29 +464,48 @@
       var label = k.split('|')[0];
       if (label && labels.indexOf(label) === -1) labels.push(label);
     });
-    labels.sort();
+    // as the schedule is sent (9/21/2026): CPEC PO first, then A–Z
+    labels.sort(function (a, b) {
+      return (a === 'CPEC PO' ? 0 : 1) - (b === 'CPEC PO' ? 0 : 1) || (a < b ? -1 : a > b ? 1 : 0);
+    });
     var lines = [];
     labels.forEach(function (label) {
+      var rows = {};
       ['day', 'am', 'pm'].forEach(function (session) {
+        var key = label + '|' + session;
         var staff = clinicStaff(day, roster, label, session);
-        var cc = counts[label + '|' + session] || {};
+        var cc = counts[key] || {};
         var count = trim(cc.count);
         var extra = trim(cc.extra);
+        // Retina / Uveitis (leaving them needs no cover) are not sent — the
+        // 9/21 schedule has no such lines — unless something was typed for
+        // them; and never as 'none'
+        if (needsNoCover(label) && !count && !extra && (!overrides[key] || !staff.length)) return;
         // A clinic that normally has a resident but has nobody today (out and
         // not covered, or removed) prints 'none' — as the sent schedules do
         // ('Plastics PM: None') — so readers see the gap.
         var grp = clinics[label];
         var usual = !!(grp && (grp[session] || []).length);
         if (!staff.length && !count && !extra && !usual) return;
-        var head = session === 'day' ? label : label + ' ' + session.toUpperCase();
+        // the attending (the note) first, then the count: '(Meghpara, 28 x 2)'
         var paren = [];
-        if (count) paren.push(count);
         if (extra) paren.push(extra);
-        if (paren.length) head += ' (' + paren.join(', ') + ')';
-        var line = [seg(head + ': ')];
-        line.push(staff.length ? seg(staff.join(', '), true) : seg('none'));
-        lines.push(line);
+        if (count) paren.push(count);
+        rows[session] = { paren: paren.join(', '), staff: staff };
       });
+      function lineFor(when, r) {
+        var head = label + (when ? ' ' + when : '') + (r.paren ? ' (' + r.paren + ')' : '');
+        return [seg(head + ': '), r.staff.length ? seg(r.staff.join(', '), true) : seg('none')];
+      }
+      if (rows.day) lines.push(lineFor('', rows.day));
+      // the same attending and residents both sessions: one line, as sent
+      // ('Neuro AM/PM (Sergott): Marshall')
+      if (rows.am && rows.pm && rows.am.paren === rows.pm.paren && rows.am.staff.join('|') === rows.pm.staff.join('|')) {
+        lines.push(lineFor('AM/PM', rows.am));
+      } else {
+        if (rows.am) lines.push(lineFor('AM', rows.am));
+        if (rows.pm) lines.push(lineFor('PM', rows.pm));
+      }
     });
     return lines;
   }
@@ -431,6 +513,15 @@
   // -> array of sections; each section is an array of lines.
   function buildSections(day) {
     day = day || {};
+    BOARD = boardFor(day, day.roster || {});
+    try {
+      return buildSectionsOn(day);
+    } finally {
+      BOARD = null;
+    }
+  }
+
+  function buildSectionsOn(day) {
     var roster = day.roster || {};
     var sections = [];
 
@@ -477,11 +568,12 @@
       { key: 'jhn', label: 'JHN/TJUH/JSC', always: true }
     ];
     defs.forEach(function (def) {
-      var list = cases.filter(function (c) { return c && c.section === def.key; });
+      // a line with neither surgeon nor resident is a draft — not sent
+      var list = cases.filter(function (c) { return c && c.section === def.key && (trim(c.surgeon) || trim(c.assigned)); });
       if (!list.length && !def.always) return;
       var lines = [def.label];
       if (!list.length) lines.push('-none');
-      else list.forEach(function (c) { lines.push(caseLine(c)); });
+      else list.forEach(function (c) { lines.push(caseLine(c, day, roster)); });
       sections.push(lines);
     });
 
@@ -526,14 +618,20 @@
     return sectionsToText(buildSections(day));
   }
 
-  function sectionsToText(sections) {
+  // plain: no '**' around the bold parts — what a text message, GroupMe or
+  // a plain-text email shows (rich editors take the HTML instead)
+  function sectionsToText(sections, plain) {
     return sections.map(function (lines) {
       return lines.map(function (line) {
         return normLine(line).map(function (s) {
-          return s.b ? '**' + s.t + '**' : s.t;
+          return s.b && !plain ? '**' + s.t + '**' : s.t;
         }).join('');
       }).join('\n');
     }).join('\n\n');
+  }
+
+  function buildPlainText(day) {
+    return sectionsToText(buildSections(day), true);
   }
 
   function buildHTML(day) {
@@ -595,7 +693,7 @@
     var html, text;
     try {
       html = buildHTML(day);
-      text = buildText(day);
+      text = buildPlainText(day);
     } catch (e) {
       return Promise.resolve(false);
     }
@@ -609,7 +707,7 @@
       var secs = addOnsSections(day);
       if (!secs.length) return Promise.resolve(false);
       html = sectionsToHTML(secs);
-      text = sectionsToText(secs);
+      text = sectionsToText(secs, true);
     } catch (e) {
       return Promise.resolve(false);
     }
@@ -639,11 +737,12 @@
     });
   }
 
-  // Plain-text-only copy (used by the "Copy plain text" button).
+  // Plain-text-only copy (no '**'); the toolbar's Copy puts this and the HTML
+  // on the clipboard together.
   function copyText(day) {
     var text;
     try {
-      text = buildText(day);
+      text = buildPlainText(day);
     } catch (e) {
       return Promise.resolve(false);
     }
@@ -694,6 +793,7 @@
     buildHTML: buildHTML,
     copy: copy,
     copyText: copyText,
+    buildPlainText: buildPlainText,
     copyAddOns: copyAddOns
   };
 

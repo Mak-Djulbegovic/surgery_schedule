@@ -248,9 +248,9 @@
     return { label: r.label, names: names, standIn: standIn };
   }
 
-  // The token's label, naming whom a stand-in covers: 'Surg 2 — covering Cheng'
+  // The token's label, naming whom a stand-in covers: 'Surg 2 for Cheng'
   function tokenVia(r, name) {
-    return r.standIn && r.standIn[name] ? r.label + ' — covering ' + r.standIn[name] : r.label;
+    return r.standIn && r.standIn[name] ? r.label + ' for ' + r.standIn[name] : r.label;
   }
 
   // The sessions a set of busy spans touches, in order: ['am'], ['pm'] or
@@ -284,7 +284,7 @@
       var firsts = orBlockPeople(roster, 'Plastics OR').filter(function (p) {
         return p.year === 'pgy2';
       });
-      return { label: 'PGY-2 on Plastics OR', names: firsts.map(function (p) { return p.name; }) };
+      return { label: 'first year on Plastics OR', names: firsts.map(function (p) { return p.name; }) };
     }
     if (token === 'PLASTICS_OR_JUNIOR') {
       var pj = orBlockPeople(roster, 'Plastics OR').filter(function (p) {
@@ -302,7 +302,7 @@
       // the resident list + data.
       var cs = roster ? roster.cooperSenior : null;
       if (cs === undefined) cs = cooperSeniorFrom(roster);
-      return { label: 'Cooper (PGY-4)', names: cs ? [cs] : [] };
+      return { label: 'Cooper (third year)', names: cs ? [cs] : [] };
     }
     if (token === 'WILLS_OR') {
       return { label: 'Wills OR', names: orBlockPeople(roster, 'Wills OR', sessions).map(function (p) { return p.name; }) };
@@ -433,11 +433,13 @@
     return out;
   }
 
+  // 'in Tyson ×3' — with 'until …' only for a typed or checked-off end,
+  // never the session's edge (no guessed times)
   function busyText(st) {
     var S = getStatus();
     if (!st) return '';
-    if (st.kind === 'case' && S && st.until != null) {
-      return 'in ' + st.label + ' until ' + S.fmtClock(st.until) + (st.estimated ? ' (est.)' : '');
+    if (st.kind === 'case' && S && st.until != null && !st.openEnded) {
+      return 'in ' + st.label + ' until ' + S.fmtClock(st.until);
     }
     if (st.kind === 'case') return 'in ' + st.label;
     return st.label;
@@ -445,8 +447,15 @@
 
   // claims: name -> [{ start, end, what, by }] — residents already picked for
   // another case in this pass (`what` is the skip reason shown).
+  // The claim on someone over `spans`, or null. A claim by the role that
+  // always takes a kind (Surg 2's globe) does not block a case that starts
+  // before it: the globe follows that case (review 10/19/2026 — a 4:30 globe
+  // had taken Surg 2 from a 1:00 add-on, since a list now runs to the end
+  // of its session).
   function claimAt(list, spans) {
+    var t0 = spans && spans.length ? spans[0].start : null;
     for (var i = 0; i < (list || []).length; i++) {
+      if (list[i].always && t0 != null && t0 < list[i].start) continue;
       if (spansOverlap([list[i]], spans)) return list[i];
     }
     return null;
@@ -542,7 +551,7 @@
       if (!w.primary || !e.open) return; // an assigned case is on the board already
       var cl = claimOf(e);
       claims[w.primary.name] = (claims[w.primary.name] || []).concat(e.spans.map(function (sp) {
-        return { start: sp.start, end: sp.end, what: cl.what, label: cl.label, by: cl.by || null };
+        return { start: sp.start, end: sp.end, what: cl.what, label: cl.label, by: cl.by || null, always: !!w.primary.always };
       }));
     }
     var later = [];
@@ -605,7 +614,7 @@
     var m = /^Surg (\d)$/.exec(role);
     if (m && board.actingSurg) {
       var a = board.actingSurg(m[1], s);
-      return a ? { name: a.name, via: role + (a.for ? ' — covering ' + a.for : ''), standingFor: a.for || '' } : null;
+      return a ? { name: a.name, via: role + (a.for ? ' for ' + a.for : ''), standingFor: a.for || '' } : null;
     }
     var r = resolveToken(role, roster, [s], { board: board, sessions: [s] });
     var n = r.names[0];
@@ -620,6 +629,7 @@
   function waitFor(name, selfId, t, board, claims) {
     var start = t;
     var behind = [];
+    var seenClaims = [];
     for (var guard = 0; guard < 40; guard++) {
       var st = board.statusAt(name, start, { exclude: selfId });
       if (st.kind === 'case' && st.until != null && st.until > start) {
@@ -630,15 +640,23 @@
       var cl = claimAt((claims || {})[name], [{ start: start, end: start + 1 }]);
       if (cl && cl.end > start) {
         behind.push({ claim: true, label: cl.label || cl.what || 'another add-on', until: cl.end });
+        seenClaims.push(cl);
         start = cl.end;
         continue;
       }
       break;
     }
+    // what they were already given before `t` (an earlier globe) comes first
+    // in line too, even when their own list outlasts it on the board
+    ((claims || {})[name] || []).forEach(function (cl) {
+      if (cl.start <= t && seenClaims.indexOf(cl) === -1 && !behind.some(function (w) { return w.claim && w.label === (cl.label || cl.what); })) {
+        behind.push({ claim: true, label: cl.label || cl.what || 'another add-on', until: cl.end });
+      }
+    });
     return { start: start, behind: behind };
   }
 
-  // 'Tyson x3' · 'Tyson x3, then the globe / trauma at 1:00 PM' — what a
+  // 'Tyson ×3' · 'Tyson ×3, then the globe / trauma at 1:00 PM' — what a
   // case follows, without times
   function behindText(behind) {
     return (behind || []).map(function (w) { return w.label; }).join(', then ');
@@ -869,7 +887,9 @@
   function assignedOut(c, board) {
     var a = trimStr(c && c.assigned);
     if (!a || !board || !board.byName[a]) return false;
-    return board.statusDuringSpans(a, board.caseSpansFor(c).spans, { exclude: c.id }).kind === 'out';
+    var cs = board.caseSpansFor(c);
+    if (cs.done) return false; // checked off: over, whoever is out later
+    return board.statusDuringSpans(a, cs.spans, { exclude: c.id }).kind === 'out';
   }
 
   function suggest(cases, roster, data, board) {
@@ -903,6 +923,21 @@
       var run = runSteps(entries, roster, data, board, function (e) {
         var who = trimStr(e.c.surgeon) || 'another case';
         return { what: 'suggested for ' + who + ' at this time', label: 'suggested for ' + who };
+      });
+      // what a globe follows, now that every case has its suggestion: an
+      // earlier open case suggested to the same person comes first
+      run.settled.forEach(function (e) {
+        if (!e.pick || !e.pick.always || !e.open || !e.spans || !e.spans.length) return;
+        var t = e.spans[0].start;
+        var earlier = {};
+        run.settled.forEach(function (f) {
+          if (f === e || !f.pick || !f.open || !f.spans || !f.spans.length || f.spans[0].start > t) return;
+          var n = Math.max(1, parseInt(f.c.count, 10) || 1);
+          earlier[f.pick.name] = (earlier[f.pick.name] || []).concat(f.spans.map(function (sp) {
+            return { start: sp.start, end: sp.end, label: (trimStr(f.c.surgeon) || f.c.category || 'case') + ' ×' + n };
+          }));
+        });
+        e.waits = waitFor(e.pick.name, e.c.id, t, board, earlier).behind;
       });
       return run.settled.map(function (e) {
         return e.private ? privateResult(e.c) : boardResult(e, board, load, run.claims);
@@ -1253,7 +1288,7 @@
       e.alwaysPick = ap;
       preClaims[ap.cand.name] = (preClaims[ap.cand.name] || []).concat(e.spans.map(function (sp) {
         return {
-          start: sp.start, end: sp.end, entry: e,
+          start: sp.start, end: sp.end, entry: e, always: true,
           what: 'taking the ' + e.def.label.toLowerCase() + ' at ' + S.fmtClock(e.time),
           label: 'the ' + e.def.label.toLowerCase() + ' at ' + S.fmtClock(e.time)
         };
@@ -1279,6 +1314,17 @@
       e.byOrder = g ? g.opt.cand.name : null; // who the doc's order alone gives it to
       e.changed = (e.byOrder || '') !== (e.pick ? e.pick.name : '');
     });
+    entries.forEach(function (e) {
+      if (!e.alwaysPick) return;
+      var earlier = {};
+      entries.forEach(function (f) {
+        if (f === e || !f.pick || f.time > e.time || (f.time === e.time && f.i > e.i)) return;
+        earlier[f.pick.name] = (earlier[f.pick.name] || []).concat(f.spans.map(function (sp) {
+          return { start: sp.start, end: sp.end, label: 'the ' + f.def.label.toLowerCase() + ' at ' + S.fmtClock(f.time) };
+        }));
+      });
+      e.alwaysPick.behind = waitFor(e.pick.name, e.c.id, e.time, board, earlier).behind;
+    });
     function overlapsE(a, b) { return spansOverlap(a.spans, b.spans); }
     function takerOf(name, e) {
       return entries.filter(function (f) { return f !== e && f.pick && f.pick.name === name && overlapsE(e, f); })[0] || null;
@@ -1289,10 +1335,24 @@
     // clinics at once.
     var covers = [];
     entries.slice().sort(function (a, b) { return a.time - b.time || a.i - b.i; }).forEach(function (e) {
-      if (!e.pick || !e.pickStatus || e.pickStatus.kind !== 'clinic') return;
+      // whatever clinic the pick leaves — their worst status can read
+      // 'case' when a list of their own comes later (review 10/19/2026)
+      if (!e.pick) return;
       var pulled = pulledClinic(board, e.pick.name, e.spans, null);
       if (!pulled) return;
       var win = [{ start: pulled.start, end: pulled.end }];
+      // the same person pulled from the same clinic again (a second globe
+      // after the first): the cover already found carries on
+      var same = covers.filter(function (cv) {
+        return cv.pick === e.pick.name && cv.clinic === pulled.clinic && cv.owner === pulled.owner && cv.win[0].start <= pulled.end && pulled.start <= cv.win[0].end;
+      })[0];
+      if (same) {
+        same.win[0].start = Math.min(same.win[0].start, pulled.start);
+        same.win[0].end = Math.max(same.win[0].end, pulled.end);
+        same.handoff.window = { clinic: same.handoff.window.clinic, clinics: same.handoff.window.clinics, owner: same.handoff.window.owner, session: same.handoff.window.session, start: same.win[0].start, end: same.win[0].end };
+        e.handoff = same.handoff;
+        return;
+      }
       var busy = [e.pick.name];
       entries.forEach(function (f) { if (f.pick && spansOverlap(f.spans, win)) busy.push(f.pick.name); });
       covers.forEach(function (cv) { if (spansOverlap(cv.win, win)) busy.push(cv.name); });
@@ -1301,7 +1361,7 @@
         clinic: pulled.clinic, owner: pulled.owner, window: pulled,
         primary: cover.primary, second: cover.second, steps: cover.steps, outside: cover.outside, pullable: cover.pullable
       };
-      if (cover.primary) covers.push({ name: cover.primary.name, win: win });
+      if (cover.primary) covers.push({ name: cover.primary.name, win: win, pick: e.pick.name, clinic: pulled.clinic, owner: pulled.owner, handoff: e.handoff });
     });
 
     var claimsFinal = {};
@@ -1349,7 +1409,7 @@
       return {
         kind: e.def.key, label: e.def.label, key: e.key, hierLabel: e.hier.label, time: e.time,
         // taken by the role that always takes it: what it follows when they
-        // are operating then ('Tyson x3'), or a case of theirs that starts
+        // are operating then ('Tyson ×3'), or a case of theirs that starts
         // during it
         always: e.alwaysPick ? e.always : '',
         follows: e.alwaysPick ? behindText(e.alwaysPick.behind) : '',

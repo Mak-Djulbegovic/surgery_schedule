@@ -10,9 +10,9 @@ how-to's order. Status: **released as v2 (9/2026)**; v1 is archived in `v1/`.
 |---|---|---|
 | 1 Out today | Step 1 — vacation coverage | "No one out — 24 strong", or add who is out (all day / AM / PM, reason) and pick who covers each session, or **NC** |
 | 2 Roster | Step 2 — Surg 1–5 | as before; Surg 3/4 shown as **all day** ("Cornea PM if no case") |
-| 3 Surgery | Steps 3–10 — cases | **one line per attending**, reading like the sent schedule: `Surgeon × # · start · category · svc → resident`. The suggested resident is a dashed pill (one click); an assigned one gets a status dot (green free, amber leaves a clinic, red out/double-booked); the backup line appears under the line only when the case pulls someone out of clinic. Service times / done by / notes / add-on / move / delete sit behind **⋯**. **Enter** adds the next line. The CPEC sheet is a prefill banner (Add all / Choose…) that shrinks to one line once added. The old Assign tab is gone |
+| 3 Surgery | Steps 3–10 — cases | **one line per attending**, reading like the sent schedule: `Surgeon × # · start · category · svc → resident`. The suggested resident is a dashed pill (one click); an assigned one gets a status dot (green free, amber leaves a clinic or follows their own earlier list, red out/double-booked); the backup line appears under the line only when the case pulls someone out of clinic. A part-private list's service time opens under the line (amber when missing). Done by / notes / add-on / move / delete sit behind **⋯**. **Enter** adds the next line. The CPEC sheet is a prefill banner (Add all / Choose…) that shrinks to one line once added. The old Assign tab is gone |
 | 4 Clinics | Steps 11–12 — clinics | counts as before; each clinic shows who is out / pulled into a case and who covers; "Needs coverage" list on top |
-| 5 Coverage | the new backup view | today's roles (with stand-ins for anyone out), needs coverage (everything still open, from every tab), the day at a glance — morning OR → afternoon clinic, then AM / PM: who is operating (lists to check off), free, pull first (Retina / Uveitis), out — "if a globe or add-on comes in", add-on call names, the rules (flow chart) |
+| 5 Coverage | the new backup view | needs coverage (everything still open, from every tab), "if a globe or add-on comes in" (Surg 2's day in one line), the day — roles, who is out (once), free now (today), morning OR → afternoon clinic, then AM / PM: who is operating (lists to check off, with who covers the clinic each one leaves), free, pull first (Retina / Uveitis) — the add-on call names, the rules (flow chart, folded) |
 | 6 Preview & Copy | — | the document |
 
 How-to, the flow chart (10/18/2026), CPEC sheet, block schedules and Setup
@@ -138,7 +138,82 @@ bracketed notes and block names ("Stadium OR (Abendroth)") as they were.
 - Absences are per day: the next day's add-on row uses that day's saved
   draft, if there is one, else the block schedule.
 
-## Coverage revamped; no case-time estimates (10/18/2026, latest)
+## Review round (10/19/2026, latest)
+
+Eight reviewers (the change itself, the whole app, each page, design and
+usability) — reports summarized in docs/AUDIT.md "Fifth pass". What changed:
+
+- **Coverage.** Order: Needs → Surg 2 and the globe → the day. Roles sit
+  in the day's card; who is out is said once ("Cheng (vacation) → Bair",
+  AM/PM only for a half day); a free window that only runs until the
+  resident's own list is not shown; a case count only for more than one
+  list; "Pull first" chips without "— no cover needed". On today: "Free
+  now", the session under way marked, and after noon the morning keeps only
+  its lists (phones show the afternoon first). The Free strip is not shown
+  on Coverage. A list that pulls its resident out of a clinic says who
+  covers it ("· Glaucoma → Bair", red when nobody). The morning OR →
+  afternoon clinic band shows a list checked off ("✓ 11:40 AM") and an
+  afternoon list's clinic cover. The Surg 2 line says what Surg 2 is doing
+  ("No globe — Surg 2, Bair (for Cheng), is free." or their commitments);
+  one globe is one line ("→ Bair Surg 2 for Cheng — free"); the hand-off
+  reads "Glaucoma (Shields) → Aguwa (Surg 1) from 1:00 PM until Shields is
+  back"; the 4:30 note names tonight's call person. The rules are folded
+  until opened (a new storage key — the old one saved "open" on every
+  render). Needs: the same person away from the same clinic AM and PM is
+  one row ("CPEC all day — Wibbelsman is Surg 2 for Cheng, so CPEC is one
+  short"), its button **acknowledges** ("OK — CPEC runs one short", kept
+  per cause in `state.shortOk`, lapsing when the cover changes) instead of
+  editing who staffs the clinic; fixes toast; "Pick on Surgery" lands on the
+  line with its picker open. Check-off: the whole line is the box's label,
+  22 px (24 on phones).
+- **One word each.** Stand-ins: "Surg 2 for Cheng" everywhere. Years:
+  first / second / third year (PGY-2 / 3 / 4). Undecided: **TBD** (red);
+  decided not covered: **NC**. On-screen lists: "Tyson ×3" (the copied
+  schedule keeps "-Tyson x3").
+- **Covers come from the board** (`board.coverOf`). A cover who is out too,
+  or already covering someone else then, is no cover: the absence is an open
+  need saying why ("TBD (Wibbelsman is out too)"), and the copied schedule
+  prints TBD rather than naming them. Out today lists such people as not
+  pickable (already covering someone, the Day Float for anyone but the Night
+  Float resident, Surg 2 for the ER) and shows the board's warnings.
+- **Out today.** One pick for an all-day absence ("Split AM / PM" for two);
+  the picker lists clinics and Retina / Uveitis before Surg / OR holders
+  (likely operating), same year first, with each person's own duty; the
+  Night Float is one line in the list; the Vacation note is a link until
+  used. Adding the Night Float resident by hand keeps them out all day, the
+  Day Float covering any session left blank.
+- **Surgery.** A blank line (no surgeon, no resident) is a draft: no
+  suggestion, not a need, not copied. Svc follows # until edited. A new
+  line's type follows the attending (remembered type, globe/trauma, CPEC
+  attending → cataract, JHN → plastics) until picked. At most one note under
+  a suggestion; who was passed over is in the pill's title; the pill always
+  shows the name. A list that follows the same resident's earlier list (no
+  known end) is amber "Follows X — check in", not green or red. Assign all
+  also takes the suggested backups. Reassigning a case clears its old
+  backup.
+- **Board.** A list checked off before it began keeps its start and ends
+  nothing; the back-to-back rule clips span by span (a partly private
+  list's later service time stays); a list checked off after the next one's
+  start pushes that one back; "PM TF" counts for the afternoon. A later
+  globe no longer takes Surg 2 from an earlier case — it follows it. A coverer
+  away from their own clinic all session is one gap, caused by the cover.
+- **Copied schedule.** Clinics as sent (9/21): CPEC PO first, the attending
+  before the count, "Neuro AM/PM (Sergott)" for identical sessions, no
+  Retina / Uveitis lines unless something was typed. One **Copy** button: the
+  plain-text half has no `**`. The send-check lists each open item with its
+  fix, the board's warnings and unnamed add-on call rows; "No cases yet." is
+  not a green check.
+- **Library.** The flow chart is the rules only (two per row on wide
+  screens; prints in three pages); How-to is the steps and tips; names match
+  everywhere ("CPEC sheet", "Block schedules", "Setup"); Paste a sent
+  schedule moved to ⋯.
+- **Design.** Darker greys (AA contrast), 40 px tap targets and 16 px
+  inputs on phones (no iOS zoom), short tab labels on phones, menus close on
+  Escape, red = nobody / conflict, amber = decide, information neutral.
+- **Build stamp.** The header reads "· build 24" — an old cached copy shows
+  an older number.
+
+## Coverage revamped; no case-time estimates (10/18/2026)
 
 The asks: "i think estimating may confuse things because things can run
 short or long. just have it listed who is operating that day so there can be
@@ -493,7 +568,7 @@ Every resident, every 5 minutes from 7:00 to 17:00, is one of:
 |---|---|
 | out | typed absence; the Night Float resident (post-call, out all day) |
 | case | assigned to a case whose busy span covers that minute |
-| clinic | own block clinic (CPEC included), a clinic they were added to, an absent resident's clinic they cover, a clinic they cover as a case backup or for a morning OR running late |
+| clinic | own block clinic (CPEC included), a clinic they were added to, an absent resident's clinic they cover, a clinic they cover as a case backup |
 | duty | ER, Jeff/Cooper consults, Day Float, off-site (Cooper Clinic / Cooper OR) |
 | free | PT, or a Surg role / OR block with nothing booked |
 

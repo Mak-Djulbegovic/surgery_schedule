@@ -118,6 +118,11 @@ Days saved in v1 open in v2 (same browser, same storage keys).
 Because state lives in each browser's localStorage, sharing a link shares the
 app — never your entered data.
 
+**Which version am I on?** The header reads "AY 2026–2027 · v2 · build 24".
+A browser can keep an old copy cached after an update; if the build number
+is behind, reload with the cache bypassed (Shift-reload, or on a phone close
+the tab and reopen the link).
+
 ### Saving, and working at the same time as someone else
 
 - **Autosave**: every edit is saved within 0.3 s, and again the moment the tab
@@ -131,7 +136,7 @@ app — never your entered data.
   day on their own phones or computers never see or overwrite each other.
 - **Taking over a day someone else built**: the Surg 2 who builds a day is
   often not that day's Surg 2. Paste the schedule you were sent (landing
-  page, or Library → **Paste a sent schedule**): the app reads it back into
+  page, or ⋯ → **Paste a sent schedule**): the app reads it back into
   that day — cases with residents and backups, who's out and who covers,
   Night Float, clinic counts and edits, add-on names — checks that it
   rebuilds the same schedule line for line, and saves it, so Coverage runs

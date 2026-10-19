@@ -51,7 +51,7 @@ x = board({ cases: [hark('Djulbegovic'),
 plan = Assign.planAddOn('globe', 810, roster, DATA, x.b);
 eq(plan.pick && plan.pick.name, 'Djulbegovic', 'Surg 2 scrubbed in Tyson x3 → still Surg 2 (always takes the globe)');
 eq(plan.always, 'Surg 2', '…by the always-takes rule');
-eq(plan.follows, 'Tyson x3', '…it follows their cases (no estimated time)');
+eq(plan.follows, 'Tyson ×3', '…it follows their cases (no estimated time)');
 eq(plan.spans[0].start, 810, 'the globe keeps the time it came in');
 eq(plan.handoff, null, 'Surg 2 is operating, not covering a clinic — nothing to hand off');
 eq(plan.steps.length, 1, 'no chain walk: Surg 3 / Surg 4 are not offered the globe');
@@ -66,8 +66,8 @@ x = board({ cases: [tyson, gcase] });
 res = Assign.suggest([tyson, gcase], roster, DATA, x.b);
 var gr = res.filter(function (r) { return r.caseId === 'g1'; })[0];
 eq(gr && gr.name, 'Djulbegovic', 'Surgery: the trauma case is suggested to Surg 2 while they are scrubbed');
-eq(gr && gr.follows, 'Tyson x3', '…following their cases');
-ok(gr && gr.warnings.some(function (w) { return /^Djulbegovic is operating \(Tyson x3\) — it follows their cases; check in with them$/.test(w); }), '…and the warning says so, with no time — got ' + JSON.stringify(gr && gr.warnings));
+eq(gr && gr.follows, 'Tyson ×3', '…following their cases');
+ok(gr && gr.warnings.some(function (w) { return /^Djulbegovic is operating \(Tyson ×3\) — it follows their cases; check in with them$/.test(w); }), '…and the warning says so, with no time — got ' + JSON.stringify(gr && gr.warnings));
 ok(gr && !gr.warnings.some(function (w) { return /\d:\d\d/.test(w); }), '…no estimated time anywhere in the warnings');
 ok(gr && gr.alternates.indexOf('Calotti') !== -1, '…the chain’s free members stay as alternates');
 // Surg 2 out with nobody covering: the chain as before
@@ -79,14 +79,14 @@ eq(plan.pick && plan.pick.name, 'Bair', '…the trauma chain: Surg 3 takes it');
 x = board({ cases: [{ id: 'c3', section: 'wills', surgeon: 'Tyson', count: 2, serviceCount: 2, start: '1300', category: 'cataract', addOn: false, assigned: 'Wibbelsman', backup: '' }],
   absences: [{ id: 'a9', name: 'Djulbegovic', am: true, pm: true, reason: 'vacation', coverAM: 'Wibbelsman', coverPM: 'Wibbelsman' }] });
 plan = Assign.planAddOn('globe', 790, roster, DATA, x.b);
-eq(plan.pick && plan.pick.name + ' | ' + plan.follows, 'Wibbelsman | Tyson x2', 'Surg 2 c/b Wibbelsman, operating → Wibbelsman, following their cases');
-ok(/covering Djulbegovic/.test(plan.pick && plan.pick.via), '…named as covering Djulbegovic — got ' + (plan.pick && plan.pick.via));
+eq(plan.pick && plan.pick.name + ' | ' + plan.follows, 'Wibbelsman | Tyson ×2', 'Surg 2 c/b Wibbelsman, operating → Wibbelsman, following their cases');
+ok(/Surg 2 for Djulbegovic/.test(plan.pick && plan.pick.via), '…named as Surg 2 for Djulbegovic — got ' + (plan.pick && plan.pick.via));
 // split cover: Wibbelsman Surg 2 AM, Cheng PM — the globe goes to whoever
 // is Surg 2 when it comes in
 x = board({ cases: [{ id: 'c4', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1100', category: 'cataract', addOn: false, assigned: 'Wibbelsman', backup: '' }],
   absences: [{ id: 'a9', name: 'Djulbegovic', am: true, pm: true, reason: 'vacation', coverAM: 'Wibbelsman', coverPM: 'Cheng' }] });
 plan = Assign.planAddOn('globe', 690, roster, DATA, x.b);
-eq(plan.pick && plan.pick.name + ' | ' + plan.follows, 'Wibbelsman | Tyson x3', 'an 11:30 globe → the AM Surg 2 (Wibbelsman), following their cases');
+eq(plan.pick && plan.pick.name + ' | ' + plan.follows, 'Wibbelsman | Tyson ×3', 'an 11:30 globe → the AM Surg 2 (Wibbelsman), following their cases');
 plan = Assign.planAddOn('globe', 780, roster, DATA, x.b);
 eq(plan.pick && plan.pick.name + ' | ' + plan.follows, 'Cheng | ', 'a 1:00 globe → the PM Surg 2 (Cheng), free');
 
@@ -188,9 +188,9 @@ x = board({ cases: [
 ] });
 plan = Assign.planAddOn('other', 810, roster, DATA, x.b);
 eq(plan.pick && plan.pick.name, 'Samuel', 'Surg 2/3/4 in cases → the Cooper-block senior (Samuel) takes an add-on (Step 10)');
-eq(plan.pick && plan.pick.via, 'Cooper (PGY-4)', '…via the Cooper (PGY-4) chain step');
+eq(plan.pick && plan.pick.via, 'Cooper (third year)', '…via the Cooper (third year) chain step');
 plan = Assign.planAddOn('globe', 810, roster, DATA, x.b);
-eq(plan.pick && plan.pick.name + ' | ' + plan.follows, 'Djulbegovic | Tyson x3', '…a globe still goes to Surg 2 (following their cases), not Cooper');
+eq(plan.pick && plan.pick.name + ' | ' + plan.follows, 'Djulbegovic | Tyson ×3', '…a globe still goes to Surg 2 (following their cases), not Cooper');
 // Thu 10/1: Samuel is at Cooper Clinic — off-site, skipped
 var r101 = Engine.resolveDay('2026-10-01', DATA);
 var b101 = Status.build(r101, { nightFloat: 'Perez', absences: [], clinicStaffOverrides: {}, cases: [
@@ -329,7 +329,7 @@ eq(jt.items[1].adjusted && jt.items[1].byOrder, 'Calotti', '…and it says the o
 ok(jt.searched < 100, 'the search is tiny (' + jt.searched + ' nodes)');
 // a globe in the same squeeze: Surg 2 always, following their list
 jt = Assign.planAddOns([{ kind: 'globe', t: 780 }, { kind: 'glaucoma', t: 810 }], null, roster, DATA, x.b);
-eq(jt.items.map(function (it) { return it.label.split(' ')[0] + ':' + (it.pick ? it.pick.name : '-') + (it.follows ? ' after ' + it.follows : ''); }).join(' '), 'Globe:Djulbegovic after Xa x4 Glaucoma:Calotti',
+eq(jt.items.map(function (it) { return it.label.split(' ')[0] + ':' + (it.pick ? it.pick.name : '-') + (it.follows ? ' after ' + it.follows : ''); }).join(' '), 'Globe:Djulbegovic after Xa ×4 Glaucoma:Calotti',
   'globe 1:00 → Surg 2, following their list; glaucoma 1:30 → Surg 4 (Step 6)');
 // with nothing in the way the plan is exactly the doc's order
 jt = Assign.planAddOns([{ kind: 'globe', t: 600 }, { kind: 'glaucoma', t: 600 }, { kind: 'cornea', t: 600 }], null, roster, DATA, board({}).b);
@@ -358,14 +358,14 @@ eq(x.b.standIn('Djulbegovic', 'am'), 'Aguwa', 'board: Aguwa stands in for Djulbe
 eq(JSON.stringify(x.b.actingSurg('2', 'pm')), '{"name":"Aguwa","for":"Djulbegovic"}', 'board: Aguwa is the acting Surg 2 PM');
 eq(JSON.stringify(x.b.surgRolesAt('Aguwa', 'am')), '[{"n":"2","for":"Djulbegovic"}]', 'board: Aguwa holds Surg 2 (for Djulbegovic)');
 plan = Assign.planAddOn('globe', 870, roster, DATA, x.b);
-eq(plan.pick && plan.pick.name + ' / ' + plan.pick.via, 'Aguwa / Surg 2 — covering Djulbegovic', 'globe: the acting Surg 2 takes it — not Surg 3 pulled from Cornea clinic');
+eq(plan.pick && plan.pick.name + ' / ' + plan.pick.via, 'Aguwa / Surg 2 for Djulbegovic', 'globe: the acting Surg 2 takes it — not Surg 3 pulled from Cornea clinic');
 eq(plan.handoff, null, '…the acting Surg 2 is free — no clinic to hand off');
 res = Assign.suggest([{ id: 'r1', section: 'wills', surgeon: 'X', count: 1, serviceCount: 1, start: '1000', category: 'other', addOn: false, assigned: '' }], roster, DATA, x.b);
 eq(res[0].name, 'Aguwa', 'remaining cases (Step 10): the acting Surg 2 first');
-ok(/Surg 2 — covering Djulbegovic/.test(res[0].reasons[0]), '…and the reason says whom they cover — got ' + res[0].reasons[0]);
+ok(/Surg 2 for Djulbegovic/.test(res[0].reasons[0]), '…and the reason says whom they cover — got ' + res[0].reasons[0]);
 x = board({ absences: s2out.absences, cases: [hark('')] });
 bp = Assign.backupPlan(x.day.cases[0], roster, DATA, x.day.cases, x.b);
-eq(bp && bp.primary && bp.primary.name + ' / ' + bp.primary.source, 'Aguwa / Surg 2 — covering Djulbegovic', 'clinic cover (Step 12): the acting Surg 2 first');
+eq(bp && bp.primary && bp.primary.name + ' / ' + bp.primary.source, 'Aguwa / Surg 2 for Djulbegovic', 'clinic cover (Step 12): the acting Surg 2 first');
 j = Assign.planAddOns(['globe', 'glaucoma', 'cornea'], 600, roster, DATA, board(s2out).b);
 eq(names(j), 'Globe:Aguwa Glaucoma:Calotti Cornea:Bair', 'several add-ons: the globe goes to the acting Surg 2');
 // covered for the morning only: the stand-in is Surg 2 only then
@@ -455,8 +455,84 @@ ok(bp && bp.primary && bp.primary.name !== 'Cheng', 'Surg 2 in a 12:00 globe is 
   var cat = { id: 'k', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1300', category: 'cataract', addOn: false, assigned: w.s2, backup: '' };
   day.cases = cases.map(function (c) { var d = {}; for (var k in c) d[k] = c[k]; d.backup = ''; return d; }).concat([cat]);
   gp = Assign.planAddOn('globe', 810, r, DATA, Status.build(r, day, DATA));
-  eq(gp.pick && gp.pick.name + ' | ' + gp.follows, w.s2 + ' | Tyson x3', w.d + ': Surg 2 operating → still Surg 2, following their cases');
+  eq(gp.pick && gp.pick.name + ' | ' + gp.follows, w.s2 + ' | Tyson ×3', w.d + ': Surg 2 operating → still Surg 2, following their cases');
 });
+
+/* ---------- review fixes (10/19/2026) ---------- */
+// skip reasons never print a guessed end ("until 12:00 PM" = the session edge)
+var hark2 = { id: 'h2', section: 'wills', surgeon: 'Hark', count: 2, serviceCount: 2, start: '0800', category: 'cornea', addOn: false, assigned: 'Bair', backup: '' };
+x = board({ cases: [hark2] });
+res = Assign.suggest([hark2, { id: 'q1', section: 'wills', surgeon: 'Q', count: 1, serviceCount: 1, start: '0900', category: 'cornea', addOn: true, assigned: '' }], roster, DATA, x.b);
+var q1 = res.filter(function (r) { return r.caseId === 'q1'; })[0];
+var bairSkip = q1 && q1.skipped.filter(function (s) { return s.name === 'Bair'; })[0];
+eq(bairSkip && bairSkip.why, 'in Hark ×2', 'a skip reason names the list, with no guessed end time');
+// a globe for an operating Surg 2 does not cut their list short
+var reza = { id: 'rz', section: 'wills', surgeon: 'Reza', count: 4, serviceCount: 4, start: '0730', category: 'cataract', addOn: false, assigned: 'Djulbegovic', backup: '' };
+var glb = { id: 'gl', section: 'wills', surgeon: 'Globe/trauma', count: 1, serviceCount: 1, start: '0900', category: 'trauma', addOn: true, assigned: 'Djulbegovic', backup: '' };
+x = board({ cases: [reza, glb] });
+eq(JSON.stringify(x.b.caseInfo.rz.spans), JSON.stringify([{ start: 450, end: 720 }]), 'Reza x4 still runs the morning — the globe follows it, it does not end it');
+// two globes while Surg 2 is operating: the second follows the list, then the first globe
+x = board({ cases: [reza] });
+var g2 = Assign.planAddOns([{ kind: 'globe', t: 540 }, { kind: 'globe', t: 600 }], null, roster, DATA, x.b);
+eq(g2.items[0].follows + ' | ' + g2.items[1].follows, 'Reza ×4 | Reza ×4, then the globe / trauma at 9:00 AM', 'two globes, Surg 2 operating: the second follows the first');
+
+/* ---------- review round 10/19/2026: lists, globes and hand-offs ---------- */
+function kase(o) {
+  var c = { section: 'wills', surgeon: 'S', count: 1, serviceCount: 1, start: '', serviceTimes: '', category: 'cataract', addOn: false, notes: '', assigned: '', backup: '', backupNote: '', until: '', done: false, doneAt: '' };
+  for (var k in o) c[k] = o[k];
+  return c;
+}
+function spansOf(b, id) { return JSON.stringify(b.caseInfo[id].spans.map(function (s) { return [s.start, s.end]; })); }
+// a later list checked off before it began keeps its own start, and does not end the running one
+x = board({ cases: [kase({ id: 'w', surgeon: 'Wisner', count: 3, start: '0730', assigned: 'Cheng' }),
+  kase({ id: 'p', surgeon: 'Pendse', count: 2, start: '1300', assigned: 'Cheng', done: true, doneAt: '0800' })] });
+eq(spansOf(x.b, 'w'), '[[450,720]]', 'a list cancelled (checked off before it began) does not cut the running list short');
+eq(x.b.caseInfo.p.start + ' ' + x.b.caseInfo.p.cancelled, '780 true', '…and keeps its own 1:00 PM start, marked cancelled');
+eq(x.b.statusAt('Cheng', 570).kind, 'case', '…so Cheng is still operating at 9:30');
+// a partly private list keeps its later service time when another list comes between
+x = board({ cases: [kase({ id: 'h', surgeon: 'Henry', count: 10, serviceCount: 2, start: '0730', serviceTimes: '1015 & 1300', category: 'cornea', assigned: 'Bair' }),
+  kase({ id: 'k', surgeon: 'Hark', count: 1, start: '1100', category: 'cornea', assigned: 'Bair' })] });
+eq(spansOf(x.b, 'h'), '[[615,660],[780,' + x.b.dayEnd + ']]', 'a list between two service times ends only the first: the 1:00 PM service case stays');
+eq(x.b.statusAt('Bair', 810).kind, 'case', '…so Bair is busy at 1:30 and Cornea needs a backup');
+// checked off after the next list's typed start: that list started then
+x = board({ cases: [kase({ id: 'a', surgeon: 'Wisner', count: 3, start: '0730', assigned: 'Cheng', done: true, doneAt: '1100' }),
+  kase({ id: 'b', surgeon: 'Lee', count: 2, start: '1000', assigned: 'Cheng' })] });
+eq(spansOf(x.b, 'b'), '[[660,720]]', 'a list checked off at 11:00 pushes the 10:00 list to 11:00 — no false double-booking');
+// odd starts
+eq(Status.caseSpans(kase({ start: 'PM TF' }), DATA).start, 720, '"PM TF" counts for the afternoon (noon), not 7:30');
+var late = Status.caseSpans(kase({ start: '1730' }), DATA);
+ok(late.end > late.start, 'a list typed after the board’s day never ends before it starts');
+// a later globe does not take Surg 2 from an earlier add-on — it follows it
+x = board({});
+var catAlone = Assign.planAddOns([{ kind: 'cataract', t: 780 }], null, roster, DATA, x.b).items[0];
+var both = Assign.planAddOns([{ kind: 'cataract', t: 780 }, { kind: 'globe', t: 990 }], null, roster, DATA, x.b);
+eq(catAlone.pick && catAlone.pick.name, 'Djulbegovic', 'a 1:00 cataract add-on alone: Surg 2 (remaining-cases chain)');
+eq(both.items[0].pick && both.items[0].pick.name, 'Djulbegovic', 'a 4:30 globe does not take Surg 2 from the earlier 1:00 add-on');
+eq(both.items[1].pick && both.items[1].pick.name + ' | ' + both.items[1].follows, 'Djulbegovic | the cataract add-on at 1:00 PM', '…the globe still goes to Surg 2 and follows that add-on');
+// Surg 2 covering a clinic, with a list of their own later: the hand-off still happens
+x = board({ cases: [hark('Djulbegovic'), kase({ id: 'own', surgeon: 'Tyson', count: 2, start: '1500', assigned: 'Djulbegovic' })] });
+plan = Assign.planAddOn('globe', 810, roster, DATA, x.b);
+eq(plan.handoff && plan.handoff.clinic, 'Cornea', 'Surg 2 with a later list of their own: the Cornea they leave is still handed off');
+// two globes: one cover for the one clinic
+x = board({ cases: [hark('Djulbegovic')] });
+var two = Assign.planAddOns([{ kind: 'globe', t: 810 }, { kind: 'globe', t: 840 }], null, roster, DATA, x.b);
+var h1 = two.items[0].handoff, h2 = two.items[1].handoff;
+eq(h2 && h1 && h2.primary && h1.primary && h2.primary.name === h1.primary.name, true, 'two globes: the clinic Surg 2 leaves gets one cover, not two different people');
+// a checked-off case whose resident is later marked out needs nobody new
+x = board({ absences: [{ id: 'o', name: 'Cheng', am: true, pm: true, reason: 'sick', coverAM: 'NC', coverPM: 'NC' }],
+  cases: [kase({ id: 'd', surgeon: 'Wisner', count: 3, start: '0730', assigned: 'Cheng', done: true, doneAt: '1000' })] });
+var sd = Assign.suggest(x.day.cases, roster, DATA, x.b)[0];
+eq(sd && sd.replaces, '', 'a case checked off before its resident was marked out is over — it is not reopened');
+// a cover picked twice, or a cover who is out too, is an open need — not silence
+x = board({ absences: [{ id: 'a', name: 'Cheng', am: true, pm: true, reason: 'vacation', coverAM: 'Wibbelsman', coverPM: 'Wibbelsman' },
+  { id: 'b', name: 'Calotti', am: true, pm: true, reason: 'vacation', coverAM: 'Wibbelsman', coverPM: 'Wibbelsman' }] });
+var dbl = x.b.needs.filter(function (n) { return n.type === 'absence' && n.name === 'Calotti'; });
+eq(dbl.length + ' | ' + (dbl[0] && dbl[0].blocked), '2 | Wibbelsman is covering Cheng', 'one cover picked for two: the second absence is open, saying why');
+eq(x.b.coverOf('Calotti', 'am') + '|' + x.b.coverOf('Cheng', 'am'), '|Wibbelsman', '…and the board names the cover only where it happens');
+x = board({ absences: [{ id: 'a', name: 'Cheng', am: true, pm: true, reason: 'vacation', coverAM: 'Wibbelsman', coverPM: 'Wibbelsman' },
+  { id: 'b', name: 'Wibbelsman', am: true, pm: true, reason: 'sick', coverAM: 'NC', coverPM: 'NC' }] });
+var gone = x.b.needs.filter(function (n) { return n.type === 'absence' && n.name === 'Cheng'; });
+eq(gone.length + ' | ' + (gone[0] && gone[0].blocked), '2 | Wibbelsman is out too', 'a cover who is out too: open, saying why');
 
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures) process.exitCode = 1; else console.log('OK');

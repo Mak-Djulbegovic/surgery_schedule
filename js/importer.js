@@ -242,6 +242,10 @@
       if (um) {
         marked = true;
         tail = trim(um[1]);
+        // 'TBD (Cheng out)' — the app's line for a case whose resident is out
+        var gm = /^\(([^()]+?) out\)\s*(.*)$/.exec(tail);
+        var ga = gm && whoAt(trim(gm[1]), names, unknownNames);
+        if (ga && ga.len === trim(gm[1]).length) { c.assigned = ga.name; tail = trim(gm[2]); }
       } else {
         var a = whoAt(who, names, unknownNames);
         if (!a) return null;
@@ -391,6 +395,9 @@
       head = head.replace(sm[0], ' ');
     }
     var rawLabel = trim(head.replace(/\s+/g, ' '));
+    // no label at all ('AM: Bair', ': Bair'): a line that could not be read
+    // (it threw and blanked the paste screen — review 10/19/2026)
+    if (!rawLabel) return null;
     if (NOT_CLINICS[rawLabel.toLowerCase()]) return { info: true };
     var label = clinicLabelOf(rawLabel, clinics);
     if (!label) return { notClinic: rawLabel };
@@ -501,7 +508,7 @@
         if (!cl) { out.unknown.push(raw); return; }
         out.read++;
         if (cl.info) return;
-        if (cl.notClinic) { out.notClinics.push(raw); return; }
+        if (cl.notClinic != null) { out.notClinics.push(raw); return; }
         cl.sessions.forEach(function (s) {
           out.clinics.push({
             label: cl.label, session: s, count: cl.count, extra: cl.extra,

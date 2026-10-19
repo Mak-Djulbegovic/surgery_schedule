@@ -321,7 +321,7 @@ function av(list, n) { return list.filter(function (x) { return x.name === n; })
 var ch2 = av(avAM, 'Cheng');
 eq(ch2 && ch2.group, 'free', 'Cheng (Surg 1, Henry x10) is available AM…');
 same(ch2 && ch2.ranges.map(function (r) { return [r.start, r.end]; }), [[450, 615]], '…until 10:15, his one service case (the AM counts from 7:30, the OR start)');
-ok(ch2 && ch2.gaps.some(function (g) { return g.start === 615 && /Henry x10/.test(g.label); }), '…and the gap is labelled with the case');
+ok(ch2 && ch2.gaps.some(function (g) { return g.start === 615 && /Henry ×10/.test(g.label); }), '…and the gap is labelled with the case');
 eq(av(avPM, 'Cheng') && av(avPM, 'Cheng').full, true, 'Cheng is available all afternoon');
 eq(av(avAM, 'Tang') && av(avAM, 'Tang').group, 'pull', 'Tang (Retina Private) is listed to pull first');
 eq(av(avAM, 'Patel') && av(avAM, 'Patel').group, 'pull', 'Patel (Uveitis AM) is listed to pull first');
@@ -363,6 +363,47 @@ ok(!b.warnings.some(function (w) { return /Camacho is covering Cotton/.test(w); 
 b = Status.build(r1021, day({ nightFloat: 'Cotton', absences: [{ id: 'x', name: 'Camacho', am: false, pm: true, reason: 'sick', coverAM: '', coverPM: '' }] }), DATA);
 eq(b.statusAt('Camacho', 540).covering, 'Cotton', 'Day Float out only PM: still covers Cotton in the morning');
 eq(b.needs.filter(function (n) { return n.type === 'absence' && n.auto; }).map(function (n) { return n.session; }).join(), 'pm', '…the afternoon is the open need');
+
+/* ---------- a coverer's own clinic: one gap for the session (review 10/19/2026) ---------- */
+// Hamou (Peds / CPEC) covers Cheng (Surg 1) all day and, as Surg 1, takes a
+// 1:30 list: CPEC PM is one short all afternoon because of the cover — not
+// two gaps split at 1:30, the second offering a case backup that cannot fill it
+b = Status.build(roster, day({
+  absences: [{ id: 'ch', name: 'Cheng', am: true, pm: true, reason: 'vacation', coverAM: 'Hamou', coverPM: 'Hamou' }],
+  cases: [{ id: 'h1', section: 'wills', surgeon: 'Hark', count: 2, serviceCount: 2, start: '1330', category: 'cornea', assigned: 'Hamou', backup: '' }]
+}), DATA);
+var cpecGaps = b.needs.filter(function (n) { return n.type === 'clinic' && n.clinic === 'CPEC' && n.holder === 'Hamou'; });
+eq(cpecGaps.length, 1, 'coverer pulled into a case: their own CPEC PM is one gap, not split at the case');
+eq(cpecGaps[0] && cpecGaps[0].start + '-' + cpecGaps[0].end, '720-' + b.dayEnd, '…for the whole afternoon');
+eq(cpecGaps[0] && cpecGaps[0].whyKind !== 'case' && cpecGaps[0].awayFor, 'Cheng', '…caused by covering Cheng (no case backup offered)');
+eq(cpecGaps[0] && cpecGaps[0].awayAs, 'Surg 1', '…as Surg 1');
+
+// "OK — CPEC runs one short" acknowledges exactly that cause, and lapses with it
+var ack = cpecGaps[0] && cpecGaps[0].ackKey;
+eq(ack, 'CPEC|pm|Hamou|Cheng', 'the one-short need carries the key of its cause');
+b = Status.build(roster, day({
+  absences: [{ id: 'ch', name: 'Cheng', am: true, pm: true, reason: 'vacation', coverAM: 'Hamou', coverPM: 'Hamou' }],
+  shortOk: { 'CPEC|pm|Hamou|Cheng': true }
+}), DATA);
+eq(b.needs.filter(function (n) { return n.type === 'clinic' && n.clinic === 'CPEC' && n.holder === 'Hamou'; }).length, 0, '…acknowledged: no longer open');
+b = Status.build(roster, day({
+  absences: [{ id: 'ch', name: 'Teng', am: true, pm: true, reason: 'vacation', coverAM: 'Hamou', coverPM: 'Hamou' }],
+  shortOk: { 'CPEC|pm|Hamou|Cheng': true }
+}), DATA);
+eq(b.needs.filter(function (n) { return n.type === 'clinic' && n.clinic === 'CPEC' && n.holder === 'Hamou' && n.session === 'pm'; }).length, 1, '…covering someone else instead: open again');
+
+/* ---------- the Night Float resident added by hand (review 10/19/2026) ---------- */
+// The Day-Float-out need says to add the Night Float resident on Out today:
+// doing so keeps them out all day, and the Day Float still covers any session left blank
+b = Status.build(r1021, day({ nightFloat: 'Cotton', absences: [
+  { id: 'x', name: 'Camacho', am: false, pm: true, reason: 'sick', coverAM: '', coverPM: '' },
+  { id: 'y', name: 'Cotton', am: false, pm: true, reason: 'vacation', coverAM: '', coverPM: 'Calotti' }
+] }), DATA);
+eq(b.isOut('Cotton', 'am') && b.isOut('Cotton', 'pm'), true, 'Night Float added for the PM only: still out all day (post-call)');
+eq(b.coverOf('Cotton', 'am') + ' | ' + b.coverOf('Cotton', 'pm'), 'Camacho | Calotti', '…the Day Float covers the morning left blank, the pick covers the PM');
+eq(b.statusAt('Camacho', 540).kind !== 'free' && b.statusAt('Camacho', 540).covering, 'Cotton', '…and the Day Float, on Cotton’s duty, is never counted as free');
+ok(!b.warnings.some(function (w) { return /Day Float covers only/.test(w); }), '…with no false "Day Float covers only the Night Float resident" warning');
+ok(!b.availableInSession('am').some(function (x) { return x.name === 'Cotton' || x.name === 'Camacho'; }), '…and neither shows as available in the morning');
 
 /* ---------- weekend ---------- */
 b = Status.build(Engine.resolveDay('2026-09-26', DATA), day({}), DATA);

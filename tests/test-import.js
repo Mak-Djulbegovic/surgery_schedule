@@ -342,6 +342,14 @@ var rn = roundTrip(tn);
 eq(roundTrip(rn.text).text, tn, 'notes with brackets come back unchanged, paste after paste');
 eq(bySurgeon(rn.day.cases, 'Hark').notes + ' | ' + bySurgeon(rn.day.cases, 'Hark').backupNote, 'tissue (Lions) | ', '…and stay notes, not a backup note');
 
+// a clinic line with no label is a line that could not be read — it threw
+// and left the paste screen blank (review 10/19/2026)
+['AM: Bair', ': Bair', '(28 x 2): Parekh'].forEach(function (ln) {
+  var pl = null;
+  try { pl = ImportFmt.parse('Clinics\n' + ln, { names: names, clinics: roster.clinics }); } catch (e) { pl = null; }
+  ok(pl && pl.unknown.indexOf(ln) !== -1, 'a clinic line with no label is listed as not read, no crash: "' + ln + '"');
+});
+
 if (failures) {
   console.error(failures + ' failure(s) of ' + checks);
   process.exit(1);

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Surg Schedule Builder</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 38 38' width='38' height='38'%3E%3Ccircle cx='19' cy='19' r='13' fill='#1a73b8'/%3E%3Cpath d='M19.00 12.70L19.00 7.30M20.95 13.01L22.24 9.01M22.70 13.90L25.88 9.53M24.10 15.30L27.49 12.83M24.99 17.05L30.13 15.38M25.30 19.00L29.50 19.00M24.99 20.95L30.13 22.62M24.10 22.70L27.49 25.17M22.70 24.10L25.88 28.47M20.95 24.99L22.24 28.99M19.00 25.30L19.00 30.70M17.05 24.99L15.76 28.99M15.30 24.10L12.12 28.47M13.90 22.70L10.51 25.17M13.01 20.95L7.87 22.62M12.70 19.00L8.50 19.00M13.01 17.05L7.87 15.38M13.90 15.30L10.51 12.83M15.30 13.90L12.12 9.53M17.05 13.01L15.76 9.01' stroke='#c3e5f8' stroke-width='1.1' stroke-linecap='round' opacity='0.9'/%3E%3Ccircle cx='19' cy='19' r='5.2' fill='#0a2d4f'/%3E%3Ccircle cx='21.4' cy='16.6' r='1.6' fill='#fff'/%3E%3Ccircle cx='16.9' cy='21.2' r='0.7' fill='#fff' opacity='0.65'/%3E%3Ccircle cx='19' cy='19' r='13' fill='none' stroke='#0b3a63' stroke-width='1.6'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=23">
+<link rel="stylesheet" href="css/style.css?v=24">
 </head>
 <body class="home-active">
 
@@ -49,13 +49,13 @@
     <footer class="home-foot">
       <p class="home-quote" id="homeQuote"></p>
       <div class="home-links">
-        <button type="button" class="btn-link" id="btnHomeHowto">How it works</button>
+        <button type="button" class="btn-link" id="btnHomeHowto">How-to</button>
         <span class="home-dot" aria-hidden="true">·</span>
         <button type="button" class="btn-link" id="btnHomeFlow">Flow chart</button>
         <span class="home-dot" aria-hidden="true">·</span>
-        <button type="button" class="btn-link" id="btnHomeReference">Block schedules &amp; rules</button>
+        <button type="button" class="btn-link" id="btnHomeReference">Block schedules</button>
         <span class="home-dot" aria-hidden="true">·</span>
-        <button type="button" class="btn-link" id="btnHomeSetup">Set up a new year</button>
+        <button type="button" class="btn-link" id="btnHomeSetup">Setup</button>
       </div>
     </footer>
   </div>
@@ -80,21 +80,20 @@
     <span class="save-state" id="saveState" title="Saved automatically, in this browser only — nobody else can see or change it"></span>
     <div class="header-actions">
       <details class="more-menu lib-menu" id="libMenu">
-        <summary title="How-to, CPEC sheet, block schedules, setup">Library ▾</summary>
+        <summary>Library ▾</summary>
         <div class="menu-pop">
-          <button type="button" class="btn" data-lib="import">Paste a sent schedule</button>
           <button type="button" class="btn" data-lib="howto">How-to</button>
           <button type="button" class="btn" data-lib="flow">Flow chart</button>
-          <button type="button" class="btn" data-lib="cpec">CPEC block schedule</button>
-          <button type="button" class="btn" data-lib="reference">Block schedules &amp; rules</button>
-          <button type="button" class="btn" data-lib="setup">Setup / new year</button>
+          <button type="button" class="btn" data-lib="cpec">CPEC sheet</button>
+          <button type="button" class="btn" data-lib="reference">Block schedules</button>
+          <button type="button" class="btn" data-lib="setup">Setup</button>
         </div>
       </details>
       <details class="more-menu" id="moreMenu">
-        <summary title="More actions">⋯</summary>
+        <summary aria-label="More actions" title="More actions">⋯</summary>
         <div class="menu-pop">
+          <button type="button" class="btn" data-lib="import">Paste a sent schedule</button>
           <button type="button" class="btn" id="btnYesterday">Start from yesterday</button>
-          <button type="button" class="btn" id="btnSetupMenu">Setup / new year</button>
           <button type="button" class="btn btn-danger" id="btnClear">Clear day</button>
         </div>
       </details>
@@ -103,12 +102,12 @@
 </header>
 
 <nav class="tabbar" id="tabbar" role="tablist" aria-label="Sections">
-  <button type="button" class="tab active" data-tab="out" role="tab"><span class="tab-num">1</span>Out today<span class="tab-badge" id="badge-out"></span></button>
+  <button type="button" class="tab active" data-tab="out" role="tab"><span class="tab-num">1</span><span class="tab-long">Out today</span><span class="tab-short">Out</span><span class="tab-badge" id="badge-out"></span></button>
   <button type="button" class="tab" data-tab="roster" role="tab"><span class="tab-num">2</span>Roster</button>
   <button type="button" class="tab" data-tab="surgery" role="tab"><span class="tab-num">3</span>Surgery<span class="tab-badge" id="badge-surgery"></span></button>
   <button type="button" class="tab" data-tab="clinics" role="tab"><span class="tab-num">4</span>Clinics<span class="tab-badge" id="badge-clinics"></span></button>
   <button type="button" class="tab" data-tab="coverage" role="tab"><span class="tab-num">5</span>Coverage<span class="tab-badge" id="badge-coverage"></span></button>
-  <button type="button" class="tab" data-tab="preview" role="tab"><span class="tab-num">6</span>Preview &amp; Copy</button>
+  <button type="button" class="tab" data-tab="preview" role="tab"><span class="tab-num">6</span><span class="tab-long">Preview &amp; Copy</span><span class="tab-short">Copy</span></button>
 </nav>
 <div class="avail-strip hidden" id="availStrip" role="status" aria-live="polite"></div>
 
@@ -152,7 +151,7 @@
     <div data-head="clinics"></div>
     <div id="clinicNeeds"></div>
     <div class="card">
-      <h2>Clinics <span class="h-note">Patient counts come from the EMRs — type them in</span></h2>
+      <h2>Clinics</h2>
       <div id="clinicDressBanner" class="dress-banner hidden"></div>
       <div id="clinicRows"></div>
     </div>
@@ -163,7 +162,7 @@
     <div data-head="coverage"></div>
     <div id="coverageBody"></div>
     <div class="card">
-      <h2>Add-ons <span class="h-note">Call coverage — printed at the end of the copied schedule</span></h2>
+      <h2>Add-on call <span class="h-note">Printed at the end of the copied schedule</span></h2>
       <div id="addOnsCoverage"></div>
     </div>
     <div id="coverageRules"></div>
@@ -174,10 +173,8 @@
     <div data-head="preview"></div>
     <div class="send-col">
       <div class="toolbar card-lite">
-        <button type="button" class="btn btn-primary" id="btnCopyHTML">Copy formatted</button>
-        <button type="button" class="btn" id="btnCopyText">Copy plain text</button>
+        <button type="button" class="btn btn-primary" id="btnCopyHTML">Copy</button>
         <button type="button" class="btn" id="btnCopyAddons">Copy add-ons only</button>
-        <span class="toolbar-note">Paste straight into email or chat — formatting is kept.</span>
         <div class="send-check" id="sendCheck" aria-live="polite"></div>
       </div>
       <div class="document card" id="previewDoc"></div>
@@ -217,12 +214,12 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-<script src="js/data.js?v=23"></script>
-<script src="js/engine.js?v=23"></script>
-<script src="js/status.js?v=23"></script>
-<script src="js/assign.js?v=23"></script>
-<script src="js/export.js?v=23"></script>
-<script src="js/importer.js?v=23"></script>
-<script src="js/app.js?v=23"></script>
+<script src="js/data.js?v=24"></script>
+<script src="js/engine.js?v=24"></script>
+<script src="js/status.js?v=24"></script>
+<script src="js/assign.js?v=24"></script>
+<script src="js/export.js?v=24"></script>
+<script src="js/importer.js?v=24"></script>
+<script src="js/app.js?v=24"></script>
 </body>
 </html>

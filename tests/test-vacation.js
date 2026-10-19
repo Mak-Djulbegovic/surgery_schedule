@@ -60,10 +60,10 @@ has(text, 'Ransone (CPEC/Plastics) NC\nDjulbegovic at AAO Fri', 'free-text note 
 /* ---------- clinic lines follow who is out ---------- */
 text = ExportFmt.buildText(day({ absences: [{ name: 'Ransone', am: true, pm: true, coverAM: 'Patel', coverPM: 'Hamou' }] }));
 has(text, 'Plastics PM: **Hamou (for Ransone)**', 'coverer stands in on the absent resident’s clinic');
-has(text, 'Uveitis AM: none', 'Patel (covering Ransone) is not listed in their own Uveitis AM — it prints none (the gap)');
+lacks(text, 'Uveitis AM', 'Patel (covering Ransone) leaves Uveitis AM — no cover needed, so no line (never "none"), as sent');
 text = ExportFmt.buildText(day({ absences: [{ name: 'Ransone', am: true, pm: true, coverAM: 'NC', coverPM: 'NC' }] }));
 has(text, 'Plastics PM: none', 'NC: the absent resident drops off and the uncovered clinic prints none (as sent schedules do)');
-has(text, 'Uveitis AM: **Patel**', 'Patel stays in Uveitis when not covering');
+lacks(text, 'Uveitis AM', 'Retina / Uveitis lines are not sent (the 9/21 schedule has none) unless something was typed for them');
 
 // Night Float week: the NF resident's clinic goes to Day Float.
 // Mon 10/12: Williamson (NF) has Glaucoma PM; Camacho is Day Float.
@@ -98,6 +98,35 @@ var d1021 = { date: '2026-10-21', nightFloat: 'Cotton', vacation: '', cases: [],
 text = ExportFmt.buildText(d1021);
 lacks(text, 'Camacho (for Cotton)', 'Day Float on vacation: never printed standing in for the Night Float resident');
 ok(/(^|\n)Camacho \(Day Float\)(\n|$)/.test(text), 'the Day Float line says no "coverage TBD" (Day Float needs no cover)');
+
+// A case whose resident is out is printed 'TBD (Cheng out)', not as theirs
+// — and a paste reads it back (round trip)
+var r1019 = Engine.resolveDay('2026-10-19', DATA);
+var d1019 = { date: '2026-10-19', nightFloat: '', nfCleared: true, vacation: '', clinicCounts: {}, clinicStaffOverrides: {}, addOns: [], roster: r1019,
+  absences: [{ name: 'Cheng', am: false, pm: true, reason: 'sick', coverAM: '', coverPM: 'NC' }],
+  cases: [
+    { id: 'k1', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1300', category: 'cataract', assigned: 'Cheng', backup: '', backupNote: '', notes: '' },
+    { id: 'k2', section: 'wills', surgeon: 'Wisner', count: 2, serviceCount: 2, start: '0730', category: 'cataract', assigned: 'Cheng', backup: '', backupNote: '', notes: '' }
+  ] };
+text = ExportFmt.buildText(d1019);
+ok(text.indexOf('-Tyson x3 (1300 start) - **TBD (Cheng out)**') !== -1, 'Cheng out PM: his 1 PM list prints TBD (Cheng out)');
+ok(text.indexOf('-Wisner x2 (0730 start) - **Cheng**') !== -1, '…his 7:30 list (he is in for the AM) still prints Cheng');
+var ImportFmt = require(path.join(__dirname, '..', 'js', 'importer.js'));
+var back = ImportFmt.parse(text, r1019, DATA);
+var tyson = back.cases.filter(function (c) { return c.surgeon === 'Tyson'; })[0];
+eq(tyson && tyson.assigned, 'Cheng', 'the paste reads TBD (Cheng out) back as Cheng’s case');
+
+/* ---------- the copied schedule names only covers the board has (review 10/19/2026) ---------- */
+var Status = require(path.join(__dirname, '..', 'js', 'status.js'));
+var r19 = Engine.resolveDay('2026-10-19', DATA); // Surg 2 Cheng
+function copy19(abs) {
+  return ExportFmt.buildText({ date: '2026-10-19', nightFloat: r19.nightFloat, cases: [], clinicCounts: {}, clinicStaffOverrides: {}, addOns: [], absences: abs, roster: r19 });
+}
+var t19 = copy19([{ id: 'a', name: 'Cheng', am: true, pm: true, reason: 'vacation', coverAM: 'Wibbelsman', coverPM: 'Wibbelsman' },
+  { id: 'b', name: 'Wibbelsman', am: true, pm: true, reason: 'sick', coverAM: 'NC', coverPM: 'NC' }]);
+has(t19, 'Surg 2 - TBD (Cheng out)', 'a cover who is out too: the Surg line says TBD, not the absent cover');
+lacks(t19, 'Wibbelsman (for Cheng)', '…and never names them as standing in');
+has(t19, 'Cheng (Surg 2) — coverage TBD', '…and the Vacation line agrees');
 
 console.log(checks + ' checks, ' + failures + ' failure(s)');
 if (failures) process.exitCode = 1; else console.log('OK');

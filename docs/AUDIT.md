@@ -199,6 +199,45 @@ docs/UISPEC6.md, "Surg 2 and the globe".
     CPEC urgent-case line, the Surg 3 / Surg 4 clinic list, the "both
     clinics" warning) are built in, not spelled out.
 
+## Fifth pass — eight reviewers (10/19/2026)
+
+The merged change, the whole app, each page, design and usability, each
+reproduced in Node or the browser. Fixed (regression tests in
+test-status / test-coverage / test-import / test-vacation):
+
+37. **A list checked off before it began** took the check-off time as its
+    start and cut short the resident's running list — they showed free while
+    scrubbed and were offered for other cases. It keeps its start now and
+    ends nothing.
+38. **The back-to-back rule dropped a partly private list's later service
+    time** when another list came between; it clips span by span.
+39. **Adding the Night Float resident on Out today** (what the Day-Float-out
+    need asks) replaced the automatic absence: the post-call resident could
+    be put in a morning clinic, the Day Float counted as free. Merged now.
+40. **A cover picked twice, or a cover who is out too, was dropped
+    silently** — the ER could go unstaffed with no need raised, and the
+    copied schedule still named the cover. Both are open needs now; every
+    tab and the copy read covers from the board (`board.coverOf`).
+41. **A later globe took Surg 2 from an earlier add-on** (lists run to the
+    end of their session, so they all overlapped); the globe follows it.
+42. **The planner dropped the clinic hand-off** when Surg 2 also had a later
+    list, and **two globes handed one clinic to two people**.
+43. **Reassigning a case kept its backup** — "Cheng; Cheng" in the copy.
+44. **A blank line** (Enter after the last case) was suggested a resident,
+    counted as open and copied as "-? x1".
+45. **Svc stayed 1 when # changed** ("Hark x4 … x1 service").
+46. **"OK / Take X off CPEC"** edited who staffs the clinic and outlived the
+    absence (the coverer then showed free); it is an acknowledgment now.
+47. **× on a struck clinic chip** silently removed the cover from the copy.
+48. **The paste screen went blank** on a clinic line with no label.
+49. **Odd starts:** "PM TF" counted for the morning; a 5:30 PM start ended
+    before it began; two lists at one start were "double-booked".
+50. **Smaller:** the coverer's own clinic gap listed twice; a checked-off
+    case reopened when its resident was later marked out; Coverage badge on
+    weekends; impossible URL dates; the CPEC sheet's highlight did not follow
+    the date; the add-on call kept an old configuration's Surg 2; "until X is
+    back" for an owner out all day; send-check green over contradictions.
+
 ## Still open — questions for the chief
 
 - **Cooper buddies are not on the board.** The buddy (pulled from, e.g.,

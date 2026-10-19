@@ -12,6 +12,11 @@
   // v2 (9/2026) keeps v1's storage keys, so days saved in v1 open here.
   // The archived v1 copy (v1/index.html) uses its own keys.
   var APP_VERSION = 'v2';
+  // The build, shown in the header and on Home, so an old copy held in the
+  // browser's cache is plain to see. Bump it with the ?v= numbers in
+  // index.html on every release.
+  var BUILD = '24';
+  var BUILD_DATE = '10/19/26';
   var LS_PREFIX = 'surgsched:v1:day:';
   var DATA_OVERRIDE_KEY = 'surgsched:v1:dataOverride';
   // Where this browser last was (date + tab) — for "Pick up where you left off".
@@ -214,6 +219,9 @@
       cases: [],
       clinicCounts: {},
       clinicStaffOverrides: {},
+      // "OK — CPEC runs one short": acknowledged clinic gaps, keyed to their
+      // cause ('CPEC|am|Wibbelsman|Cheng') so they lapse when it changes
+      shortOk: {},
       suggestions: {},
       seq: 1
     };
@@ -326,6 +334,9 @@
           added: (v && Array.isArray(v.added)) ? v.added.map(String) : []
         };
       });
+    }
+    if (st.shortOk && typeof st.shortOk === 'object') {
+      Object.keys(st.shortOk).forEach(function (k) { if (st.shortOk[k]) out.shortOk[String(k)] = true; });
     }
     if (st.suggestions && typeof st.suggestions === 'object') out.suggestions = st.suggestions;
     var maxId = 0;
@@ -524,6 +535,22 @@
      override, and back-to-back cases for one attending are normal.
      opts: { spans, session, exclude (case id), suggested, emptyLabel,
              extra: [{ value, text }], hideNames: [names] } */
+  // Covering an absence (Out today): the chief's covers come from clinics
+  // and Retina / Uveitis, same year first ("Ransone c/b Patel AM (Uveitis)
+  // | Hamou PM (CPEC)"); a Surg role or OR block with no case yet is listed
+  // after them — at step 1 no cases are in, so they read "free" but are the
+  // ones about to operate (review 10/19/2026)
+  var ABSENCE_GROUPS = [
+    { kind: 'free', label: 'Free' },
+    { kind: 'pull', label: 'Retina / Uveitis — no cover needed' },
+    { kind: 'clinic', label: 'Clinic — leaves a gap' },
+    { kind: 'surgor', label: 'Surg / OR — likely operating' },
+    { kind: 'case', label: 'In a case then' },
+    { kind: 'duty', label: 'Day Float or off-site (Cooper)' },
+    { kind: 'never', label: 'Never pulled (ER, consults, Path)' },
+    { kind: 'out', label: 'Out' },
+    { kind: 'off', label: 'Residents' }
+  ];
   var KIND_GROUPS = [
     { kind: 'free', label: 'Free' },
     { kind: 'pull', label: 'Pull first — Retina / Uveitis, no cover needed' },
@@ -549,8 +576,8 @@
     var b = App.board;
     if (!b || !b.byName[name]) return null;
     if (opts.spans && opts.spans.length) return b.statusDuringSpans(name, opts.spans, { exclude: opts.exclude });
-    if (opts.session === 'am' || opts.session === 'pm') {
-      var from = opts.session === 'am' ? b.dayStart : b.noon;
+    if (opts.session === 'am' || opts.session === 'pm' || opts.session === 'day') {
+      var from = opts.session === 'pm' ? b.noon : b.dayStart;
       var to = opts.session === 'am' ? b.noon : b.dayEnd;
       return b.statusDuring(name, from, to, { exclude: opts.exclude });
     }
@@ -583,20 +610,30 @@
   // OR block with nothing booked is just "free".
   function statusBrief(st) {
     if (!st) return '';
-    if (st.kind === 'free' && /, no case$/.test(st.label || '')) return 'free';
+    // a stand-in with nothing booked too: 'Surg 2 for Cheng' is named beside it
+    if (st.kind === 'free' && (/, no case$/.test(st.label || '') || st.covering)) return 'free';
     if (st.kind === 'free') return 'free (' + st.label + ')';
     if (st.kind === 'clinic' && !st.covering) return 'in ' + (st.clinic || st.label);
     return statusShort(st);
   }
 
-  // What Out today says about `name`, for each session they are out ->
-  // [{ s, who }] — who: the coverer, 'NC', or '' (not decided yet).
+  // Who covers `name`, for each session they are out, as the board has it ->
+  // [{ s, who, blocked }] — who: the coverer, 'NC', or '' (nobody yet);
+  // blocked: why the cover picked on Out today cannot (out too, or
+  // covering someone else then) — every tab says the same (review 10/19/2026)
   function outCovers(name) {
     var b = App.board;
     if (!b || !b.byName[name]) return [];
     return ['am', 'pm'].filter(function (s) { return b.isOut(name, s); }).map(function (s) {
       var abs = (b.base[name][s] && b.base[name][s].absence) || {};
-      return { s: s, who: trim(s === 'am' ? abs.coverAM : abs.coverPM) };
+      var raw = trim(s === 'am' ? abs.coverAM : abs.coverPM);
+      var who = b.coverOf ? b.coverOf(name, s) : raw;
+      var blocked = '';
+      if (!who && raw && raw !== 'NC' && b.byName[raw]) {
+        var other = (b.absences || []).filter(function (x) { return x.name !== name && b.coverOf(x.name, s) === raw; })[0];
+        blocked = b.isOut(raw, s) ? raw + ' is out too' : other ? raw + ' is covering ' + other.name : raw + ' cannot';
+      }
+      return { s: s, who: who || (raw === 'NC' ? 'NC' : ''), blocked: blocked };
     });
   }
 
@@ -606,11 +643,12 @@
     var oc = outCovers(name);
     if (!oc.length) return '';
     var head = oc.length === 2 ? 'Out today' : 'Out ' + oc[0].s.toUpperCase();
-    if (oc.length === 2 && oc[0].who !== oc[1].who) {
+    if (oc.length === 2 && (oc[0].who !== oc[1].who || oc[0].blocked !== oc[1].blocked)) {
       return head + ' — AM ' + (oc[0].who || 'TBD') + ' · PM ' + (oc[1].who || 'TBD');
     }
     var w = oc[0].who;
-    return head + ' — ' + (w === 'NC' ? 'not covered (NC)' : w ? w + ' covers' : 'cover not picked yet');
+    if (!w && oc[0].blocked) return head + ' — TBD (' + oc[0].blocked + ')';
+    return head + ' — ' + (w === 'NC' ? 'NC' : w ? w + ' covers' : 'TBD');
   }
 
   // ' (out today — Wibbelsman covers)' after a name, or ''
@@ -630,6 +668,7 @@
       if (y) y.residents.forEach(function (n) { names.push({ name: n, year: y.short || yk }); });
     });
     var hide = opts.hideNames || [];
+    var dis = opts.disable || null; // { name: why } — listed, not pickable
     var sugg = opts.suggested || '';
     var groups = {};
     names.forEach(function (x) {
@@ -639,22 +678,37 @@
       var st = statusFor(n, opts);
       var kind = pickKind(st);
       if (kind === 'out' && n !== value) return; // out → not offered
+      if (opts.forAbsence && kind === 'free' && st && (st.cls === 'surg' || st.cls === 'or')) kind = 'surgor';
       (groups[kind] || (groups[kind] = [])).push({ name: n, year: x.year, st: st });
     });
+    // their own duty that session ('CPEC', 'Surg 2') — not what picking them
+    // would make it ('for Cheng: Surg 2')
+    function ownDuty(n) {
+      var ss = opts.session === 'day' ? ['am', 'pm'] : [opts.session];
+      var d = ss.map(function (s) { return dutyOf(n, s); }).filter(Boolean);
+      return d.length === 2 && d[0] === d[1] ? d[0] : d.join('/');
+    }
+    var absentYear = opts.forAbsence ? yearOf(opts.forAbsence) : '';
     if (sugg) {
       var og0 = el('optgroup', { label: 'Suggested' });
       var sst = statusFor(sugg, opts);
       og0.appendChild(el('option', { value: sugg, text: sugg + (sst && sst.label ? ' — ' + statusShort(sst) : '') }));
       sel.appendChild(og0);
     }
-    KIND_GROUPS.forEach(function (g) {
+    (opts.forAbsence ? ABSENCE_GROUPS : KIND_GROUPS).forEach(function (g) {
       var list = groups[g.kind];
       if (!list || !list.length) return;
+      if (absentYear) {
+        list = list.filter(function (x) { return yearOf(x.name) === absentYear; })
+          .concat(list.filter(function (x) { return yearOf(x.name) !== absentYear; }));
+      }
       var og = el('optgroup', { label: g.label });
       list.forEach(function (x) {
-        var detail = x.st && x.st.label ? ' — ' + statusShort(x.st) : '';
+        var off = dis && dis[x.name];
+        var own = opts.forAbsence ? ownDuty(x.name) : '';
+        var detail = off ? ' — ' + off : opts.forAbsence ? (own ? ' — ' + own : '') : x.st && x.st.label ? ' — ' + statusShort(x.st) : '';
         var o = el('option', { value: x.name, text: x.name + ' (' + x.year + ')' + detail });
-        if (g.kind === 'never' && x.name !== value) o.disabled = true; // never pulled from Path
+        if ((g.kind === 'never' || off) && x.name !== value) o.disabled = true; // never pulled from Path
         og.appendChild(o);
       });
       sel.appendChild(og);
@@ -672,7 +726,7 @@
     var chip = el('span', { class: 'name-chip ' + yearOf(name) + (onRemove ? '' : ' no-x') }, [name]);
     if (onRemove) {
       chip.appendChild(el('button', {
-        type: 'button', class: 'btn-icon danger', title: 'Remove ' + name,
+        type: 'button', class: 'btn-icon danger', title: 'Remove ' + name, 'aria-label': 'Remove ' + name,
         text: '×', onclick: onRemove
       }));
     }
@@ -853,7 +907,8 @@
   /* ------------------------------------------------------------------ */
 
   function renderHeader() {
-    $('ayLabel').textContent = (data().ayLabel || '') + ' · ' + APP_VERSION;
+    $('ayLabel').textContent = (data().ayLabel || '') + ' · ' + APP_VERSION + ' · build ' + BUILD;
+    $('ayLabel').title = 'Build ' + BUILD + ' (' + BUILD_DATE + ')';
     renderPageHeads();
     var chips = $('dayChips');
     clearNode(chips);
@@ -876,7 +931,7 @@
   // Page head on every tab: the step's icon (same as the landing cards),
   // "Step n of 6", the title and the weekday + date. Library pages get a
   // book icon and "Library".
-  var LIB_TITLES = { howto: 'How-to', flow: 'Flow chart', cpec: 'CPEC block schedule', reference: 'Block schedules & rules', setup: 'Setup / new year', 'import': 'Paste a sent schedule' };
+  var LIB_TITLES = { howto: 'How-to', flow: 'Flow chart', cpec: 'CPEC sheet', reference: 'Block schedules', setup: 'Setup', 'import': 'Paste a sent schedule' };
   var LIB_ICON = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>';
   var IMPORT_ICON = '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><line x1="12" y1="10" x2="12" y2="17"/><polyline points="9 14 12 17 15 14"/>';
 
@@ -890,7 +945,7 @@
     var icon = el('span', { class: 'ph-icon', 'aria-hidden': 'true' });
     icon.innerHTML = iconSvg(step ? step.icon : (tab === 'import' ? IMPORT_ICON : LIB_ICON), 20);
     var d = App.state ? parseISO(App.state.date) : null;
-    var head = el('div', { class: 'page-head' }, [
+    var head = el('div', { class: 'page-head' + (step ? ' workflow' : '') }, [
       icon,
       el('div', { class: 'ph-text' }, [
         el('span', { class: 'ph-eyebrow', text: step ? 'Step ' + (i + 1) + ' of ' + WORKFLOW_TABS.length : (tab === 'import' ? 'Hand-off' : 'Library') }),
@@ -1011,9 +1066,15 @@
     var grid = el('div', { class: 'glance-grid' });
     surgKeys.forEach(function (n) {
       var s = r.surg[n];
-      var tile = el('div', { class: 'glance-tile' }, [
+      // out (Out today): the tile names whoever does the job, as the copied
+      // schedule prints it — 'Bair', for Cheng; 'AM Wibbelsman · PM Aguwa'
+      var oc = outCovers(s.name);
+      var by = { am: s.name, pm: s.name };
+      oc.forEach(function (x) { by[x.s] = x.who === 'NC' ? 'NC' : x.who || 'TBD'; });
+      var shown = by.am === by.pm ? by.am : 'AM ' + by.am + ' · PM ' + by.pm;
+      var tile = el('div', { class: 'glance-tile' + (!oc.length ? '' : oc.some(function (x) { return !x.who; }) ? ' glance-tbd' : oc.some(function (x) { return x.who === 'NC'; }) ? ' glance-nc' : '') }, [
         el('div', { class: 'glance-role', text: 'Surg ' + n }),
-        el('div', { class: 'glance-name', text: s.name })
+        el('div', { class: 'glance-name', text: shown })
       ]);
       // How-to Step 2: Surg 3 and 4 are all day even when the grid shows a
       // clinic — the clinic is where they go when they have no case.
@@ -1029,14 +1090,10 @@
           text: allDay ? 'All day · ' + (s.amText || '—') + ' AM if no case' : 'PM only · AM: ' + (s.amText || '—')
         }));
       }
-      // Out (Out today): who covers takes the role for that session
-      var outTxt = outCoverText(s.name);
-      if (outTxt) {
-        tile.classList.add('glance-out');
-        tile.appendChild(el('div', { class: 'glance-sess', text: outTxt }));
+      if (oc.length) {
+        var blocked = oc.filter(function (x) { return x.blocked; })[0];
+        tile.appendChild(el('div', { class: 'glance-for', text: (oc.length === 1 ? oc[0].s.toUpperCase() + ' ' : '') + 'for ' + s.name + (blocked ? ' — ' + blocked.blocked : '') }));
       }
-      var m = meta['Surg ' + n];
-      if (m) tile.appendChild(el('div', { class: 'glance-sub', text: m.split(';')[0] }));
       grid.appendChild(tile);
     });
     host.appendChild(grid);
@@ -1095,8 +1152,11 @@
     host.appendChild(row);
   }
 
+  // a single input, select or textarea is labelled by its caption; a group
+  // of controls keeps a plain container
   function labeledField(labelText, control, hint) {
-    var f = el('div', { class: 'field' }, [
+    var single = /^(INPUT|SELECT|TEXTAREA)$/.test(control && control.tagName);
+    var f = el(single ? 'label' : 'div', { class: 'field' }, [
       el('span', { class: 'field-label', text: labelText }), control
     ]);
     if (hint) f.appendChild(el('span', { class: 'field-hint', text: hint }));
@@ -1198,7 +1258,7 @@
     var wrap = el('div');
     var d = data();
     st.addOns.forEach(function (row, idx) {
-      var line = el('div', { class: 'addon-row' });
+      var line = el('div', { class: 'addon-row' + (row.auto && row.date ? ' auto' : '') });
 
       // The three standard rows follow the schedule date, so they need no
       // controls — just the label and who is covering. Rows the user adds
@@ -1254,7 +1314,7 @@
         line.appendChild(el('span', { class: 'addon-hint bad', text: nm + ' is out that day' }));
       }
       line.appendChild(el('button', {
-        type: 'button', class: 'btn-icon danger', title: 'Remove row', text: '×',
+        type: 'button', class: 'btn-icon danger', title: 'Remove row', 'aria-label': 'Remove ' + (addOnLabel(row) || 'row'), text: '×',
         onclick: function () {
           st.addOns.splice(idx, 1);
           touch();
@@ -1298,7 +1358,7 @@
         });
         sel.appendChild(og);
       });
-      sel.appendChild(el('option', { value: '__seniors__', text: '← PGY-4s only' }));
+      sel.appendChild(el('option', { value: '__seniors__', text: '← third years only' }));
     } else {
       var y4 = data().years.pgy4;
       ((y4 && y4.residents) || []).forEach(function (n) {
@@ -1373,8 +1433,15 @@
 
   // New line in `section`, right after `afterId` when given; focus lands on
   // its surgeon field.
+  // New lines whose type still follows the attending typed (UI only): a
+  // remembered type, globe/trauma, a CPEC-sheet attending → cataract, JHN →
+  // plastics (review 10/19/2026: every other line needed a manual pick, and
+  // a forgotten one silently got the cataract chain)
+  var catFollows = {};
+
   function addCase(section, afterId) {
     var c = newCase(section);
+    catFollows[c.id] = true;
     var idx = -1;
     if (afterId) App.state.cases.forEach(function (x, i) { if (x.id === afterId) idx = i; });
     if (idx === -1) App.state.cases.push(c);
@@ -1444,7 +1511,9 @@
     suggMap = {};
     if (!window.Assign || !window.Assign.suggest) return;
     try {
-      window.Assign.suggest(App.state.cases, App.roster, data(), App.board).forEach(function (s) {
+      // a blank line (no surgeon, no resident) is a draft: it neither gets
+      // a suggestion nor takes one from another line
+      window.Assign.suggest(App.state.cases.filter(function (c) { return !isDraftCase(c); }), App.roster, data(), App.board).forEach(function (s) {
         suggMap[s.caseId] = s;
       });
     } catch (e) {
@@ -1453,6 +1522,10 @@
   }
 
   function needsResident(c) { return c.serviceCount > 0 && !trim(c.assigned); }
+
+  // Enter after the last line leaves a blank one (review 10/19/2026: it was
+  // suggested a resident, counted as open and copied out as '-? x1')
+  function isDraftCase(c) { return !trim(c.surgeon) && !trim(c.assigned); }
 
   // The case's resident is out while it runs (marked out on Out today after
   // the case was assigned) — the case needs someone new.
@@ -1474,7 +1547,7 @@
   // a service case, not checked off, with nobody on it or whose resident is
   // out. (needsResident alone is for days without a board, e.g. a pasted
   // schedule.)
-  function caseOpen(c) { return c.serviceCount > 0 && !caseDone(c) && (!trim(c.assigned) || assignedOutCase(c)); }
+  function caseOpen(c) { return c.serviceCount > 0 && !caseDone(c) && !isDraftCase(c) && (!trim(c.assigned) || assignedOutCase(c)); }
 
   // 'Surg 2', or 'Surg 2 for Cheng' while standing in for an absent Surg 2,
   // in the session(s) `spans` touch.
@@ -1486,7 +1559,14 @@
       var roles = b.surgRolesAt ? b.surgRolesAt(name, sess[i]) : [];
       if (roles.length) return 'Surg ' + roles[0].n + (roles[0].for ? ' for ' + roles[0].for : '');
     }
+    // out then: someone else holds their role — no tag
+    if (sess.length && sess.every(function (s) { return b.isOut(name, s); })) return '';
     return b.surgRole[name] ? 'Surg ' + b.surgRole[name] : '';
+  }
+
+  // 'cornea' · 'CPEC' · 'CPEC / cornea' — a clinic in running text, acronyms kept
+  function clinicWord(name) {
+    return String(name || '').split(' / ').map(function (w) { return /^[A-Z]{2,}$/.test(w) ? w : w.toLowerCase(); }).join(' / ');
   }
 
   function spanText(spans) {
@@ -1517,8 +1597,31 @@
       if (holdsAlwaysRole(c, name, info.spans[0] && info.spans[0].start)) {
         return { tone: 'amber', follows: true, text: name + ' is operating (' + st.label + ') — ' + window.Assign.alwaysRole(c, data()) + ' always takes the globe: it follows their cases; check in with them' };
       }
+      // …and that globe is no conflict for the list it follows
+      var other = st.caseId && caseById(st.caseId);
+      var oi = other && b.caseInfo[other.id];
+      if (other && other.addOn && trim(other.assigned) === name && oi && oi.start > info.start) {
+        return { tone: 'ok', text: name + ' is operating — ' + caseLabelOf(other) + ' follows this list' };
+      }
+      // their other list has no known end and starts first (or at the same
+      // time, listed first; or this one has no start): this one follows it
+      // — no guessed time, so check in (review 10/19/2026). Red stays for
+      // a typed "Done by" that runs into this list.
+      if (oi && trim(other.assigned) === name && oi.openEnded) {
+        var otherFirst = oi.start < info.start || (oi.start === info.start &&
+          ((info.unknownStart && !oi.unknownStart) || (!!info.unknownStart === !!oi.unknownStart && oi.order < info.order)));
+        if (otherFirst) return { tone: 'amber', follows: true, text: 'Follows ' + caseLabelOf(other) + ' — check in with ' + name };
+        return { tone: 'ok', text: name + ' is operating — ' + caseLabelOf(other) + ' follows this list' };
+      }
       return { tone: 'bad', text: name + ' is double-booked — ' + statusShort(st) };
     }
+    // their earlier list ends where this one starts (back to back): it follows
+    var prevList = null;
+    Object.keys(b.caseInfo).forEach(function (id) {
+      var o = b.caseInfo[id];
+      if (!prevList && o.endsAtNext === c.id && o.assigned === name && !o.done) prevList = o;
+    });
+    if (prevList) return { tone: 'amber', follows: true, text: 'Follows ' + caseLabelOf(prevList.c) + ' — check in with ' + name };
     // Retina / Uveitis: pulled first, no cover needed — as the backup pill shows it
     if (st.kind === 'clinic' && st.pullFirst) return { tone: 'ok', text: name + ' leaves ' + (st.clinic || 'clinic') + ' — no cover needed' };
     if (st.kind === 'clinic') return { tone: 'amber', kind: 'clinic', text: name + ' leaves ' + (st.clinic || 'clinic') + ' for this case' };
@@ -1536,22 +1639,40 @@
     return !!a && a.name === name;
   }
 
+  // The pill's role, short: 'Surg 2' · 'Surg 2 for Cheng' · 'Retina, no
+  // cover' · 'Cooper' — the full reason is the pill's title
   function suggVia(s) {
     var r = (s.reasons && s.reasons[0]) || '';
     var i = r.lastIndexOf('→ ');
     var via = i === -1 ? r : r.slice(i + 2);
-    return via.replace(/ \(remaining-cases chain\)$/, '').replace(/ — Surg 2's discretion$/, '');
+    return via.replace(/ \(remaining-cases chain\)$/, '')
+      .replace(/ — Surg \d always takes it$/, '')
+      .replace(/^junior in (.+?) — no cover needed, Surg 2['’]s discretion$/, '$1, no cover')
+      .replace(/ — Surg 2['’]s discretion$/, '')
+      .replace(/ \(TABs \/ outpatient plastics only\)/, '')
+      .replace(/^Cooper \(third year\)$/, 'Cooper');
   }
 
   function backupNoteFor(c, plan) {
     var S = window.Status;
-    var t = 'to cover ' + String(plan.clinic || 'clinic').toLowerCase() + ' clinic';
+    var t = 'to cover ' + clinicWord(plan.clinic || 'clinic') + ' clinic';
     if (plan.owner && plan.owner !== trim(c.assigned)) t += ' (for ' + plan.owner + ')';
     t += ' during case';
     var info = App.board && App.board.caseInfo[c.id];
     if (S && info && plan.window && info.start < plan.window.start) t += ' if it runs past ' + S.fmtClock(plan.window.start);
     if (plan.second) t += ', 2nd backup ' + plan.second.name + ' (' + plan.second.source + ')';
     return t;
+  }
+
+  // Give case c to `name`. Another resident leaves another clinic, so the
+  // old backup and its note no longer apply (review 10/19/2026: a case
+  // handed on printed "Cheng; Cheng").
+  function setAssigned(c, name) {
+    if (trim(c.assigned) !== trim(name)) {
+      c.backup = '';
+      c.backupNote = '';
+    }
+    c.assigned = name;
   }
 
   function lineOf(id) { return document.querySelector('.srow[data-case-id="' + id + '"]'); }
@@ -1571,6 +1692,7 @@
     var assigned = trim(c.assigned);
     var service = c.serviceCount > 0;
     var picking = resPicking[c.id] === 'res';
+    if (isDraftCase(c) && !picking) return; // a blank line: nothing until a surgeon is typed
 
     if (!service && !assigned && !picking) {
       host.appendChild(el('button', {
@@ -1582,7 +1704,7 @@
     }
     if (picking || (!assigned && !(sugg && sugg.name))) {
       var pick = residentPicker(assigned, function (v) {
-        c.assigned = v;
+        setAssigned(c, v);
         delete resPicking[c.id];
         touch();
         refreshAssignAreas();
@@ -1607,10 +1729,11 @@
       return;
     }
     if (!assigned) {
+      var passed = (sugg.skipped || []).slice(0, 4).map(function (s) { return s.name + ' (' + s.why + ')'; });
       host.appendChild(el('button', {
         type: 'button', class: 'res-pill suggested',
-        title: 'Suggested: ' + (sugg.reasons || []).join(' · ') + ' — click to assign',
-        onclick: function () { c.assigned = sugg.name; touch(); refreshAssignAreas(); }
+        title: (sugg.reasons || []).join(' · ') + (passed.length ? ' · passed over ' + passed.join(', ') : ''),
+        onclick: function () { setAssigned(c, sugg.name); touch(); refreshAssignAreas(); }
       }, [
         el('span', { class: 'res-mark', text: '+' }),
         el('b', { text: sugg.name }),
@@ -1689,7 +1812,17 @@
       var win = plan && plan.window ? plan.window : info;
       if (cur !== 'NC' && bd && bd.byName[cur] && win && win.end > win.start) {
         var bst = bd.statusDuring(cur, win.start, win.end, { exclude: c.id });
-        if (bst.kind === 'out' || bst.kind === 'case') {
+        // in a case of their own whose backup covers on (a chain — Surg 2
+        // backs up a PKP, then takes a globe, whose backup covers the clinic):
+        // amber; red only when the board really has the clinic uncovered
+        var chainGap = bst.kind === 'case' && plan && (bd.needs || []).some(function (n) {
+          return n.type === 'clinic' && n.clinic === plan.clinic && n.owner === plan.owner && n.start < win.end && win.start < n.end;
+        });
+        if (bst.kind === 'case' && plan && !chainGap) {
+          tone = 'amber';
+          flag = 'in a case';
+          tip = cur + ' is ' + statusShort(bst) + ' — that case’s backup covers ' + plan.clinic + ' — click to change';
+        } else if (bst.kind === 'out' || bst.kind === 'case') {
           tone = 'bad';
           flag = bst.kind === 'out' ? 'out' : 'in a case';
           tip = cur + ' cannot cover — ' + statusShort(bst) + ' — click to change';
@@ -1727,9 +1860,22 @@
     var b = App.board;
     var info = b && b.caseInfo[c.id];
     var res = row.querySelector('.s-res');
-    if (res) renderResCell(c, res);
+    if (res) {
+      // rebuilding the pill under the keyboard keeps the focus on it
+      var hadFocus = res.contains(document.activeElement) && document.activeElement !== document.body;
+      renderResCell(c, res);
+      if (hadFocus) {
+        var again = res.querySelector('button, select');
+        if (again) again.focus();
+      }
+    }
     var svcTWrap = row.querySelector('.s-svct-wrap');
-    if (svcTWrap) svcTWrap.classList.toggle('hidden', c.section === 'private' || !(partPrivate(c) || trim(c.serviceTimes)));
+    if (svcTWrap) {
+      svcTWrap.classList.toggle('hidden', c.section === 'private' || !(partPrivate(c) || trim(c.serviceTimes)));
+      // part private with no service time: the field asks (amber), not a sentence
+      var svcIn = svcTWrap.querySelector('.s-svct');
+      if (svcIn) svcIn.classList.toggle('s-ask', !!(info && info.svcAssumed));
+    }
 
     var sub = row.querySelector('.s-sub');
     if (sub) {
@@ -1746,7 +1892,7 @@
               type: 'button', class: 'res-pill suggested small',
               title: 'In their place: ' + (sugg.reasons || []).join(' · ') + ' — click to assign',
               onclick: function () {
-                c.assigned = sugg.name;
+                setAssigned(c, sugg.name);
                 touch();
                 refreshAssignAreas();
                 toast(sugg.name + ' takes ' + caseLabelOf(c) + ' in place of ' + assigned);
@@ -1758,11 +1904,9 @@
         // a globe goes to Surg 2 even while they are operating: it follows their cases
         if (chk && chk.follows) sub.appendChild(el('div', { class: 's-note amber', text: chk.text }));
         if (c.done && info && info.done) {
-          sub.appendChild(el('div', { class: 's-note done-note', text: '✓ Checked off as done at ' + window.Status.fmtClock(info.end) + ' — ' + assigned + ' is free from then' }));
+          sub.appendChild(el('div', { class: 's-note done-note', text: '✓ Done ' + window.Status.fmtClock(info.end) }));
         }
-        if (info && info.svcAssumed) {
-          sub.appendChild(el('div', { class: 's-note', text: 'When is the service case? ' + assigned + ' counts as operating ' + operatingWhen(info) + ' (the list start) — add the time after Svc' }));
-        }
+
         var plan = null;
         if (window.Assign && window.Assign.backupPlan && b) {
           try { plan = window.Assign.backupPlan(c, App.roster, data(), App.state.cases, b); } catch (e) { plan = null; }
@@ -1770,33 +1914,37 @@
         if (plan || trim(c.backup)) {
           var S = window.Status;
           var line = el('div', { class: 's-note backup' + (plan && !trim(c.backup) ? ' needs' : '') });
+          // '↳ Glaucoma from 1:00 — backup' (an end only when typed)
           line.appendChild(el('span', {
             class: 's-note-text',
             text: plan
-              ? '↳ ' + assigned + ' leaves ' + plan.clinic + (plan.owner !== assigned ? ' (for ' + plan.owner + ')' : '') +
-                (S && plan.window ? ' ' + (info && info.openEnded && Math.abs(plan.window.end - info.end) <= 5
-                  ? 'from ' + shortClock(plan.window.start) : shortClock(plan.window.start) + '–' + shortClock(plan.window.end)) : '') + ' — backup'
+              ? '↳ ' + plan.clinic + (plan.owner !== assigned ? ' (for ' + plan.owner + ')' : '') +
+                (S && plan.window ? ' ' + (info && !info.openEnded ? shortClock(plan.window.start) + '–' + shortClock(plan.window.end) : 'from ' + shortClock(plan.window.start)) : '') + ' — backup'
               : '↳ backup'
           }));
           if (plan && !plan.primary && !trim(c.backup)) {
+            var freeOther = (plan.outside || []).concat((plan.pullable || []).map(function (n) { return n + ' (no cover)'; }));
             line.appendChild(el('span', {
               class: 's-note-warn',
-              text: 'nobody on the coverage chain is free — ' + outsideText(plan.outside, plan.pullable)
+              text: 'no one free on the chain' + (freeOther.length ? ' · free: ' + freeOther.join(', ') : '')
             }));
           }
           line.appendChild(backupPill(c, plan));
           sub.appendChild(line);
         }
       } else if (sugg && c.serviceCount > 0) {
-        var bits = [];
-        (sugg.warnings || []).forEach(function (w) {
-          if (!/— needs a backup$/.test(w)) bits.push(w); // shown as the backup line once assigned
-        });
-        if ((sugg.skipped || []).length) {
-          bits.push('skipped ' + sugg.skipped.slice(0, 3).map(function (s) { return s.name + ' (' + s.why + ')'; }).join(', '));
+        // one short line at most: nobody free (and who else is), what a
+        // globe follows, a heavy load or a missing start — the rest is in
+        // the pill's title (review 10/19/2026: 1–3 grey lines on 9 of 16 rows)
+        if (!sugg.name) {
+          var others = (sugg.outside || []).concat((sugg.pullable || []).map(function (n) { return n + ' (no cover)'; }));
+          sub.appendChild(el('div', { class: 's-note', text: 'No one free on the chain — Surg 2’s call' + (others.length ? ' · free: ' + others.join(', ') : '') }));
+        } else if (sugg.follows) {
+          sub.appendChild(el('div', { class: 's-note amber', text: 'Follows ' + sugg.follows + ' — check in with ' + sugg.name }));
+        } else {
+          var keep = (sugg.warnings || []).filter(function (w) { return /already has \d+ cases|^No start time/.test(w); })[0];
+          if (keep) sub.appendChild(el('div', { class: 's-note', text: keep }));
         }
-        if (!sugg.name) bits.unshift('nobody in the how-to chain is free then');
-        bits.forEach(function (t) { sub.appendChild(el('div', { class: 's-note', text: t })); });
       }
       sub.classList.toggle('hidden', !sub.firstChild);
     }
@@ -1813,10 +1961,8 @@
           onclick: function () { c.done = false; c.doneAt = ''; touch(); refreshAssignAreas(); }
         }));
       } else if (info && (c.serviceCount > 0 || trim(c.assigned))) {
-        timing.appendChild(document.createTextNode('Operating ' + operatingWhen(info) +
-          (info.openEnded ? ' — until it is checked off' : '') +
-          (info.svcAssumed ? ' · service case time not given — assumed at the list start' : '') +
-          (info.unknownStart ? ' · no start time, assumed 7:30' : '')));
+        // only what was typed: a "Done by" end or All day
+        if (!info.openEnded || info.allDay) timing.appendChild(document.createTextNode('Operating ' + operatingWhen(info)));
         if (isToday() && trim(c.assigned) && info.spans.length) {
           var now = nowMinutes();
           var last = info.spans[info.spans.length - 1];
@@ -1831,7 +1977,7 @@
                 c.doneAt = window.Status.fmtHHMM(Math.round(nowMinutes() / 5) * 5);
                 touch();
                 refreshAssignAreas();
-                toast(trim(c.assigned) + ' is free from now — checked off on Coverage too');
+                toast('Checked off — ' + trim(c.assigned) + ' is free from now');
               }
             }));
           }
@@ -1844,8 +1990,12 @@
     return function (ev) {
       if (ev.key === 'Enter') {
         ev.preventDefault();
+        if (isDraftCase(c)) return; // already a blank line to type into
         addCase(c.section, c.id);
       }
+      // Tab out of a field: settle the pending refresh now, so focus lands
+      // on the rebuilt suggestion, not a pill about to be replaced
+      if (ev.key === 'Tab' && assignRefreshTimer) refreshAssignAreas();
     };
   }
 
@@ -1853,10 +2003,34 @@
     var row = el('div', { class: 'srow' + (rowOpen[c.id] ? ' open' : ''), 'data-case-id': c.id });
     var main = el('div', { class: 'srow-main' });
 
-    var sur = textInput(c.surgeon, 'Surgeon', function (v) { c.surgeon = v; touch(); });
+    var sur = textInput(c.surgeon, 'Surgeon', function (v) {
+      var was = trim(c.surgeon);
+      c.surgeon = v;
+      var refresh = !was !== !trim(v); // a draft line becomes a case (or back)
+      if (catFollows[c.id] && window.ImportFmt && window.ImportFmt.inferCategory) {
+        var entries = [];
+        try { entries = (cpecInfo() || {}).entries || []; } catch (e) { entries = []; }
+        var t = window.ImportFmt.inferCategory({ surgeon: v, section: c.section }, {
+          knownTypes: knownSurgeonTypes(),
+          cpecSurgeons: entries.map(function (e) { return e.attending; })
+        });
+        if (t !== 'other' && t !== c.category) { c.category = t; cat.value = t; refresh = true; }
+      }
+      touch();
+      if (refresh) scheduleAssignRefresh();
+    });
     sur.className = 's-surgeon';
     sur.setAttribute('aria-label', 'Surgeon');
-    var cnt = numInput(c.count, function (v) { c.count = v; touch(); });
+    // the service count follows the count until it is edited (review
+    // 10/19/2026: 'Hark x4' copied out as '…, x1 service')
+    var cnt = numInput(c.count, function (v) {
+      if (c.section !== 'private' && (parseInt(c.serviceCount, 10) || 0) === (parseInt(c.count, 10) || 0)) {
+        c.serviceCount = v;
+        svc.value = String(v);
+      }
+      c.count = v;
+      touch();
+    });
     cnt.className = 's-count';
     cnt.setAttribute('aria-label', 'Number of cases');
     cnt.title = 'Number of cases';
@@ -1868,7 +2042,7 @@
     var cat = el('select', { class: 's-cat', 'aria-label': 'Category' });
     CATEGORIES.forEach(function (k) { cat.appendChild(el('option', { value: k, text: k })); });
     cat.value = c.category;
-    cat.addEventListener('change', function () { c.category = cat.value; rememberSurgeonType(c.surgeon, c.section, c.category); touch(); refreshAssignAreas(); });
+    cat.addEventListener('change', function () { delete catFollows[c.id]; c.category = cat.value; rememberSurgeonType(c.surgeon, c.section, c.category); touch(); refreshAssignAreas(); });
     var svc = numInput(c.serviceCount, function (v) { c.serviceCount = v; touch(); });
     svc.className = 's-svc';
     svc.setAttribute('aria-label', 'Service cases');
@@ -1898,7 +2072,7 @@
     main.appendChild(el('span', { class: 's-arrow', text: '→', 'aria-hidden': 'true' }));
     main.appendChild(el('div', { class: 's-res' }));
     var more = el('button', {
-      type: 'button', class: 's-more', text: '⋯', title: 'Details: add-on, service times, done by, notes',
+      type: 'button', class: 's-more', text: '⋯', title: 'Done by, notes, add-on, move, delete', 'aria-label': 'Case details',
       'aria-expanded': rowOpen[c.id] ? 'true' : 'false',
       onclick: function () {
         rowOpen[c.id] = !rowOpen[c.id];
@@ -1929,12 +2103,12 @@
     });
     grid.appendChild(el('div', { class: 's-d-pill' }, [pill]));
 
-    var until = textInput(c.until, 'est.', function (v) { c.until = v; touch(); });
+    var until = textInput(c.until, 'e.g. 1430', function (v) { c.until = v; touch(); });
     until.classList.add('s-until');
     onTimingChange(until);
     grid.appendChild(miniField('Done by', until));
     grid.appendChild(miniField('Notes', textInput(c.notes, 'no Peds OR…', function (v) { c.notes = v; touch(); })));
-    grid.appendChild(miniField('Backup note', textInput(c.backupNote, 'e.g. to cover glaucoma clinic during case if after 1 PM', function (v) { c.backupNote = v; touch(); })));
+    grid.appendChild(miniField('Backup note', textInput(c.backupNote, '', function (v) { c.backupNote = v; touch(); })));
     d.appendChild(grid);
 
     var foot = el('div', { class: 's-details-foot' });
@@ -1980,18 +2154,33 @@
     renderBadges();
   }
 
+  // Every suggested resident, then every suggested clinic backup — one at a
+  // time against a fresh board, so two cases never take the same backup
+  // (review 10/19/2026: each backup still needed a click)
   function acceptAllSuggestions() {
     computeBoard();
     computeSuggestions();
     var n = 0;
     App.state.cases.forEach(function (c) {
       var s = suggMap[c.id];
-      if (s && s.name && caseOpen(c) && s.name !== trim(c.assigned)) { c.assigned = s.name; n++; }
+      if (s && s.name && caseOpen(c) && s.name !== trim(c.assigned)) { setAssigned(c, s.name); n++; }
+    });
+    computeBoard();
+    var nb = 0;
+    App.state.cases.forEach(function (c) {
+      if (!trim(c.assigned) || trim(c.backup) || caseDone(c) || !window.Assign || !window.Assign.backupPlan) return;
+      var plan = null;
+      try { plan = window.Assign.backupPlan(c, App.roster, data(), App.state.cases, App.board); } catch (e) { plan = null; }
+      if (!plan || !plan.primary) return;
+      c.backup = plan.primary.name;
+      c.backupNote = backupNoteFor(c, plan);
+      nb++;
+      computeBoard();
     });
     touch();
     computeBoard();
     renderSurgeryTab();
-    toast(n ? 'Assigned ' + n + ' suggestion' + (n === 1 ? '' : 's') : 'Nothing to assign — every service case has a resident');
+    toast(n || nb ? 'Assigned ' + n + (nb ? ' · ' + nb + ' backup' + (nb === 1 ? '' : 's') : '') : 'Nothing to assign');
   }
 
   function renderSurgeryToolbar() {
@@ -2008,8 +2197,7 @@
     var actions = [stat];
     if (acceptable) {
       actions.push(el('button', {
-        type: 'button', class: 'btn btn-primary', text: 'Assign all suggestions (' + acceptable + ')',
-        title: 'Suggestions follow the how-to chains and skip anyone out or already in a case then',
+        type: 'button', class: 'btn btn-primary', text: 'Assign all (' + acceptable + ')',
         onclick: acceptAllSuggestions
       }));
     }
@@ -2049,13 +2237,9 @@
         sec.appendChild(el('div', { class: 'scols', 'aria-hidden': 'true' }, [
           el('span', { text: 'Surgeon' }), el('span'), el('span', { text: '#' }), el('span', { text: 'Start' }),
           el('span', { text: 'Category' }), el('span', { class: key === 'private' ? 'invisible' : '', text: 'Svc' }),
-          el('span', { class: key === 'private' ? 'invisible' : '', text: 'Svc time' }),
           el('span'), el('span', { text: 'Resident' }), el('span')
         ]));
         list.forEach(function (c) { sec.appendChild(surgeryLine(c)); });
-      }
-      if (key === 'private' && list.length) {
-        sec.appendChild(el('p', { class: 'field-hint ssec-hint', text: 'Privates need no resident — listed so the schedule shows who is operating.' }));
       }
       wrap.appendChild(sec);
     });
@@ -2192,18 +2376,21 @@
       if (!b.byName[name]) return;
       var base = b.base[name][session];
       if (base.kind === 'out') {
+        // covered: the chip already reads 'Samuel (for Nahar)'; no cover
+        // needed here: nothing to say
         out.away[name] = true;
-        var abs = base.absence || {};
-        var cov = session === 'am' ? abs.coverAM : abs.coverPM;
+        var oc = outCovers(name).filter(function (x) { return x.s === session; })[0] || {};
+        if (oc.who && oc.who !== 'NC') return;
+        if (noCoverHere && oc.who !== 'NC') return;
         out.lines.push({
-          text: name + ' out (' + base.label + ')' + (cov && cov !== 'NC' ? ' → ' + cov + ' covers' : cov === 'NC' ? ' — NC' : noCoverHere ? ' — no cover needed' : ' — nobody covering yet'),
-          bad: !cov && !noCoverHere
+          text: name + ' out — ' + (oc.who === 'NC' ? 'NC' : oc.blocked ? 'TBD (' + oc.blocked + ')' : 'no cover yet'),
+          bad: oc.who !== 'NC'
         });
         return;
       }
       if (base.covering && base.text !== label) {
         out.away[name] = true;
-        out.lines.push({ text: name + ' is covering ' + base.covering + ' (' + base.text + ') — not here', bad: false });
+        out.lines.push({ text: name + ' → ' + base.text + ' (for ' + base.covering + ')', bad: false });
         return;
       }
       // pulled into a case during the session?
@@ -2217,21 +2404,24 @@
         var s1 = Math.min(sg.end, to);
         var who = coveredBySegments(name, label, s0, s1);
         var gap = who.some(function (w) { return !w.name; });
-        // an open-ended list (no typed end): from its start, no end time
-        var openEnd = info && info.openEnded && Math.abs(s1 - Math.min(info.end, to)) <= 5;
-        var txt = name + ' in ' + sg.label + ' ' + (openEnd ? 'from ' + S.fmtClock(s0) : S.fmtClock(s0) + '–' + S.fmtClock(s1));
+        // only times someone typed: the list's start when it starts in this
+        // session ('AM TF' as typed); never the board's edges (7:00, noon,
+        // 5:00) nor a guessed end (review 10/19/2026)
+        var when = sg.start < from ? ' (since the morning)'
+          : info && info.unknownStart ? (trim(info.c.start) ? ' (' + trim(info.c.start) + ')' : '')
+          : ' from ' + S.fmtClock(s0);
+        var txt = name + ' in ' + sg.label + when;
         if (noCoverHere && !who.some(function (w) { return w.name; })) {
-          txt += ' — no cover needed';
           gap = false;
         } else if (info && info.backup === 'NC' && !who.some(function (w) { return w.name; })) {
           txt += ' — NC';
           gap = false;
         } else if (who.length === 1) {
-          txt += who[0].name ? ' → ' + who[0].name + ' covers' : ' — nobody covering';
+          txt += who[0].name ? ' → ' + who[0].name : ', no cover';
         } else {
-          txt += ' → ' + who.map(function (w) {
-            return (w.name || 'nobody') + ' ' + S.fmtClock(w.start).replace(/ [AP]M$/, '') + '–' + S.fmtClock(w.end).replace(/ [AP]M$/, '');
-          }).join(', ');
+          txt += ' → ' + who.map(function (w, i) {
+            return (w.name || 'nobody') + (i ? ' from ' + S.fmtClock(w.start) : '');
+          }).join(', then ');
         }
         out.lines.push({ text: txt, bad: gap });
       });
@@ -2261,16 +2451,29 @@
 
     var chips = el('span', { class: 'clinic-chips' });
     var notes = clinicStatusNotes(label, session, eff.staff);
+    var bd = App.board;
+    var shown = eff.staff.slice();
     eff.staff.forEach(function (name) {
-      var chip = nameChip(name, function () { removeClinicStaff(label, session, name); });
-      if (notes.away[name]) chip.classList.add('chip-away');
+      // out with a cover: the chip is the cover, as the copied line prints
+      // it ('Samuel (for Nahar)'); away otherwise: struck. Neither gets ×
+      // (review 10/19/2026: × on a struck chip silently dropped the cover
+      // from the copied schedule) — the cover is changed on Out today.
+      var si = (session === 'am' || session === 'pm') && bd && bd.isOut(name, session) ? bd.standIn(name, session) : '';
+      if (si) {
+        shown.push(si);
+        chips.appendChild(el('span', { class: 'name-chip no-x ' + yearOf(si), title: name + ' is out — ' + si + ' covers (Out today)' }, [si + ' (for ' + name + ')']));
+        return;
+      }
+      var away = !!notes.away[name];
+      var chip = nameChip(name, away ? null : function () { removeClinicStaff(label, session, name); });
+      if (away) chip.classList.add('chip-away');
       chips.appendChild(chip);
     });
     var addSel = residentPicker('', function (v) {
       addClinicStaff(label, session, v);
     }, {
       session: (session === 'am' || session === 'pm') ? session : null,
-      emptyLabel: '+ add…', hideNames: eff.staff
+      emptyLabel: '+ add…', hideNames: shown
     });
     addSel.className = 'clinic-add';
     chips.appendChild(addSel);
@@ -2283,9 +2486,22 @@
     }
     row.appendChild(chips);
 
+    var sessName = session === 'day' ? '' : ' ' + session.toUpperCase();
     var countIn = el('input', {
-      type: 'text', class: 'clinic-count', placeholder: 'e.g. 29x3',
+      type: 'text', class: 'clinic-count', placeholder: 'count', autocomplete: 'off', enterkeyhint: 'next',
+      'aria-label': label + sessName + ' count',
       value: (cc && cc.count) || ''
+    });
+    // Enter or ↓ goes to the next clinic's count, ↑ back — the counts are
+    // typed one after another from the EMRs
+    countIn.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+      var all = Array.prototype.slice.call(document.querySelectorAll('.clinic-count'));
+      var i = all.indexOf(countIn) + (ev.key === 'ArrowUp' ? -1 : 1);
+      if (i < 0 || i >= all.length) return;
+      ev.preventDefault();
+      all[i].focus();
+      all[i].select();
     });
     countIn.addEventListener('input', function () {
       clinicCountEntry(key).count = countIn.value;
@@ -2294,8 +2510,10 @@
     });
     row.appendChild(countIn);
 
+    // the attending — the sent line names them first: 'Glaucoma PM (Amarasekera, 20 x 2)'
     var extraIn = el('input', {
-      type: 'text', class: 'clinic-extra', placeholder: 'note',
+      type: 'text', class: 'clinic-extra', placeholder: 'attending', autocomplete: 'off',
+      'aria-label': label + sessName + ' attending or note',
       value: (cc && cc.extra) || ''
     });
     extraIn.addEventListener('input', function () {
@@ -2317,7 +2535,7 @@
     // (typically the operating PGY-4s); it reaches the output only once
     // staffed or counted. Stored under 'CPEC PO|day' end-to-end.
     host.appendChild(clinicRowEl('CPEC PO', 'day', {
-      standing: true, subLabel: 'daily post-op checks — typically the operating PGY-4s'
+      standing: true
     }));
 
     var clinics = App.roster.clinics || {};
@@ -2608,6 +2826,17 @@
     return caseId;
   }
 
+  // Surgery, scrolled to the case's line with its resident picker open
+  function pickOnSurgery(c) {
+    if (c) {
+      resPicking[c.id] = 'res';
+      if (c.section) caseSectionOpen[c.section] = true;
+    }
+    setTab('surgery');
+    var line = c && lineOf(c.id);
+    if (line && line.scrollIntoView) line.scrollIntoView({ block: 'center' });
+  }
+
   function caseById(id) {
     var found = null;
     (App.state.cases || []).forEach(function (c) { if (c.id === id) found = c; });
@@ -2627,35 +2856,34 @@
       var when = !S ? '' : n.openEnded || !(n.end > n.start) ? '(' + S.fmtClock(n.start) + ')' : S.fmtClock(n.start) + '–' + S.fmtClock(n.end);
       row.classList.add('case-need');
       row.appendChild(el('div', { class: 'need-text' }, [
-        el('b', { text: n.label + ' ' + when }),
+        el('b', { text: (kc ? caseListLabel(kc) : n.label) + ' ' + when }),
         n.why === 'out'
           ? ' — ' + n.holder + ' is out (' + n.outLabel + '): needs a new resident'
           : ' — no resident yet'
       ]));
       if (kc && sg && sg.name && sg.name !== trim(kc.assigned)) {
         actions.appendChild(el('button', {
-          type: 'button', class: 'btn btn-small btn-primary',
-          text: '✓ ' + sg.name + ' takes it (' + suggVia(sg) + ')',
+          type: 'button', class: 'btn btn-small btn-fix',
           title: (sg.reasons || []).join(' · '),
           onclick: function () {
-            kc.assigned = sg.name;
+            setAssigned(kc, sg.name);
             touch();
             refreshEverything();
             toast(sg.name + ' takes ' + n.label + (n.why === 'out' ? ' in place of ' + n.holder : ''));
           }
-        }));
+        }, ['✓ ' + sg.name + ' takes it ', el('span', { class: 'btn-why', text: suggVia(sg) })]));
       } else if (kc && sg && !sg.name) {
         actions.appendChild(el('span', { class: 'field-hint', text: 'Nobody in the how-to chain is free then — Surg 2’s call; ' + outsideText(sg.outside, sg.pullable) }));
       }
       actions.appendChild(el('button', {
-        type: 'button', class: 'btn btn-small', text: 'Pick on Surgery',
-        onclick: function () { setTab('surgery'); }
+        type: 'button', class: 'btn btn-small need-sec', text: 'Pick on Surgery',
+        onclick: function () { pickOnSurgery(kc); }
       }));
     } else if (n.type === 'absence') {
       if (n.erFirst) row.classList.add('er-first');
       row.appendChild(el('div', { class: 'need-text' }, [
         el('b', { text: n.name + ' out ' + n.session.toUpperCase() }),
-        ' — ' + n.duty + ': nobody covering yet' + (!n.auto ? '' : n.dayFloat
+        ' — ' + n.duty + ': ' + (n.blocked ? 'TBD (' + n.blocked + ')' : 'TBD') + (!n.auto || n.blocked ? '' : n.dayFloat
           ? ' (Night Float — Day Float ' + n.dayFloat + ' is out; add ' + n.name + ' on Out today to pick a cover)'
           : ' (Night Float — no Day Float to cover)'),
         n.erFirst ? el('span', { class: 'er-flag', text: ' ER is staffed first' }) : null
@@ -2667,15 +2895,21 @@
         }));
       }
     } else if (n.type === 'clinic') {
-      // a gap that lasts as long as an open-ended list: from its start only
+      // a gap that lasts as long as an open-ended list: from its start only;
+      // a whole session (or the whole day): no clock at all
       var gci = n.whyKind === 'case' && n.caseId && b && b.caseInfo[n.caseId];
       var estEnd = gci && gci.openEnded && Math.abs(n.end - gci.end) <= 5;
-      var when = !S ? '' : estEnd ? 'from ' + S.fmtClock(n.start) : S.fmtClock(n.start) + '–' + S.fmtClock(n.end);
+      var whole = b && (n.session === 'day' || (n.start === (n.session === 'am' ? b.dayStart : b.noon) && n.end === (n.session === 'am' ? b.noon : b.dayEnd)));
+      var when = !S || whole ? '' : estEnd ? ' from ' + S.fmtClock(n.start) : ' ' + S.fmtClock(n.start) + '–' + S.fmtClock(n.end);
       var who = n.owner !== n.holder ? ' (covering for ' + n.owner + ')' : '';
+      var sessWord = n.session === 'day' ? ' all day' : ' ' + n.session.toUpperCase();
+      // 'Wibbelsman is Surg 2 for Cheng, so CPEC is one short'
+      var doing = n.awayFor ? n.awayAs + ' for ' + n.awayFor : n.whyKind === 'clinic' && n.awayAs ? 'in ' + n.awayAs : n.why;
       row.appendChild(el('div', { class: 'need-text' }, [
-        el('b', { text: n.clinic + ' ' + n.session.toUpperCase() + ' ' + when }),
-        ' — ' + n.holder + who + ' is ' + n.why +
-          (n.whyKind === 'case' ? ' and nobody is covering' : ', so nobody is left for ' + n.holder + '’s spot')
+        el('b', { text: n.clinic + sessWord + when }),
+        n.whyKind === 'case'
+          ? ' — ' + n.holder + who + ' is ' + n.why + ' and nobody is covering'
+          : ' — ' + n.holder + who + ' is ' + doing + ', so ' + n.clinic + ' is one short'
       ]));
       if (n.whyKind === 'case' && n.caseId) {
         var target = caseById(chainEndCase(n.caseId, n.start + 1));
@@ -2685,29 +2919,56 @@
         }
         if (target && plan && plan.primary) {
           actions.appendChild(el('button', {
-            type: 'button', class: 'btn btn-small btn-primary',
-            text: '✓ ' + plan.primary.name + ' covers (' + plan.primary.source + ')',
+            type: 'button', class: 'btn btn-small btn-fix',
             onclick: function () {
               target.backup = plan.primary.name;
               target.backupNote = backupNoteFor(target, plan);
               touch();
               refreshEverything();
+              toast(plan.primary.name + ' covers ' + plan.clinic + ' during ' + caseListLabel(target));
             }
-          }));
+          }, ['✓ ' + plan.primary.name + ' covers ', el('span', { class: 'btn-why', text: plan.primary.source })]));
         }
         if (target && plan && !plan.primary) actions.appendChild(el('span', { class: 'field-hint', text: 'Nobody on the coverage chain is free — Surg 2’s call; ' + outsideText(plan.outside, plan.pullable) }));
         if (target) {
           actions.appendChild(el('button', {
-            type: 'button', class: 'btn btn-small', text: 'NC — leave uncovered',
-            onclick: function () { target.backup = 'NC'; touch(); refreshEverything(); }
+            type: 'button', class: 'btn btn-small need-sec', text: 'NC — leave uncovered',
+            onclick: function () {
+              target.backup = 'NC';
+              touch();
+              refreshEverything();
+              toast(n.clinic + ' left uncovered during ' + caseListLabel(target) + ' (NC)');
+            }
           }));
         }
       } else {
-        actions.appendChild(el('button', {
-          type: 'button', class: 'btn btn-small',
-          text: 'Take ' + n.holder + ' off ' + n.clinic + ' ' + n.session.toUpperCase(),
-          onclick: function () { removeClinicStaff(n.clinic, n.session, n.holder); refreshEverything(); }
-        }));
+        // The clinic runs one short: acknowledged, keyed to its cause, so it
+        // lapses when the cover changes. Not a staffing edit — taking them
+        // off the list outlived the absence and left them "free" (review
+        // 10/19/2026); the copied schedule already lists a coverer only
+        // where they are.
+        if (n.ackKey) {
+          actions.appendChild(el('button', {
+            type: 'button', class: 'btn btn-small',
+            text: 'OK — ' + n.clinic + ' runs one short',
+            onclick: function () {
+              var keys = n.session === 'day' ? [n.ackKey, n.ackKeyPM] : [n.ackKey];
+              keys.forEach(function (k) { if (k) App.state.shortOk[k] = true; });
+              touch();
+              refreshEverything();
+              toast(n.clinic + sessWord + ' runs one short — noted');
+            }
+          }));
+        } else {
+          actions.appendChild(el('button', {
+            type: 'button', class: 'btn btn-small',
+            text: 'Take ' + n.holder + ' off ' + n.clinic + sessWord,
+            onclick: function () {
+              (n.session === 'day' ? ['am', 'pm'] : [n.session]).forEach(function (s) { removeClinicStaff(n.clinic, s, n.holder); });
+              refreshEverything();
+            }
+          }));
+        }
       }
     }
     row.appendChild(actions);
@@ -2716,21 +2977,52 @@
 
   // `types` (optional): only these kinds of need — the Clinics tab shows
   // absences and clinic gaps; Coverage shows everything still open.
+  function mergeDayNeeds(needs) {
+    var b = App.board;
+    var out = [];
+    var byKey = {};
+    needs.forEach(function (n) {
+      var whole = b && n.type === 'clinic' && n.whyKind !== 'case' &&
+        n.start === (n.session === 'am' ? b.dayStart : b.noon) && n.end === (n.session === 'am' ? b.noon : b.dayEnd);
+      var key = whole ? [n.holder, n.owner, n.clinic, n.why].join('|') : null;
+      var prev = key && byKey[key];
+      if (prev && prev.session !== n.session) {
+        var day = {};
+        for (var k in prev) day[k] = prev[k];
+        day.ackKeyPM = n.ackKey;
+        day.session = 'day';
+        day.start = b.dayStart;
+        day.end = b.dayEnd;
+        out[out.indexOf(prev)] = day;
+        byKey[key] = day;
+        return;
+      }
+      if (key) byKey[key] = n;
+      out.push(n);
+    });
+    return out;
+  }
+
   function renderNeedsCard(host, title, note, types) {
     var b = App.board;
-    var needs = ((b && b.needs) || []).filter(function (n) { return !types || types.indexOf(n.type) !== -1; });
+    var needs = mergeDayNeeds(((b && b.needs) || []).filter(function (n) { return !types || types.indexOf(n.type) !== -1; }));
     var warns = (b && b.warnings) || [];
+    var noCases = !types && !(App.state.cases || []).some(function (c) { return !isDraftCase(c); });
+    if (!needs.length && !warns.length && noCases) {
+      host.appendChild(el('div', { class: 'card card-lite empty-card', text: 'No cases yet.' }));
+      return;
+    }
     if (!needs.length && !warns.length) {
-      host.appendChild(el('div', { class: 'card ok-card' }, [
+      host.appendChild(el('div', { class: 'card ok-card ok-slim' }, [
         el('span', { class: 'ok-mark', text: '✓' }),
-        types ? ' Every clinic is covered and every absence has a decision.'
-          : ' Nothing open — every service case has a resident, every clinic is covered and every absence has a decision.'
+        types ? ' Clinics covered.'
+          : ' Nothing open — every case, clinic and absence is covered.'
       ]));
       return;
     }
     var card = el('div', { class: 'card needs-card' + (needs.length ? '' : ' heads-up') });
     card.appendChild(el('h2', {}, needs.length
-      ? [title + ' ', el('span', { class: 'h-note', text: note })]
+      ? [title + ' ', note ? el('span', { class: 'h-note', text: note }) : null]
       : ['Heads-up ', el('span', { class: 'h-note', text: 'Nothing uncovered — just worth knowing' })]));
     needs.forEach(function (n) { card.appendChild(needItem(n)); });
     warns.forEach(function (w) { card.appendChild(el('div', { class: 'warn-line', text: '⚠ ' + w })); });
@@ -2742,7 +3034,7 @@
     if (!host) return;
     clearNode(host);
     if (!App.board || !App.board.order.length) return;
-    renderNeedsCard(host, 'Needs coverage', 'Clinics left short by vacations or by residents pulled into cases', ['absence', 'clinic']);
+    renderNeedsCard(host, 'Needs coverage', '', ['absence', 'clinic']);
   }
 
   /* ------------------------------------------------------------------ */
@@ -2816,6 +3108,34 @@
     renderOutTab();
   }
 
+  // Absence cards whose AM and PM covers are picked separately (UI only)
+  var absSplit = {};
+
+  // Who cannot take the cover for `a` in session s (each, or both for
+  // 'day') -> { name: why }: listed, not pickable — Surg 2 for the ER
+  // (10/18/2026: "surg 2 would never cover the ER" — the globe is theirs),
+  // the Day Float (only ever the Night Float resident), and anyone already
+  // covering someone else then (review 10/19/2026: the second cover was
+  // dropped silently).
+  function coverBlocks(a, sessions) {
+    var st = App.state;
+    var bd = App.board;
+    var disable = {};
+    sessions.forEach(function (s) {
+      var duty = dutyOf(a.name, s);
+      var s2 = duty === 'ER' && bd ? bd.actingSurg('2', s) : null;
+      if (s2 && s2.name !== a.name) disable[s2.name] = 'Surg 2 — never the ER';
+      // an earlier line keeps its cover, as on the board (the first wins)
+      st.absences.slice(0, st.absences.indexOf(a)).forEach(function (x) {
+        if (!x[s]) return;
+        var w = trim(s === 'am' ? x.coverAM : x.coverPM);
+        if (w && w !== 'NC' && !disable[w]) disable[w] = 'covering ' + x.name;
+      });
+    });
+    if (bd && a.name !== bd.nightFloat) (bd.dayFloats || []).forEach(function (n) { if (n !== bd.nightFloat) disable[n] = 'Day Float — Night Float only'; });
+    return disable;
+  }
+
   function absenceCard(a, idx) {
     var st = App.state;
     var card = el('div', { class: 'abs-card' });
@@ -2831,13 +3151,13 @@
       if (!a.pm) a.coverPM = '';
       outChanged();
     }));
-    var reason = el('select', { class: 'sel abs-reason' });
+    var reason = el('select', { class: 'sel abs-reason', 'aria-label': 'Reason' });
     REASONS.forEach(function (r) { reason.appendChild(el('option', { value: r.key, text: r.label })); });
     reason.value = a.reason;
     reason.addEventListener('change', function () { a.reason = reason.value; outChanged(); });
     top.appendChild(reason);
     top.appendChild(el('button', {
-      type: 'button', class: 'btn-icon danger', title: 'Remove', text: '×',
+      type: 'button', class: 'btn-icon danger', title: 'Remove', 'aria-label': 'Remove ' + (a.name || 'this absence'), text: '×',
       onclick: function () { st.absences.splice(idx, 1); outChanged(); }
     }));
     card.appendChild(top);
@@ -2847,53 +3167,49 @@
       return card;
     }
 
-    // A Surg role out changes the whole day. Whoever covers becomes that
-    // Surg for the session — their place in every chain (cases, add-ons,
-    // clinic cover) and, for Surg 2, the daytime add-on call. With NC the
-    // role's cases go down each chain to the next person.
+    // A Surg role out: whoever covers is that Surg for the session, in
+    // every chain — said in one line, as Coverage and the copy say it
     var role = App.board && App.board.surgRole[a.name];
     if (role) {
-      var sessOut = ['am', 'pm'].filter(function (s) { return a[s]; });
-      var covs = sessOut.map(function (s) { return trim(s === 'am' ? a.coverAM : a.coverPM); });
-      var split = covs.length === 2 && covs[0] !== covs[1];
-      var now = (split ? sessOut : sessOut.slice(0, 1)).map(function (s, i) {
-        var w = covs[i];
-        var pre = split ? s.toUpperCase() + ': ' : '';
-        if (w === 'NC') return pre + 'nobody (NC) — Surg ' + role + '’s cases go to the next person in each chain';
-        if (w) return pre + w + ' is Surg ' + role;
-        return pre + 'pick who covers';
-      });
-      card.appendChild(el('div', { class: 'warn-line' }, [
-        '⚠ ' + a.name + ' is Surg ' + role + ' today. Whoever covers becomes Surg ' + role + ' for that session — Surg ' + role +
-          '’s place in every chain' + (role === '2' ? ' and the daytime add-on call' : '') + '. ',
-        el('b', { text: now.join(' · ') + '.' })
-      ]));
-    }
-    if ((App.roster.dayFloat || []).indexOf(a.name) !== -1) {
-      card.appendChild(el('div', { class: 'warn-line' }, ['⚠ ' + a.name + ' is the Day Float — check who covers the Night Float resident today.']));
+      card.appendChild(el('div', { class: 'abs-role' }, [el('span', { class: 'abs-role-k', text: 'Surg ' + role + ' today' }), ' ' + roleWho(a.name, function (sess) { return App.board.actingSurg(role, sess); }).replace(/cover not picked/g, 'TBD')]));
     }
 
-    ['am', 'pm'].forEach(function (s) {
-      if (!a[s]) return;
-      var key = s === 'am' ? 'coverAM' : 'coverPM';
-      var duty = dutyOf(a.name, s) || '—';
+    var av = data().availability || {};
+    var noCoverList = (av.noCoverTexts || ['PT', 'Day Float']).concat(av.pullFirstTexts || ['Retina', 'Retina Private', 'Uveitis']);
+    // all day with one cover (the usual): one pick for both sessions
+    var both = a.am && a.pm;
+    var oneRow = both && !absSplit[a.id] && trim(a.coverAM) === trim(a.coverPM);
+    var rows = oneRow ? [['am', 'pm']] : ['am', 'pm'].filter(function (s) { return a[s]; }).map(function (s) { return [s]; });
+    rows.forEach(function (ss) {
+      var duties = ss.map(function (s) { return dutyOf(a.name, s) || '—'; });
+      var duty = duties[0] === duties[duties.length - 1] ? duties[0] : duties.join('/');
+      var noCover = ss.every(function (s) { return noCoverList.indexOf(dutyOf(a.name, s)) !== -1; });
+      var er = ss.some(function (s) { return dutyOf(a.name, s) === 'ER'; });
+      var cur = trim(ss[0] === 'am' ? a.coverAM : a.coverPM);
       var line = el('div', { class: 'abs-sess' });
-      line.appendChild(el('span', { class: 'badge ' + (s === 'am' ? 'badge-am' : 'badge-pm'), text: s.toUpperCase() }));
-      line.appendChild(el('span', { class: 'abs-duty' }, ['would be ', el('b', { text: duty })]));
-      line.appendChild(el('span', { class: 'abs-arrow', text: 'covered by' }));
-      // as the board decides it: noCoverTexts plus the pull-first clinics
-      var av = data().availability || {};
-      var noCover = (av.noCoverTexts || ['PT', 'Day Float']).concat(av.pullFirstTexts || ['Retina', 'Retina Private', 'Uveitis']).indexOf(duty) !== -1;
-      line.appendChild(residentPicker(a[key], function (v) { a[key] = v; outChanged(); }, {
-        session: s, hideNames: [a.name].concat(others), emptyLabel: noCover ? 'no cover needed…' : 'covered by…',
-        extra: [{ value: 'NC', text: 'NC — not covered' }]
-      }));
-      var cov = a[key];
-      if (cov && cov !== 'NC') {
-        var own = dutyOf(cov, s);
-        if (own) line.appendChild(el('span', { class: 'field-hint', text: cov + ' leaves ' + own }));
-      } else if (!cov && !noCover) {
-        line.appendChild(el('span', { class: 'unassigned-text', text: 'decide: someone or NC' }));
+      if (!oneRow) line.appendChild(el('span', { class: 'badge ' + (ss[0] === 'am' ? 'badge-am' : 'badge-pm'), text: ss[0].toUpperCase() }));
+      line.appendChild(el('span', { class: 'abs-duty' }, [el('b', { text: duty })]));
+      line.appendChild(el('span', { class: 'abs-arrow', text: 'c/b' }));
+      var disable = coverBlocks(a, ss);
+      var pick = residentPicker(cur, function (v) {
+        ss.forEach(function (s) { a[s === 'am' ? 'coverAM' : 'coverPM'] = v; });
+        outChanged();
+      }, {
+        session: oneRow ? 'day' : ss[0], hideNames: [a.name].concat(others),
+        emptyLabel: noCover ? 'no cover needed' : er ? 'TBD — ER first' : 'TBD',
+        extra: [{ value: 'NC', text: 'NC' }],
+        disable: disable, forAbsence: a.name
+      });
+      if (!cur && !noCover) pick.classList.add('tbd');
+      line.appendChild(pick);
+      if (oneRow) {
+        line.appendChild(el('button', {
+          type: 'button', class: 'btn-link abs-split', text: 'Split AM / PM',
+          onclick: function () { absSplit[a.id] = true; renderOutTab(); }
+        }));
+      }
+      if (cur && disable[cur]) {
+        line.appendChild(el('span', { class: 'unassigned-text', text: cur + ': ' + disable[cur] + ' — pick someone else' }));
       }
       card.appendChild(line);
     });
@@ -2915,23 +3231,23 @@
     var r = App.roster || {};
     var n = strengthCount();
 
-    if (dayIsBlank()) host.appendChild(importCallout('Running a day someone else built?'));
     var card = el('div', { class: 'card' });
-    card.appendChild(el('h2', {}, [
-      'Who’s out ',
-      el('span', { class: 'h-note', text: 'Vacation, sick, conferences — check the Google Calendar first' })
-    ]));
+    card.appendChild(el('h2', { text: 'Who’s out' }));
     if (!(r.residents || []).length) {
       card.appendChild(el('p', { class: 'empty-note', text: 'No block schedule for this date — pick a weekday inside the academic year.' }));
       host.appendChild(card);
       return;
     }
 
+    // what the covers picked here contradict (a cover out too, covering two)
+    ((App.board && App.board.warnings) || []).forEach(function (w) {
+      card.appendChild(el('div', { class: 'warn-line bad', text: '⚠ ' + w }));
+    });
     var named = st.absences.filter(function (a) { return trim(a.name); });
     if (!st.absences.length) {
       if (st.outConfirmed) {
         card.appendChild(el('div', { class: 'ok-banner' }, [
-          el('span', { text: '✓ No resident vacation — ' + n + ' strong' }),
+          el('span', { text: '✓ No one out — ' + n + ' strong' }),
           el('button', {
             type: 'button', class: 'btn btn-small', text: 'Undo',
             onclick: function () { st.outConfirmed = false; outChanged(); }
@@ -2954,40 +3270,47 @@
         el('span', { class: 'field-hint', text: (n - named.length) + ' strong' })
       ]));
     }
-    host.appendChild(card);
 
-    // Night Float — automatic, and the Day Float rule made visible
+    // Night Float — automatic: one line in the list (post-call, and who
+    // covers their daytime)
     var b = App.board;
     var nf = b && b.nightFloat;
     if (nf) {
-      var nfCard = el('div', { class: 'card' });
-      nfCard.appendChild(el('h2', {}, ['Night Float ', el('span', { class: 'h-note', text: 'From the call schedule — change it on the Roster tab' })]));
-      var nfAbs = b.absences.filter(function (x) { return x.auto; })[0];
+      var nfAbs = b.absences.filter(function (x) { return x.name === nf && x.reason === 'nightfloat'; })[0];
       var duty = [dutyOf(nf, 'am'), dutyOf(nf, 'pm')];
-      var dutyStr = duty[0] === duty[1] ? duty[0] : duty.filter(Boolean).join(' / ');
-      var txt = nf + ' is on Night Float — out for the day (post-call).';
+      var dutyStr = duty[0] === duty[1] ? duty[0] : duty.filter(Boolean).join('/');
+      var txt;
+      var bad = false;
       var dfOut = nfAbs && nfAbs.dayFloat && (b.isOut(nfAbs.dayFloat, 'am') || b.isOut(nfAbs.dayFloat, 'pm'));
-      if (dfOut) {
-        txt += ' Day Float ' + nfAbs.dayFloat + ' is out' + (nfAbs.coverAM || nfAbs.coverPM ? ' part of the day' : '') +
-          ' — ' + nf + '’s ' + (dutyStr || 'daytime') + ' is uncovered then. To cover it, add ' + nf + ' above as out and pick who covers.';
-      } else if (nfAbs && nfAbs.coverAM) txt += ' Day Float ' + nfAbs.coverAM + ' covers ' + nf + '’s ' + (dutyStr || 'daytime') + '.';
-      else if ((b.dayFloats || []).indexOf(nf) !== -1) txt += ' ' + nf + ' is also the Day Float, so there is no Day Float today — nothing to cover.';
-      else txt += ' No Day Float on the roster today — ' + nf + '’s ' + (dutyStr || 'daytime') + ' is uncovered.';
-      nfCard.appendChild(el('p', { class: 'ref-para', text: txt }));
-      nfCard.appendChild(el('p', { class: 'field-hint', text: 'Day Float only ever covers the Night Float resident — never vacations.' }));
-      host.appendChild(nfCard);
+      if (nfAbs && nfAbs.nfByHand) {
+        txt = 'covers on ' + nf + '’s line above' + (nfAbs.dayFloat ? ' (Day Float ' + nfAbs.dayFloat + ' where blank)' : '');
+      } else if (dfOut) {
+        txt = 'Day Float ' + nfAbs.dayFloat + ' is out' + (nfAbs.coverAM || nfAbs.coverPM ? ' part of the day' : '') + ' — add ' + nf + ' above to pick who covers ' + (dutyStr || 'their daytime');
+        bad = true;
+      } else if (nfAbs && nfAbs.coverAM) txt = 'Day Float ' + nfAbs.coverAM + ' covers ' + (dutyStr || 'their daytime');
+      else if ((b.dayFloats || []).indexOf(nf) !== -1) txt = 'also the Day Float — nothing to cover';
+      else { txt = 'no Day Float today — ' + (dutyStr || 'their daytime') + ' is uncovered'; bad = true; }
+      card.appendChild(el('div', { class: 'abs-auto' + (bad ? ' bad' : '') }, [
+        el('span', { class: 'abs-auto-k', text: 'Night Float' }), el('b', { text: nf }), ' post-call · ' + txt
+      ]));
     }
 
-    var notes = el('div', { class: 'card' });
-    notes.appendChild(el('h2', {}, ['Other notes for the Vacation section ', el('span', { class: 'h-note', text: 'Optional — printed after the lines above' })]));
-    var ta = el('textarea', { rows: '2', placeholder: 'e.g. Djulbegovic at AAO Fri' });
-    ta.value = st.vacation;
-    ta.addEventListener('input', function () { st.vacation = ta.value; touch(); });
-    notes.appendChild(ta);
-    host.appendChild(notes);
+    // a note for the Vacation section — a link until there is one
+    var noteOpen = !!trim(st.vacation) || vacationNoteOpen;
+    if (noteOpen) {
+      var ta = el('textarea', { rows: '2', placeholder: 'Vacation note, e.g. Djulbegovic at AAO Fri', 'aria-label': 'Vacation note' });
+      ta.value = st.vacation;
+      ta.addEventListener('input', function () { st.vacation = ta.value; touch(); });
+      card.appendChild(ta);
+    } else {
+      card.appendChild(el('button', { type: 'button', class: 'btn-link abs-note-link', text: '+ Vacation note', onclick: function () { vacationNoteOpen = true; renderOutTab(); } }));
+    }
+    host.appendChild(card);
+    if (dayIsBlank()) host.appendChild(importCallout('Running a day someone else built?'));
 
     host.appendChild(stepFoot('roster'));
   }
+  var vacationNoteOpen = false;
 
   /* ------------------------------------------------------------------ */
   /* tab 5 — Coverage: who is free, who backs up whom, what if a globe   */
@@ -3003,10 +3326,10 @@
     return 13 * 60;
   }
 
-  // 'Surg 2', 'PT', 'Wills OR', 'Retina Private — no cover needed'
+  // 'Surg 2', 'PT', 'Wills OR', 'Retina Private' (under "Pull first",
+  // which already says leaving it needs no cover)
   function availWhat(x) {
-    var t = String(x.label || x.text || '').replace(/, no case$/, '');
-    return x.group === 'pull' ? t + ' — no cover needed' : t;
+    return String(x.label || x.text || '').replace(/, no case$/, '');
   }
 
   // The open-ended list (no typed end) whose session end opens a free
@@ -3018,7 +3341,7 @@
     return st.kind === 'case' && st.openEnded && st.until != null && Math.abs(st.until - t) <= 5 ? st.label : '';
   }
 
-  // 'after Henry x10', 'until 10:15', 'except during Henry x10 (from 10:15)',
+  // 'after Henry ×10', 'until 10:15', 'except during Henry ×10 (from 10:15)',
   // 'from 10:45' (a typed end), '8:00–9:30'
   function availWhen(x, s) {
     var S = window.Status;
@@ -3059,7 +3382,7 @@
     c.assigned = pickName;
     if (ho && ho.primary) {
       c.backup = ho.primary.name;
-      c.backupNote = 'to cover ' + ho.clinic.toLowerCase() + ' clinic' + (ho.owner !== pickName ? ' (for ' + ho.owner + ')' : '') + ' during case';
+      c.backupNote = 'to cover ' + clinicWord(ho.clinic) + ' clinic' + (ho.owner !== pickName ? ' (for ' + ho.owner + ')' : '') + ' during case';
     }
     App.state.cases.push(c);
     caseSectionOpen.wills = true;
@@ -3081,16 +3404,28 @@
 
   function handoffLine(pickName, ho) {
     var S = window.Status;
+    // 'Glaucoma (Shields) → Aguwa (Surg 1) from 1:00 PM until Shields is
+    // back' — with the owner out all day, until whoever was covering is back
+    var b = App.board;
+    var sess = ho.window.start < (b ? b.noon : 720) ? 'am' : 'pm';
+    var back = b && b.isOut(ho.owner, sess) ? pickName : ho.owner;
     return el('div', { class: 'handoff ' + (ho.primary ? '' : 'bad') }, [
-      pickName + ' leaves ' + ho.clinic + (ho.owner !== pickName ? ' (covering for ' + ho.owner + ')' : '') + ' → ',
+      ho.clinic + ' (' + ho.owner + ') → ',
       ho.primary ? el('b', { text: ho.primary.name }) : el('b', { text: 'nobody on the coverage chain is free' }),
       ho.primary
-        ? ' (' + ho.primary.source + ') covers ' + ho.clinic + ' from ' + S.fmtClock(ho.window.start) + ' until ' + ho.owner + ' is back'
+        ? ' (' + ho.primary.source + ') from ' + S.fmtClock(ho.window.start) + ' until ' + back + ' is back'
         : ' — Surg 2’s call; ' + outsideText(ho.outside, ho.pullable)
     ]);
   }
 
   function planTimeOf(item, t) { return item.t != null ? item.t : t; }
+
+  // Tonight's add-on call (the Add-on call card) — '' when not set
+  function tonightCall() {
+    var d = App.state && App.state.date;
+    var row = (App.state.addOns || []).filter(function (x) { return x.date === d && (x.period || 'night') === 'night' && trim(x.name); })[0];
+    return row ? trim(row.name) : '';
+  }
 
   // One row per add-on: what it is, when it comes in, remove.
   function planRow(item, idx, t) {
@@ -3112,37 +3447,48 @@
     row.appendChild(sel);
     row.appendChild(el('label', { class: 'plan-at' }, ['at ', inp]));
     row.appendChild(el('button', {
-      type: 'button', class: 'btn-icon danger', title: 'Remove this add-on', text: '×',
+      type: 'button', class: 'btn-icon danger', title: 'Remove this add-on', 'aria-label': 'Remove add-on ' + (idx + 1), text: '×',
       onclick: function () { planItems.splice(idx, 1); renderCoverageBody(); }
     }));
     return row;
   }
 
-  // A general clinic (CPEC) — Surg 3 / Surg 4 leave it only for an urgent
-  // case (10/18/2026: "thursday CPEC would theoretically need coverage if
-  // surg 3 has an urgent cornea case"), unlike their subspecialty clinic,
-  // where scheduled cases run (Cornea Mon/Wed/Fri, Glaucoma Tue/Wed/Thu).
-  var GENERAL_CLINICS = ['CPEC'];
-  function isGeneralClinic(text) { return GENERAL_CLINICS.indexOf(trim(text)) !== -1; }
 
   // The role that always takes a globe (data.alwaysTakes — Surg 2), or ''
   function globeRole() {
     return window.Assign && window.Assign.alwaysRole ? window.Assign.alwaysRole({ category: 'trauma' }, data()) : '';
   }
 
-  // What Surg n's holder already has today, without estimated times:
-  // their lists and the clinics they cover as a backup ->
-  // ['operating: Tyson ×3 (1:00 PM)', 'covering Cornea for Djulbegovic during Hark ×1']
+  // What Surg n's holder already has today, without estimated times: a duty
+  // that is not free time (a clinic they cover for someone out, the ER),
+  // their lists, and the clinics they cover as a backup ->
+  // ['ER for Marshall all day', 'operating — Tyson ×3 (1:00 PM)',
+  //  'covering Glaucoma for Shields from 1:00 PM']
   function roleCommitments(n) {
     var b = App.board;
+    var S = window.Status;
     var out = [];
     var names = [];
+    var sessOf = {};
     ['am', 'pm'].forEach(function (sess) {
       var a = b.actingSurg(n, sess);
-      if (a && names.indexOf(a.name) === -1) names.push(a.name);
+      if (!a) return;
+      if (names.indexOf(a.name) === -1) names.push(a.name);
+      (sessOf[a.name] = sessOf[a.name] || []).push(sess);
     });
     names.forEach(function (who) {
       var pre = names.length > 1 ? who + ': ' : '';
+      var duty = {};
+      var dutyOrder = [];
+      sessOf[who].forEach(function (sess) {
+        var st = b.base[who][sess];
+        if (st.kind === 'free' || st.kind === 'out') return;
+        if (!duty[st.label]) { duty[st.label] = []; dutyOrder.push(st.label); }
+        duty[st.label].push(sess);
+      });
+      dutyOrder.forEach(function (lab) {
+        out.push(pre + lab + (duty[lab].length === 2 ? ' all day' : ' ' + duty[lab][0].toUpperCase()));
+      });
       var op = operatingToday(who);
       if (op.cases.length) {
         out.push(pre + 'operating — ' + op.cases.map(function (c) {
@@ -3154,7 +3500,7 @@
         if (trim(c.backup) !== who || caseDone(c) || assignedOutCase(c)) return;
         var plan = null;
         try { plan = window.Assign.backupPlan(c, App.roster, data(), App.state.cases, b); } catch (e) { plan = null; }
-        if (plan) out.push(pre + 'covering ' + plan.clinic + ' for ' + plan.owner + ' during ' + caseListLabel(c));
+        if (plan) out.push(pre + 'covering ' + plan.clinic + ' for ' + plan.owner + (S && plan.window ? ' from ' + S.fmtClock(plan.window.start) : ''));
       });
     });
     return out;
@@ -3182,10 +3528,11 @@
     if (!b.actingSurg('2', 'am') && !b.actingSurg('2', 'pm')) {
       return el('p', { class: 'warn-line bad' }, ['Surg 2 is out with nobody covering (' + who + ') — a globe goes down the trauma chain.']);
     }
+    // 'No globe — Surg 2, Bair (for Cheng), is free.' or what they have:
+    // 'No globe — Surg 2, Samuel: covering Glaucoma for Shields from 1:00 PM.'
     var busy = roleCommitments('2');
     return el('p', { class: 'surg2-lede' }, [
-      el('b', { text: 'No globe' }), ' — Surg 2, ' + who + ', is free for clinic cover or to take over a case.',
-      busy.length ? el('span', { class: 'plan-via', text: ' Today: ' + busy.join(' · ') + '.' }) : null
+      el('b', { text: 'No globe' }), ' — Surg 2, ' + who + (busy.length ? ': ' + busy.join(' · ') + '.' : ', is free.')
     ]);
   }
 
@@ -3211,11 +3558,11 @@
           onclick: function () { planItems.push({ kind: 'globe', t: at }); renderCoverageBody(); }
         }),
         el('button', {
-          type: 'button', class: 'btn btn-small', text: planItems.length ? '+ Add another add-on' : '+ Another add-on',
+          type: 'button', class: 'btn btn-small', text: planItems.length ? '+ Add another add-on' : '+ Other add-on',
           onclick: function () { planItems.push({ kind: 'cornea', t: at }); renderCoverageBody(); }
         }),
         isToday() && planItems.length ? el('button', {
-          type: 'button', class: 'btn btn-small', text: 'Times → now',
+          type: 'button', class: 'btn btn-small', text: 'Set to now',
           title: 'Set every add-on to the current time',
           onclick: function () { planItems.forEach(function (it) { it.t = null; }); coverageFollowNow = true; coverageTime = null; renderCoverageBody(); }
         }) : null
@@ -3232,7 +3579,7 @@
 
     var list = planItems.map(function (it) { return { kind: it.kind, t: planTimeOf(it, t) }; });
     var callAfter = S.parseClock(data().callAfter || '16:30');
-    // 'Samuel is operating today — Tyson x3 (3 cases): the globe follows
+    // 'Samuel is operating today — Tyson ×3 (3 cases): the globe follows
     // their cases' and the 4:30 note — no estimated times (10/18/2026: "no
     // need to estimate how long it will take … check in on them manually")
     function waitNotes(it, who) {
@@ -3242,7 +3589,8 @@
       }
       if (it.overlap) out.push(who + ' also has ' + it.overlap + ' — check in with them.');
       if (it.always && callAfter != null && (it.follows || it.overlap || it.time >= callAfter)) {
-        out.push('Not rolled back by ' + S.fmtClock(callAfter) + ': it can go to the call person.');
+        var call = tonightCall();
+        out.push('Not rolled back by ' + S.fmtClock(callAfter) + ': it can go to the call person' + (call ? ' (' + call + ')' : '') + '.');
       }
       return out;
     }
@@ -3267,10 +3615,10 @@
         ]));
         var skips = skipSummary(it);
         var notes = it.pick ? waitNotes(it, it.pick.name) : [];
+        if (it.pick && skips) row.title = skips;
         row.appendChild(el('span', { class: 'plan-joint-who' }, it.pick ? [
           '→ ', el('b', { text: it.pick.name }), el('span', { class: 'plan-via', text: ' ' + it.pick.via }),
           el('span', { class: 'plan-why', text: ' — ' + (it.follows ? 'operating — follows ' + it.follows : statusBrief(it.status)) }),
-          skips ? el('span', { class: 'plan-why plan-skips', text: skips }) : null,
           notes.length ? el('span', { class: 'plan-why plan-skips', text: notes.join(' ') }) : null
         ] : [
           '⚠ nobody in the how-to chain is free — Surg 2’s call',
@@ -3294,7 +3642,7 @@
               toast(filled.length + ' add-on case' + (filled.length === 1 ? '' : 's') + ' added — fill in the surgeons on Surgery');
             }
           }),
-          el('span', { class: 'field-hint', text: 'Adds them to Surgery (Wills) so the board, clinics and the copied schedule all follow.' })
+          el('span', { class: 'field-hint', text: 'Adds them to Surgery (Wills).' })
         ]));
       }
       return card;
@@ -3302,30 +3650,37 @@
 
     var one = list[0];
     var plan = window.Assign.planAddOn(one.kind, one.t, App.roster, data(), b);
-    if (!plan.always) {
+    if (plan.always && plan.pick) {
+      // the role that always takes it (a globe → Surg 2): one line, no chain
+      card.appendChild(el('div', { class: 'plan-one' }, [
+        '→ ', el('b', { text: plan.pick.name }),
+        el('span', { class: 'plan-via', text: ' ' + plan.pick.via }),
+        el('span', { class: 'plan-why', text: ' — ' + (plan.follows ? 'operating — follows ' + plan.follows : statusBrief(plan.pickStatus)) })
+      ]));
+    } else {
       card.appendChild(el('div', {
         class: 'field-hint plan-chain',
         text: 'How-to Step ' + plan.step + ': ' + plan.hierLabel + (plan.step < 10 ? ' — nobody on it: the remaining-cases chain (Step 10)' : '') + '.'
       }));
+      var ol = el('ol', { class: 'plan-steps' });
+      var shownAlt = 0;
+      var lastStep = null;
+      plan.steps.some(function (st) {
+        if (st.verdict === 'alt') { if (shownAlt >= 2) return true; shownAlt++; }
+        if (lastStep !== null && st.step !== lastStep) {
+          ol.appendChild(el('li', { class: 'plan-stage', text: 'Skipped for now → Step 10, remaining cases' }));
+        }
+        lastStep = st.step;
+        ol.appendChild(el('li', { class: 'plan-step ' + st.verdict }, [
+          el('span', { class: 'plan-verdict', text: st.verdict === 'take' ? '✓ takes it' : st.verdict === 'skip' ? 'skip' : 'next' }),
+          el('b', { text: st.name }),
+          el('span', { class: 'plan-via', text: ' ' + st.via }),
+          el('span', { class: 'plan-why', text: ' — ' + (st.why || (st.always && plan.follows ? 'operating — follows ' + plan.follows : statusBrief(st.status))) })
+        ]));
+        return false;
+      });
+      card.appendChild(ol);
     }
-    var ol = el('ol', { class: 'plan-steps' });
-    var shownAlt = 0;
-    var lastStep = null;
-    plan.steps.some(function (st) {
-      if (st.verdict === 'alt') { if (shownAlt >= 2) return true; shownAlt++; }
-      if (lastStep !== null && st.step !== lastStep) {
-        ol.appendChild(el('li', { class: 'plan-stage', text: 'Skipped for now → Step 10, remaining cases' }));
-      }
-      lastStep = st.step;
-      ol.appendChild(el('li', { class: 'plan-step ' + st.verdict }, [
-        el('span', { class: 'plan-verdict', text: st.verdict === 'take' ? '✓ takes it' : st.verdict === 'skip' ? 'skip' : 'next' }),
-        el('b', { text: st.name }),
-        el('span', { class: 'plan-via', text: ' ' + st.via }),
-        el('span', { class: 'plan-why', text: ' — ' + (st.why || (st.always && plan.follows ? 'operating — follows ' + plan.follows : statusBrief(st.status))) })
-      ]));
-      return false;
-    });
-    card.appendChild(ol);
 
     if (!plan.pick) {
       card.appendChild(el('div', { class: 'warn-line bad', text: '⚠ Nobody in the how-to chain is free — Surg 2’s call: ' + outsideText(plan.outside, plan.pullable) + '.' }));
@@ -3339,7 +3694,7 @@
     card.appendChild(el('div', { class: 'plan-actions' }, [
       el('button', {
         type: 'button', class: 'btn btn-primary',
-        text: 'Add it as an add-on case → ' + plan.pick.name + (ho && ho.primary ? ' (backup ' + ho.primary.name + ')' : ''),
+        text: (one.kind === 'globe' ? 'Add the globe → ' : 'Add the add-on → ') + plan.pick.name + (ho && ho.primary ? ' (backup ' + ho.primary.name + ')' : ''),
         onclick: function () {
           var def = addPlannedCase(one.kind, one.t, plan.pick.name, ho);
           planItems = [];
@@ -3348,7 +3703,7 @@
           toast(def.label + ' added at ' + S.fmtClock(one.t) + ' → ' + plan.pick.name + ' — fill in the surgeon on Surgery');
         }
       }),
-      el('span', { class: 'field-hint', text: 'Adds it to Surgery (Wills) so the board, clinics and the copied schedule all follow.' })
+      el('span', { class: 'field-hint', text: 'Adds to Surgery (Wills).' })
     ]));
     return card;
   }
@@ -3365,7 +3720,7 @@
       var a = acting(sess);
       if (a) return a.name + (a.for ? ' (for ' + a.for + ')' : '');
       var oc = outCovers(name).filter(function (x) { return x.s === sess; })[0];
-      return name + ' out — ' + (oc && oc.who === 'NC' ? 'NC' : 'cover not picked');
+      return name + ' out — ' + (oc && oc.who === 'NC' ? 'NC' : oc && oc.blocked ? 'TBD (' + oc.blocked + ')' : 'TBD');
     }
     if (!b) return name;
     var am = one('am');
@@ -3373,10 +3728,11 @@
     return am === pm ? am : 'AM ' + am + ' · PM ' + pm;
   }
 
-  function rolesCard() {
+  // The roles row at the top of the day board
+  function rolesRow() {
     var b = App.board;
     var r = App.roster || {};
-    var wrap = el('div', { class: 'card-lite roles-card' });
+    var wrap = el('div', { class: 'roles-card' });
     wrap.appendChild(el('span', { class: 'roles-key', text: 'Today’s roles' }));
     var list = el('span', { class: 'roles-list' });
     Object.keys(r.surg || {}).sort(function (x, y) { return (+x) - (+y); }).forEach(function (n) {
@@ -3421,12 +3777,12 @@
     }
     var t = coverageNow();
     if (!(App.state.cases || []).length) host.appendChild(importCallout('No cases for this day in this browser. If someone else built it —'));
-    host.appendChild(rolesCard());
+    // what is open, then Surg 2 and a globe, then the day
     var needsHost = el('div');
-    renderNeedsCard(needsHost, 'Needs coverage', 'Open items from every tab');
+    renderNeedsCard(needsHost, 'Needs coverage', '');
     host.appendChild(needsHost);
-    host.appendChild(dayBoard());
     host.appendChild(planCard(t));
+    host.appendChild(dayBoard());
   }
 
   /* ---- the day at a glance ------------------------------------------- */
@@ -3498,7 +3854,8 @@
       var info = b.caseInfo[c.id];
       if (!a || a === 'NC' || !b.byName[a] || !info || assignedOutCase(c)) return;
       var touches = info.spans.some(function (sp) { return sp.start < hi && sp.end > lo; }) ||
-        (info.start >= lo && info.start < hi); // checked off before it began
+        (info.start >= lo && info.start < hi) || // checked off before it began
+        (s === 'pm' && info.start >= hi); // typed after the board's day
       if (!touches) return;
       if (!by[a]) { by[a] = []; names.push(a); }
       by[a].push(c);
@@ -3510,10 +3867,61 @@
     return names.map(function (n) { return { name: n, cases: by[n] }; });
   }
 
-  // One list with its check-off box. Checking it off ends it then — now,
+  // The clinic(s) a list pulls its resident out of in session s, and who
+  // covers each meanwhile, as the board has it (chains included: Surg 2
+  // covers, then takes a globe, and Surg 4 covers) ->
+  // [{ clinic, owner, names: ['Bair'] | ['Bair', ''] }] ('' = nobody)
+  function listCovers(c, s) {
+    var b = App.board;
+    var info = b && b.caseInfo[c.id];
+    var a = trim(c.assigned);
+    if (c.done || !info || !a || !b.byName[a] || assignedOutCase(c)) return [];
+    var lo = s === 'am' ? b.dayStart : b.noon;
+    var hi = s === 'am' ? b.noon : b.dayEnd;
+    var parts = [];
+    info.spans.forEach(function (sp) {
+      for (var t = Math.max(sp.start, lo); t < Math.min(sp.end, hi); t += 5) {
+        var st = b.statusAt(a, t + 1, { exclude: c.id });
+        if (st.kind !== 'clinic' || st.pullFirst) continue; // Retina / Uveitis: no cover needed
+        var owner = st.covering || a;
+        var who = '';
+        for (var i = 0; i < b.order.length && !who; i++) {
+          var m = b.order[i];
+          if (m === a || m === owner) continue;
+          var ms = b.statusAt(m, t + 1);
+          if (ms.kind === 'clinic' && ms.clinic === st.clinic && ms.covering === owner) who = m;
+        }
+        var last = parts[parts.length - 1];
+        if (!last || last.clinic !== st.clinic || last.owner !== owner) parts.push(last = { clinic: st.clinic, owner: owner, names: [] });
+        if (!last.names.length || last.names[last.names.length - 1] !== who) last.names.push(who);
+      }
+    });
+    return parts;
+  }
+
+  // listCovers in words -> [{ text, bad }]: 'Glaucoma → Bair' ·
+  // 'Glaucoma → Bair, then nobody' · 'Glaucoma: NC' · 'Glaucoma: nobody covering'
+  function coverWords(c, s) {
+    var a = trim(c.assigned);
+    return listCovers(c, s).map(function (p) {
+      var what = p.clinic + (p.owner !== a ? ' (for ' + p.owner + ')' : '');
+      var none = p.names.every(function (n) { return !n; });
+      if (none && trim(c.backup) === 'NC') return { text: what + ': NC', bad: false };
+      if (none) return { text: what + ': nobody covering', bad: true };
+      return { text: what + ' → ' + p.names.map(function (n) { return n || 'nobody'; }).join(', then '), bad: p.names.indexOf('') !== -1 };
+    });
+  }
+
+  function coverNodes(words) {
+    return words.map(function (w) { return el('span', { class: 'db-cover' + (w.bad ? ' bad-text' : ''), text: ' · ' + w.text }); });
+  }
+
+  // One list with its check-off box — the whole line is the box's label, so
+  // a tap on the text checks it off. Checking it off ends it then — now,
   // today; the end of its session on another day — and the time can be
   // corrected; the resident is free from that minute (chief, 9/29/2026:
-  // "check off when the cases are done and who clears up").
+  // "check off when the cases are done and who clears up"). A list that
+  // pulls its resident out of a clinic says who covers it: '· Glaucoma → Bair'.
   function checkoffItem(c, who, s) {
     var S = window.Status;
     var b = App.board;
@@ -3536,13 +3944,16 @@
       touch();
       refreshEverything();
     });
-    item.appendChild(el('label', { class: 'done-check' }, [box]));
     var start = caseStartText(c);
     var since = s === 'pm' && info.start < b.noon;
-    item.appendChild(el('span', { class: 'db-list-text' }, [
-      caseListLabel(c),
-      el('span', { class: 'plan-via', text: (since ? ' · since the morning' : start ? ' · ' + start : '') + (c.addOn ? ' · add-on' : '') })
+    item.appendChild(el('label', { class: 'done-check' }, [
+      box,
+      el('span', { class: 'db-list-text' }, [
+        caseListLabel(c),
+        el('span', { class: 'plan-via', text: (since ? ' · since the morning' : start ? ' · ' + start : '') + (c.addOn ? ' · add-on' : '') })
+      ])
     ]));
+    coverNodes(coverWords(c, s)).forEach(function (n) { item.appendChild(n); });
     if (c.done) {
       var tin = el('input', {
         type: 'time', class: 'done-time', step: '300', 'aria-label': 'Done at',
@@ -3562,25 +3973,37 @@
 
   // Who goes from a morning OR — their OR block, or a list of theirs that
   // morning — to an afternoon clinic (Retina / Uveitis aside: no cover
-  // needed) -> [{ name, from, clinic, covering }]
+  // needed) -> [{ name, from, clinic, covering, pmLists, allDay, done }].
+  // pmLists: afternoon lists that keep them out of that clinic (who covers
+  // it rides with them); allDay: a morning list that runs on into the
+  // afternoon; done ('11:40 AM'): every morning list is checked off.
   function orToClinic() {
     var b = App.board;
+    var S = window.Status;
     var rows = [];
     b.order.forEach(function (n) {
       var am = b.base[n].am;
       var pm = b.base[n].pm;
       if (am.kind === 'out' || pm.kind === 'out' || pm.kind !== 'clinic' || pm.pullFirst) return;
-      var amLists = (App.state.cases || []).filter(function (c) {
-        var info = b.caseInfo[c.id];
-        return trim(c.assigned) === n && info && info.start < b.noon && !assignedOutCase(c);
-      });
+      var mine = (App.state.cases || []).filter(function (c) {
+        return trim(c.assigned) === n && b.caseInfo[c.id] && !assignedOutCase(c);
+      }).sort(function (x, y) { return b.caseInfo[x.id].start - b.caseInfo[y.id].start; });
+      var amLists = mine.filter(function (c) { return b.caseInfo[c.id].start < b.noon; });
       if (am.cls !== 'or' && !amLists.length) return;
+      function intoPm(c) { return !c.done && b.caseInfo[c.id].spans.some(function (sp) { return sp.end > b.noon; }); }
+      var doneAt = null;
+      if (amLists.length && amLists.every(function (c) { return c.done; })) {
+        amLists.forEach(function (c) { var e = b.caseInfo[c.id].end; if (doneAt == null || e > doneAt) doneAt = e; });
+      }
       rows.push({
         name: n, from: amLists.length ? amLists.map(caseListLabel).join(', ') : am.text,
-        clinic: pm.text, covering: pm.covering && pm.covering !== n ? pm.covering : ''
+        clinic: pm.text, covering: pm.covering && pm.covering !== n ? pm.covering : '',
+        pmLists: mine.filter(function (c) { return b.caseInfo[c.id].start >= b.noon && intoPm(c); }),
+        allDay: amLists.filter(intoPm),
+        done: doneAt != null && S ? S.fmtClock(doneAt) : ''
       });
     });
-    return rows.sort(function (x, y) { return yearRank(x.name) - yearRank(y.name); });
+    return rows.sort(function (x, y) { return (x.done ? 1 : 0) - (y.done ? 1 : 0) || yearRank(x.name) - yearRank(y.name); });
   }
 
   function dayChip(name, sub, extra) {
@@ -3590,13 +4013,83 @@
     ]);
   }
 
+  // why someone is out, as the board's Out line says it
+  var OUT_WORD = { vacation: 'vacation', sick: 'sick', conference: 'conference', nightfloat: 'post-call', other: 'out' };
+
+  // Everyone out today, once: 'Cheng (vacation) → Bair' · 'Cotton (post-call)
+  // → Camacho' · 'Hamou (sick) PM → NC' · 'Calotti (vacation) — no cover needed'
+  function outLine() {
+    var b = App.board;
+    var noCover = b.noCoverTexts || [];
+    var outs = b.order.filter(function (n) { return b.isOut(n, 'am') || b.isOut(n, 'pm'); });
+    if (!outs.length) return null;
+    var line = el('div', { class: 'db-line db-outline' }, [el('span', { class: 'db-k', text: 'Out' })]);
+    outs.forEach(function (n, i) {
+      var oc = outCovers(n);
+      var abs = b.base[n][oc[0].s].absence || {};
+      function whoNode(x) {
+        if (!x.who && noCover.indexOf(b.base[n][x.s].text) !== -1) return el('span', { class: 'plan-via', text: 'no cover needed' });
+        if (x.who === 'NC') return el('span', { class: 'plan-via', text: 'NC' });
+        if (x.blocked) return el('span', { class: 'bad-text', text: 'TBD (' + x.blocked + ')' });
+        return x.who ? el('b', { text: x.who }) : el('span', { class: 'bad-text', text: 'TBD' });
+      }
+      var half = oc.length === 1 ? ' ' + oc[0].s.toUpperCase() : '';
+      var covers = oc.length === 2 && (oc[0].who !== oc[1].who || oc[0].blocked !== oc[1].blocked)
+        ? ['AM ', whoNode(oc[0]), ' · PM ', whoNode(oc[1])]
+        : [whoNode(oc[0])];
+      line.appendChild(el('span', { class: 'db-out' }, [
+        el('b', { class: 'res-name ' + yearOf(n), text: n }),
+        el('span', { class: 'plan-via', text: ' (' + (OUT_WORD[abs.reason] || 'out') + ')' + half + ' → ' })
+      ].concat(covers, i < outs.length - 1 ? [el('span', { class: 'db-sep', text: ' · ' })] : [])));
+    });
+    return line;
+  }
+
+  // Today, during the day: who is free this minute -> the line, or null
+  function freeNowLine(now) {
+    var b = App.board;
+    var S = window.Status;
+    var names = b.freeAt(now).filter(function (n) { return !b.statusAt(n, now).neverPull; })
+      .sort(function (x, y) { return yearRank(x) - yearRank(y); });
+    return el('div', { class: 'db-line db-now' }, [el('span', { class: 'db-k', text: 'Free now · ' + S.fmtClock(now) })].concat(
+      names.length ? names.map(function (n, i) {
+        return el('span', { class: 'db-now-name', title: b.statusAt(n, now).label || '' }, [
+          el('b', { class: 'res-name ' + yearOf(n), text: n }), i < names.length - 1 ? ', ' : null
+        ]);
+      }) : [el('span', { class: 'empty-note', text: 'nobody' })]));
+  }
+
+  // A free entry with only the windows worth showing: not one that just runs
+  // until the resident's own list starts (the list already says when), and
+  // today not one that is over. -> the entry (copied) or null
+  function freeWorthShowing(x, s, now) {
+    var b = App.board;
+    var kept = x.ranges.filter(function (r) {
+      if (r.end < x.to && b.statusAt(x.name, r.end + 1).kind === 'case') return false;
+      return now == null || r.end > now;
+    });
+    if (!kept.length) return null;
+    var y = {};
+    for (var k in x) y[k] = x[k];
+    y.ranges = kept;
+    y.full = kept.length === 1 && kept[0].start === x.from && kept[0].end === x.to;
+    return y;
+  }
+
   function dayBoard() {
     var b = App.board;
     var S = window.Status;
     var card = el('div', { class: 'card day-board' });
-    card.appendChild(el('h2', {}, ['Today at a glance ', el('span', {
-      class: 'h-note', text: 'Check a list off when it is done — they are free from then.'
+    card.appendChild(el('h2', {}, ['The day ', el('span', {
+      class: 'h-note', text: 'Check off each list when it finishes — they are free from then.'
     })]));
+    card.appendChild(rolesRow());
+    var out = outLine();
+    if (out) card.appendChild(out);
+    var now = isToday() ? nowMinutes() : null;
+    var live = now != null && now >= b.dayStart && now < b.dayEnd;
+    if (live) card.appendChild(freeNowLine(now));
+    var amOver = live && now >= b.noon;
 
     var moves = orToClinic();
     if (moves.length) {
@@ -3604,23 +4097,39 @@
       band.appendChild(el('div', { class: 'db-h', text: 'Morning OR → afternoon clinic' + (S ? ' (' + S.fmtClock(b.pmClinicStart) + ')' : '') }));
       var ul = el('ul', { class: 'db-moves' });
       moves.forEach(function (m) {
-        ul.appendChild(el('li', {}, [
+        var li = el('li', { class: m.done ? 'done' : '' }, [
           el('b', { class: 'res-name ' + yearOf(m.name), text: m.name }),
           el('span', { class: 'db-tag', text: whoTag(m.name) }),
-          ' ' + m.from + ' → ',
-          el('b', { text: m.clinic }),
-          m.covering ? el('span', { class: 'plan-via', text: ' (covering ' + m.covering + ')' }) : null
-        ]));
+          ' ' + m.from,
+          m.done ? el('span', { class: 'db-done', text: ' ✓ ' + m.done }) : null
+        ]);
+        if (m.pmLists.length || m.allDay.length) {
+          // an afternoon list keeps them out of the clinic: who covers it
+          var lists = m.pmLists.length ? m.pmLists : m.allDay;
+          li.appendChild(document.createTextNode(m.pmLists.length ? ' → ' + m.pmLists.map(caseListLabel).join(', ') : ', all day'));
+          var words = [];
+          lists.forEach(function (c) { words = words.concat(coverWords(c, 'pm')); });
+          coverNodes(words).forEach(function (n) { li.appendChild(n); });
+        } else {
+          li.appendChild(document.createTextNode(' → '));
+          li.appendChild(el('b', { text: m.clinic }));
+          if (m.covering) li.appendChild(el('span', { class: 'plan-via', text: ' (covering ' + m.covering + ')' }));
+        }
+        ul.appendChild(li);
       });
       band.appendChild(ul);
       card.appendChild(band);
     }
 
-    var cols = el('div', { class: 'db-cols' });
+    // after noon today the afternoon comes first on a phone, and the morning
+    // keeps only its lists (to check off)
+    var cols = el('div', { class: 'db-cols' + (amOver ? ' pm-first' : '') });
     [['am', 'AM'], ['pm', 'PM']].forEach(function (p) {
       var s = p[0];
-      var col = el('div', { class: 'db-col' });
-      col.appendChild(el('h3', { class: 'avail-h', text: p[1] }));
+      var past = s === 'am' && amOver;
+      var nowCol = live && ((s === 'am') === (now < b.noon));
+      var col = el('div', { class: 'db-col db-col-' + s + (past ? ' past' : '') + (nowCol ? ' now' : '') });
+      col.appendChild(el('h3', { class: 'avail-h' }, [p[1], past ? el('span', { class: 'h-note', text: ' over' }) : null]));
 
       // operating
       var ops = operatingIn(s);
@@ -3631,10 +4140,12 @@
         var count = 0;
         left.forEach(function (c) { count += caseCountOf(c); });
         var row = el('div', { class: 'db-op' + (left.length ? '' : ' done') });
+        // a count only when it adds something: more than one list
+        var countText = !left.length ? 'done' : o.cases.length > 1 ? count + ' case' + (count === 1 ? '' : 's') + (left.length < o.cases.length ? ' left' : '') : '';
         row.appendChild(el('div', { class: 'db-who' }, [
           el('b', { class: 'res-name ' + yearOf(o.name), text: o.name }),
           el('span', { class: 'db-tag', text: whoTag(o.name, [s]) }),
-          el('span', { class: 'db-count', text: left.length ? (count + ' case' + (count === 1 ? '' : 's')) : 'done' })
+          countText ? el('span', { class: 'db-count', text: countText }) : null
         ]));
         var lists = el('div', { class: 'db-lists' });
         o.cases.forEach(function (c) { lists.appendChild(checkoffItem(c, o.name, s)); });
@@ -3642,10 +4153,16 @@
         opBox.appendChild(row);
       });
       col.appendChild(opBox);
+      if (past) {
+        cols.appendChild(col);
+        return;
+      }
 
-      // free, then pull first (Retina / Uveitis — no cover needed)
+      // free, then pull first (Retina / Uveitis — leaving needs no cover)
+      var nowHere = live && (s === 'am' ? now < b.noon : true) ? now : null;
       var av = b.availableInSession(s);
-      var free = av.filter(function (x) { return x.group === 'free'; }).sort(function (x, y) { return yearRank(x.name) - yearRank(y.name) || (x.full ? 0 : 1) - (y.full ? 0 : 1); });
+      var free = av.filter(function (x) { return x.group === 'free'; }).map(function (x) { return freeWorthShowing(x, s, nowHere); })
+        .filter(Boolean).sort(function (x, y) { return yearRank(x.name) - yearRank(y.name) || (x.full ? 0 : 1) - (y.full ? 0 : 1); });
       var pull = av.filter(function (x) { return x.group === 'pull'; }).sort(function (x, y) { return yearRank(x.name) - yearRank(y.name); });
       var freeBox = el('div', { class: 'db-sec' }, [el('div', { class: 'db-h', text: 'Free' })]);
       var fr = el('div', { class: 'free-row' });
@@ -3659,24 +4176,6 @@
         pull.forEach(function (x) { pr.appendChild(dayChip(x.name, availWhat(x), ' pull')); });
         pullBox.appendChild(pr);
         col.appendChild(pullBox);
-      }
-
-      // out, and who covers
-      var outs = b.order.filter(function (n) { return b.isOut(n, s); });
-      if (outs.length) {
-        var outBox = el('div', { class: 'db-sec' }, [el('div', { class: 'db-h', text: 'Out' })]);
-        var ol = el('div', { class: 'db-outs' });
-        outs.forEach(function (n) {
-          var oc = outCovers(n).filter(function (x) { return x.s === s; })[0];
-          var who = oc ? oc.who : '';
-          ol.appendChild(el('span', { class: 'db-out' }, [
-            el('b', { class: 'res-name ' + yearOf(n), text: n }),
-            el('span', { class: 'plan-via', text: ' ' + (b.base[n][s].label || 'out') + ' → ' }),
-            who === 'NC' ? el('span', { class: 'bad-text', text: 'NC' }) : who ? el('b', { text: who }) : el('span', { class: 'bad-text', text: 'cover not picked' })
-          ]));
-        });
-        outBox.appendChild(ol);
-        col.appendChild(outBox);
       }
       cols.appendChild(col);
     });
@@ -3696,7 +4195,11 @@
     clearNode(host);
     var b = App.board;
     var S = window.Status;
-    var show = WORKFLOW_TABS.indexOf(App.activeTab) !== -1 && b && b.order.length && S;
+    // Coverage shows the day itself (Free now, Free AM | PM) — no strip there
+    // …nor on Out today / Roster before any case is in: everyone in a Surg
+    // role or OR block reads "free" then, though they are the ones operating
+    var early = (App.activeTab === 'out' || App.activeTab === 'roster') && !(App.state.cases || []).some(function (c) { return !isDraftCase(c); });
+    var show = WORKFLOW_TABS.indexOf(App.activeTab) !== -1 && App.activeTab !== 'coverage' && !early && b && b.order.length && S;
     host.classList.toggle('hidden', !show);
     if (!show) return;
     function list(items) {
@@ -3768,9 +4271,12 @@
     else setBadge('badge-out', st.outConfirmed ? '✓' : '', 'ok');
     var needRes = (st.cases || []).filter(caseOpen).length;
     setBadge('badge-surgery', needRes ? String(needRes) : '', 'warn');
-    var clinicGaps = b ? b.needs.filter(function (n) { return n.type === 'clinic'; }).length : 0;
+    // the Clinics card lists absences and clinic gaps, so its badge counts
+    // both; a day with no roster (weekend, out of year) has nothing to cover
+    var live = b && b.order.length;
+    var clinicGaps = live ? b.needs.filter(function (n) { return n.type === 'clinic' || n.type === 'absence'; }).length : 0;
     setBadge('badge-clinics', clinicGaps ? String(clinicGaps) : '', 'warn');
-    var all = b ? b.needs.length : 0;
+    var all = live ? b.needs.length : 0;
     setBadge('badge-coverage', all ? String(all) : '', 'warn');
   }
 
@@ -3778,7 +4284,7 @@
     var wrap = el('div', { class: 'step-foot-inner' });
     if (next && TAB_TITLES[next]) {
       wrap.appendChild(el('button', {
-        type: 'button', class: 'btn btn-primary', text: 'Next: ' + TAB_TITLES[next] + ' →',
+        type: 'button', class: 'btn', text: 'Next: ' + TAB_TITLES[next] + ' →',
         onclick: function () { setTab(next); window.scrollTo(0, 0); }
       }));
     }
@@ -3812,35 +4318,44 @@
   /* tab 6 — Preview & Copy                                              */
   /* ------------------------------------------------------------------ */
 
+  // Before sending: everything still open, each with its fix — what the
+  // board needs, what contradicts itself (a cover out too, one cover for
+  // two), add-on call rows with no name (left out of the copy), and an Out
+  // today not looked at. Green only when none of that is left (review
+  // 10/19/2026: it went green over a self-contradicting copy).
   function renderSendCheck() {
     var host = $('sendCheck');
     if (!host) return;
     clearNode(host);
     var st = App.state;
     var b = App.board;
-    var noRes = (st.cases || []).filter(caseOpen).length;
-    // cases are counted above; the rest of what is open (absences, clinic gaps)
-    var gaps = b ? b.needs.filter(function (n) { return n.type !== 'case'; }).length : 0;
-    if (!noRes && !gaps) {
-      host.className = 'send-check ok';
-      host.appendChild(document.createTextNode('✓ Nothing open — every service case has a resident and every gap has a decision'));
+    if (!b || !b.order.length) { host.className = 'send-check'; return; }
+    var needs = mergeDayNeeds(b.needs || []);
+    var warns = b.warnings || [];
+    var blankCall = (st.addOns || []).filter(function (a) { return a && a.date && !trim(a.name) && !a.cleared; });
+    var outOpen = !st.outConfirmed && !(st.absences || []).some(function (a) { return trim(a.name); });
+    var noCases = !(st.cases || []).some(function (c) { return !isDraftCase(c); });
+    if (!needs.length && !warns.length && !blankCall.length && !outOpen) {
+      host.className = 'send-check' + (noCases ? '' : ' ok');
+      host.appendChild(document.createTextNode(noCases ? 'No cases yet.' : '✓ Nothing open'));
       return;
     }
     host.className = 'send-check warn';
-    host.appendChild(document.createTextNode('⚠ Still open: '));
-    if (noRes) {
-      host.appendChild(el('button', {
-        type: 'button', class: 'btn-link', text: noRes + (noRes === 1 ? ' case' : ' cases') + ' without a resident',
-        onclick: function () { setTab('surgery'); window.scrollTo(0, 0); }
-      }));
+    host.appendChild(el('div', { class: 'send-check-h', text: '⚠ Still open' }));
+    if (outOpen) {
+      host.appendChild(el('div', { class: 'need-row' }, [
+        el('div', { class: 'need-text' }, [el('b', { text: 'Out today' }), ' — not filled in (or “No one out”)']),
+        el('div', { class: 'need-actions' }, [el('button', { type: 'button', class: 'btn btn-small', text: 'Out today', onclick: function () { setTab('out'); window.scrollTo(0, 0); } })])
+      ]));
     }
-    if (noRes && gaps) host.appendChild(document.createTextNode(' · '));
-    if (gaps) {
-      host.appendChild(el('button', {
-        type: 'button', class: 'btn-link', text: gaps + (gaps === 1 ? ' gap needs' : ' gaps need') + ' coverage',
-        onclick: function () { setTab('coverage'); window.scrollTo(0, 0); }
-      }));
-    }
+    needs.forEach(function (n) { host.appendChild(needItem(n)); });
+    warns.forEach(function (w) { host.appendChild(el('div', { class: 'warn-line bad', text: '⚠ ' + w })); });
+    blankCall.forEach(function (a) {
+      host.appendChild(el('div', { class: 'need-row' }, [
+        el('div', { class: 'need-text' }, [el('b', { text: addOnLabel(a) }), ' — add-on call: no name yet (left out of the copy)']),
+        el('div', { class: 'need-actions' }, [el('button', { type: 'button', class: 'btn btn-small', text: 'Add-on call', onclick: function () { setTab('coverage'); var c = $('addOnsCoverage'); if (c && c.scrollIntoView) c.scrollIntoView({ block: 'center' }); } })])
+      ]));
+    });
   }
 
   function renderPreview() {
@@ -3958,7 +4473,7 @@
     var card = el('div', { class: 'card import-card' });
     card.appendChild(el('h2', {}, ['Paste the schedule you were sent ', el('span', {
       class: 'h-note',
-      text: 'The whole message — from email, a text or GroupMe. The app reads it into that day so Coverage works here; nothing is sent anywhere.'
+      text: 'The whole message, as sent. Nothing leaves this browser.'
     })]));
     var ta = el('textarea', {
       class: 'import-text', rows: '12', spellcheck: 'false',
@@ -3982,7 +4497,8 @@
     var open = cases.filter(needsResident).length;
     var bits = [];
     bits.push(cases.length + ' case' + (cases.length === 1 ? '' : 's') + (cases.length ? ' (' + staffed + ' with a resident' + (open ? ', ' + open + ' open' : '') + ')' : ''));
-    bits.push(day.absences.length ? day.absences.length + ' out' : (day.outConfirmed ? 'no one out' : 'no Vacation section'));
+    if (day.absences.length) bits.push(day.absences.length + ' out');
+    else if (day.outConfirmed) bits.push('no one out');
     if (day.nightFloat) bits.push('Night Float ' + day.nightFloat);
     if (parsed.clinics.length) bits.push(parsed.clinics.length + ' clinic line' + (parsed.clinics.length === 1 ? '' : 's'));
     var named = parsed.addOns.length;
@@ -4032,7 +4548,7 @@
       var list = el('div', { class: 'imp-block' });
       list.appendChild(el('div', { class: 'imp-block-head' }, [
         el('b', { text: 'Cases' }),
-        el('span', { class: 'field-hint', text: 'Set each case’s type — it is not in the text, and the app uses it for case length and backup chains. Types you set are remembered for each attending.' })
+        el('span', { class: 'field-hint', text: 'Set each case’s type — it picks the chain. Remembered for each attending.' })
       ]));
       day.cases.forEach(function (c) {
         var sig = caseSig(c);
@@ -4185,28 +4701,22 @@
   }
 
   var CHAIN_TOKEN_LABELS = {
-    COOPER: 'Cooper (PGY-4)',
+    COOPER: 'Cooper (third year)',
     WILLS_OR: 'Wills OR',
     RETINA: 'Retina / Uveitis',
     PEDS_OR_JUNIOR: 'junior on Peds OR',
     FREE_JUNIOR: 'free junior at Surg 2’s discretion',
-    PLASTICS_OR_PGY2: 'PGY-2 on Plastics OR',
+    PLASTICS_OR_PGY2: 'first year on Plastics OR',
     PLASTICS_OR_JUNIOR: 'junior on Plastics OR'
   };
 
   // `skip`: tokens to leave out
-  function chainText(key, fallback, skip) {
-    var h = (data().hierarchy || {})[key];
-    if (!h || !(h.chain || []).length) return fallback;
-    return h.chain.filter(function (tok) { return (skip || []).indexOf(tok) === -1; }).map(function (tok) { return CHAIN_TOKEN_LABELS[tok] || tok; }).join(' → ');
-  }
-
   /* ------------------------------------------------------------------ */
   /* Library — Flow chart                                                */
   /* ------------------------------------------------------------------ */
-  // One page to refer to, or print for the lounge wall: the six steps and
-  // what each feeds forward, what happens when someone is out, who takes a
-  // case (the how-to's steps 3–10) and who covers a clinic (step 12). The
+  // One page to refer to, or print for the lounge wall: the rules only —
+  // Surg 2 and the globe, someone out, who takes a case (the how-to's steps
+  // 3–10) and who covers a clinic (step 12); the steps are on Home and How-to. The
   // chains come straight from the active configuration (data.hierarchy), so
   // a new year's chains show up here with no code change.
 
@@ -4269,25 +4779,14 @@
     return list.length > 1 ? list.slice(0, -1).join(', ') + ' or ' + list[list.length - 1] : list.join('');
   }
 
-  var FLOW_STEPS = [
-    { title: 'Out today', you: 'Who is out — all day, AM or PM — and who covers each session, or NC.', app: 'The coverer does the absent resident’s job that session: duty and place in every chain. Night Float is automatic.' },
-    { title: 'Roster', you: 'Check Night Float, add lectures.', app: 'Surg 1–5, WER, consults and clinics from the block schedule — with whoever covers anyone out.' },
-    { title: 'Surgery', you: 'Add the CPEC-sheet lists and the cases from the EMRs: Wills · Stadium / Cherry Hill · JHN · Privates.', app: 'Suggests a resident per case, in the how-to’s order, skipping anyone out or busy; asks for a backup when a case pulls someone from clinic.' },
-    { title: 'Clinics', you: 'Patient counts from the EMRs.', app: 'Shows who is out or pulled into a case, and who covers; anything left short is listed first.' },
-    { title: 'Coverage', you: 'On the day: check in with whoever is operating and check their lists off; plan a globe or add-ons.', app: 'What is still open, then the day at a glance — AM and PM: who is operating, who goes from a morning OR to an afternoon clinic, who is free, who is out — and who takes each add-on.' },
-    { title: 'Preview & Copy', you: 'Copy and send.', app: 'The schedule in the usual format, and a warning for anything still open.' }
-  ];
-
   function renderFlow() {
     var host = $('flowBody');
     if (!host) return;
     clearNode(host);
 
     host.appendChild(el('div', { class: 'flow-tools' }, [
-      el('button', { type: 'button', class: 'btn btn-small', text: 'Print / save as PDF', onclick: function () { window.print(); } }),
-      el('span', { class: 'field-hint', text: 'Built from the active configuration — the chains below are the ones the app uses.' })
+      el('button', { type: 'button', class: 'btn btn-small', text: 'Print / save as PDF', onclick: function () { window.print(); } })
     ]));
-    host.appendChild(dayFlowCard());
     var cards = flowCards();
     [cards.surg2, cards.out, cards.cases, cards.clinic].forEach(function (c) { host.appendChild(c); });
   }
@@ -4297,32 +4796,13 @@
     return { surg2: surg2FlowCard(), out: outFlowCard(), cases: casesFlowCard(), clinic: clinicFlowCard() };
   }
 
-  function dayFlowCard() {
-    var day = refCard('The day, step by step');
-    day.appendChild(el('p', { class: 'field-hint flow-lede', text: 'Follow the tabs in order. Each one feeds the live board, and every tab after it reads that board — so what you change on one tab shows up on every tab after it.' }));
-    var ol = el('ol', { class: 'flow-steps' });
-    FLOW_STEPS.forEach(function (s, i) {
-      ol.appendChild(el('li', { class: 'flow-step' }, [
-        el('div', { class: 'flow-step-head' }, [el('span', { class: 'flow-num', text: String(i + 1) }), el('b', { text: s.title })]),
-        el('div', { class: 'flow-line' }, [el('span', { class: 'flow-k', text: 'You' }), el('span', { text: s.you })]),
-        el('div', { class: 'flow-line' }, [el('span', { class: 'flow-k app', text: 'App' }), el('span', { text: s.app })])
-      ]));
-    });
-    day.appendChild(ol);
-    day.appendChild(el('div', { class: 'flow-board' }, [
-      el('b', { text: 'One live board' }),
-      el('span', { text: ' — who is out, operating, in clinic, on a fixed duty, or free, AM and PM. No case times are guessed: a list counts for its half-day until it is checked off. Steps 1–4 build it; Coverage keeps it current through the day.' })
-    ]));
-    return day;
-  }
-
   function outFlowCard() {
     var out = refCard('Someone is out');
     out.appendChild(fcFlow([
       fcNode('start', 'Out today: who is out — all day, AM or PM'),
       fcArrow(),
       fcDecision('On Night Float this week?', 'Yes',
-        fcNode('auto', 'Automatic', 'Out for the day (post-call). Day Float covers their duties — Day Float covers only the Night Float resident and is never pulled for cases.'),
+        fcNode('auto', 'Automatic', 'Out for the day (post-call). Day Float covers them — and only them.'),
         'No'),
       fcNode('q', 'Who covers each session?'),
       el('div', { class: 'fc-branches' }, [
@@ -4332,19 +4812,16 @@
             'Your own clinic is then a gap to cover (unless ' + noCoverWords() + ').'
           ])]),
         el('div', { class: 'fc-branch' }, [el('div', { class: 'fc-branch-label', text: 'NC' }),
-          fcNode('warn', 'Not covered', 'The duty runs short. A Surg role’s cases go to the next person in each chain.')]),
-        el('div', { class: 'fc-branch' }, [el('div', { class: 'fc-branch-label', text: 'Not decided yet' }),
-          fcNode('warn', 'Listed under Needs coverage', 'Until someone picks a cover or NC — an uncovered ER session is listed first.')])
+          fcNode('warn', 'Not covered', 'The duty runs short. A Surg role’s cases go to the next person in each chain.')])
       ]),
       fcArrow(),
-      fcNode('end', 'Cases they were already on', 'Show up under Needs coverage on Coverage — “X is out: needs a new resident” — with the how-to’s pick one click away.')
+      fcNode('end', 'Their cases go back down each chain')
     ]));
     return out;
   }
 
   function casesFlowCard() {
     var cases = refCard('Who takes a case');
-    cases.appendChild(el('p', { class: 'field-hint flow-lede', text: 'Every case type has its step of the how-to and its chain. Cases are assigned step by step in this order; within Step 10, in time order.' }));
     var tbl = el('div', { class: 'flow-chains' });
     var hier = data().hierarchy || {};
     Object.keys(hier).filter(function (k) { return k !== 'clinicCoverage'; }).sort(function (a, b) {
@@ -4353,7 +4830,9 @@
       tbl.appendChild(el('div', { class: 'flow-chain-row' }, [
         el('span', { class: 'flow-chain-step', text: 'Step ' + (hier[k].step != null ? hier[k].step : '—') }),
         el('span', { class: 'flow-chain-label', text: hier[k].label }),
-        chainChips(k)
+        chainChips(k),
+        // the exception, where the chain is read
+        k === 'traumaPlasticsAddOn' && globeRole() ? el('span', { class: 'fc-text flow-chain-note', text: 'A globe: ' + globeRole() + ', always.' }) : null
       ]));
     });
     cases.appendChild(tbl);
@@ -4365,61 +4844,21 @@
         'already in a case then',
         'on Path, ER or consults — never pulled',
         'at Cooper (off-site)',
-        'an OR-block slot (e.g. “PGY-2 on Plastics OR”) who is in clinic then — they stay in clinic',
+        'an OR-block slot (e.g. “first year on Plastics OR”) who is in clinic then — they stay in clinic',
         '“free junior”: only juniors who are really free, or in Retina / Uveitis — confirm with Surg 2'
       ])),
       fcArrow(),
       fcDecision('Anyone left on the chain?', 'No',
-        fcNode('warn', 'Skip for now → Step 10', 'The remaining-cases chain, in time order. Still nobody → Surg 2’s call: the app lists who else is free but never picks them.'),
+        fcNode('warn', 'Skip for now → Step 10', 'Remaining-cases chain, in time order; then Surg 2’s call.'),
         'Yes'),
-      fcNode('ok', 'The first one takes it', 'One click to accept on Surgery; the board marks them busy for the case.'),
+      fcNode('ok', 'The first one takes it'),
       fcArrow(),
       fcDecision('Were they in a clinic then?', 'Yes',
         fcNode('warn', 'The clinic needs a backup', 'Retina / Uveitis: no cover needed. Any other clinic: see Who covers a clinic.'),
         'No'),
-      fcNode('end', 'Done', 'Check the case off on Coverage when it finishes — the resident is free from then.')
+      fcNode('end', 'Done')
     ]));
-    cases.appendChild(el('p', { class: 'field-hint flow-note', text: (globeRole() ? 'A globe is the exception: ' + globeRole() + ' always takes it (' + globeRole() + ' and the globe). ' : '') + 'Add-ons on Coverage follow the same steps, each at its own time, nobody taking two at once. If that order would leave an add-on with nobody while another choice covers it, the planner takes that choice and says so.' }));
     return cases;
-  }
-
-  // This week's PM clinics for Surg 3 and Surg 4, from the block schedule
-  // alone (no absences, no cases) -> { rows: [{ n, clinic, days }], both:
-  // the days both have one } — the clinics Surg 2 is first to cover.
-  function surgPmClinicWeek() {
-    var E = window.Engine;
-    var S = window.Status;
-    var out = { rows: [], both: [], bothSub: [] };
-    if (!E || !S || !App.state || !App.state.date) return out;
-    var d = parseISO(App.state.date);
-    var mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
-    var pf = (data().availability || {}).pullFirstTexts || ['Retina', 'Retina Private', 'Uveitis'];
-    var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-    var byKey = {};
-    DAYS.forEach(function (label, i) {
-      var r = null;
-      try { r = E.resolveDay(isoOf(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i)), data()); } catch (e) { r = null; }
-      if (!r || r.isWeekend || r.inYear === false) return;
-      var count = 0;
-      ['3', '4'].forEach(function (n) {
-        var s = r.surg && r.surg[n];
-        if (!s || !s.name) return;
-        var res = (r.residents || []).filter(function (x) { return x.name === s.name; })[0];
-        var txt = trim(res && res.pm && res.pm.text);
-        if (!txt || pf.indexOf(txt) !== -1 || S.kindOfClass(S.classifyText(txt, data())) !== 'clinic') return;
-        var k = n + '|' + txt;
-        if (!byKey[k]) { byKey[k] = { n: n, clinic: txt, days: [] }; out.rows.push(byKey[k]); }
-        byKey[k].days.push(label);
-        count++;
-      });
-      if (count === 2) out.both.push(label);
-    });
-    // both subspecialty clinics (Wednesday) vs a general one (CPEC, Thursday)
-    out.bothSub = out.both.filter(function (day) {
-      return !out.rows.some(function (r) { return r.days.indexOf(day) !== -1 && isGeneralClinic(r.clinic); });
-    });
-    out.rows.sort(function (x, y) { return x.n - y.n; });
-    return out;
   }
 
   // Surg 2 and the globe (10/18/2026: "surg 2 is ALWAYS going to take a
@@ -4432,15 +4871,9 @@
   function surg2FlowCard() {
     var S = window.Status;
     var role = globeRole();
-    var wk = surgPmClinicWeek();
     var card = refCard((role || 'Surg 2') + ' and the globe');
-    var clinics = wk.rows.filter(function (r) { return !isGeneralClinic(r.clinic); }).map(function (r) { return r.clinic + ' (Surg ' + r.n + ') ' + r.days.join(', '); });
     var callAfter = S ? S.parseClock(data().callAfter || '16:30') : null;
-    var freeBody = [
-      'First to cover a clinic when Surg 3 or Surg 4 is in a PM case (first on the clinic-coverage chain), and can take over a case (first on the remaining-cases chain).'
-    ];
-    if (clinics.length) freeBody.push('PM clinics this week: ' + clinics.join(' · ') + '.');
-    if (wk.bothSub.length) freeBody.push('Both on ' + wk.bothSub.join(', ') + ' — the least slack: Surg 2 covers one, and if both are in cases at once the next free on the chain covers the other.');
+    var freeBody = ['First for clinic cover and for any case left over.'];
     if (!role) {
       card.appendChild(el('p', { class: 'field-hint flow-lede', text: 'No role always takes a globe in this configuration — a globe walks the trauma chain like any add-on (Who takes a case).' }));
       card.appendChild(fcFlow([fcNode('ok', 'With no globe, Surg 2 is free', freeBody)]));
@@ -4455,10 +4888,9 @@
       fcArrow(),
       fcDecision('Was ' + role + ' covering a clinic then?', 'No', fcNode('end', 'Nothing to hand off'), 'Yes'),
       fcNode('check', 'The next free on the clinic-coverage chain covers it', [
-        chainChips('clinicCoverage', [role]),
-        el('div', { class: 'fc-text', text: 'The usual: Surg 3 in a PKP during Cornea clinic, or a glaucoma case during Glaucoma clinic — ' + role + ' was covering, the globe takes them, the clinic passes on.' + (wk.bothSub.length ? ' On ' + wk.bothSub.join(', ') + ' both clinics can need someone at once.' : '') })
+        chainChips('clinicCoverage', [role])
       ]),
-      fcArrow('if it runs late'),
+      fcArrow('later in the day'),
       fcNode('end', callAfter != null ? 'Not rolled back by ' + S.fmtClock(callAfter) : 'Late in the day', 'It can be passed to the call person.')
     ]));
     return card;
@@ -4468,7 +4900,10 @@
   // coverage page to allow the user to know what the rules are"): the
   // same cards as Library → Flow chart, the ones used on the day first.
   // Open unless this browser closed it.
-  var COVERAGE_RULES_KEY = 'surgsched:v1:ui:coverageRules';
+  // Folded until opened (review 10/19/2026: open, the chart was most of the
+  // page). A new key: the old one stored 'open' on every render, whoever
+  // opened it.
+  var COVERAGE_RULES_KEY = 'surgsched:v1:ui:coverageRulesOpen';
 
   function renderCoverageRules() {
     var host = $('coverageRules');
@@ -4476,12 +4911,19 @@
     clearNode(host);
     if (!App.board || !App.board.order.length) return;
     var det = el('details', { class: 'cov-rules' });
-    det.open = lsGet(COVERAGE_RULES_KEY) !== 'closed';
+    var wasOpen = lsGet(COVERAGE_RULES_KEY) === 'open';
+    det.open = wasOpen;
     det.appendChild(el('summary', { class: 'cov-rules-sum' }, [
       el('span', { class: 'cov-rules-title', text: 'The rules — flow chart' }),
-      el('span', { class: 'h-note', text: 'Who takes a globe, who covers a clinic, who takes a case, someone out. Built from the active configuration — the same as Library → Flow chart.' })
+      el('span', { class: 'h-note', text: 'Who takes a globe, who covers a clinic, who takes a case — the same as Library → Flow chart.' })
     ]));
-    det.addEventListener('toggle', function () { lsSet(COVERAGE_RULES_KEY, det.open ? 'open' : 'closed'); });
+    // only a reader's own open / close is remembered — not this render's
+    var touched = false;
+    det.addEventListener('toggle', function () {
+      if (!touched && det.open === wasOpen) return;
+      touched = true;
+      lsSet(COVERAGE_RULES_KEY, det.open ? 'open' : 'closed');
+    });
     var cards = flowCards();
     [cards.surg2, cards.clinic, cards.cases, cards.out].forEach(function (c) { det.appendChild(c); });
     host.appendChild(det);
@@ -4502,13 +4944,12 @@
       fcNode('start', 'Someone leaves a clinic', 'Pulled into a case, or covering someone who is out.'),
       fcArrow(),
       fcDecision('Retina or Uveitis?', 'Yes', fcNode('ok', 'No cover needed', 'Pull from them first.'), 'No'),
-      fcNode('check', 'Step 12 — the clinic-coverage chain', [chainChips('clinicCoverage'),
-        el('div', { class: 'fc-text', text: 'Whoever covers an absent chain member is in their place.' })]),
+      fcNode('check', 'Step 12 — the clinic-coverage chain', [chainChips('clinicCoverage')]),
       fcArrow(),
       fcDecision('Anyone free for the whole time?', 'No',
-        fcNode('warn', 'Surg 2’s call', 'Or NC — the clinic runs short, and it says so.'),
+        fcNode('warn', 'Surg 2’s call', 'Or NC.'),
         'Yes'),
-      fcNode('end', 'They cover', 'Printed as the backup on the case line; the clinic shows who stands in.')
+      fcNode('end', 'They cover')
     ]));
     return cl;
   }
@@ -4552,7 +4993,7 @@
     var card = el('div', { class: 'card' });
     card.appendChild(el('h2', {}, [
       (sheet.label || 'CPEC Surgical Block Schedule') + ' ',
-      el('span', { class: 'h-note', text: 'Effective ' + fmtMDYY(parseISO(sheet.effective)) + ' — rows are the 1st–5th weekday of each calendar month' })
+      el('span', { class: 'h-note', text: 'Effective ' + fmtMDYY(parseISO(sheet.effective)) })
     ]));
 
     var legend = el('div', { class: 'cpec-legend' });
@@ -4583,26 +5024,36 @@
       body.appendChild(row);
     });
     tbl.appendChild(body);
-    card.appendChild(el('div', { class: 'table-scroll' }, [tbl]));
-    card.appendChild(el('p', { class: 'field-hint', text: 'Sites: SP = Stadium, CH = Cherry Hill. Starred entries operate only in the listed months. The highlighted cell is the selected schedule date; add that day’s lists from the CPEC banner on Surgery (Stadium and Cherry Hill lists go in their own section).' }));
+    var scroller = el('div', { class: 'table-scroll' }, [tbl]);
+    card.appendChild(scroller);
+    card.appendChild(el('p', { class: 'field-hint', text: 'Starred: those months only.' }));
     host.appendChild(card);
+    // phones: bring the selected day's column into view
+    setTimeout(function () {
+      var cell = scroller.querySelector('.cpec-today');
+      if (cell && scroller.scrollWidth > scroller.clientWidth) {
+        scroller.scrollLeft = Math.max(0, cell.offsetLeft - (scroller.clientWidth - cell.offsetWidth) / 2);
+      }
+    }, 0);
   }
 
+  // How-to: the steps and the tips — the rules live on the Flow chart, the
+  // block data on Block schedules (review 10/19/2026: one home per topic)
   function renderHowto() {
     var host = $('howtoBody');
     if (!host) return;
     clearNode(host);
 
-    // 1. The flow — the six numbered tabs, in the how-to's order
+    // The flow — the six numbered tabs, in the how-to's order
     var flow = refCard('The flow');
     [
-      { tab: 'out', num: '1', title: 'Out today', text: 'Check the Google Calendar first. Press “No one out”, or add who is out (all day / AM / PM) and pick who covers each session — or NC. Anyone out disappears from every dropdown, and whoever covers them takes over their duty and their place in every chain (cover Surg 2 and you are Surg 2 that session).' },
-      { tab: 'roster', num: '2', title: 'Roster', text: 'Everyone’s block assignment, Surg 1–5 (Surg 3 and 4 are all day), WER, consults and clinics fill in automatically. Night Float comes from the call schedule; Day Float covers only the Night Float resident.' },
-      { tab: 'surgery', num: '3', title: 'Surgery', text: 'Add the CPEC-sheet cataracts (Stadium / Cherry Hill lists go in their own section), then copy the rest of the case list out of Cerner/NextGen. Each case shows the suggested resident — one click to accept — and the dropdowns show who is free at that time.' },
-      { tab: 'clinics', num: '4', title: 'Clinics', text: 'Patient counts from the EMRs. Each clinic shows who is out or pulled into a case and who covers; anything left short is listed at the top.' },
-      { tab: 'coverage', num: '5', title: 'Coverage', text: 'Everything still open from every tab, today’s roles, then the day at a glance, AM and PM: who is operating (check each list off when it is done — no times are guessed), who goes from a morning OR to an afternoon clinic, who is free, who is out. Then a globe or add-ons, and the add-on call names.' },
-      { tab: 'preview', num: '6', title: 'Preview & Copy', text: 'The document, exactly in the usual format — Copy formatted and paste.' },
-      { tab: 'import', num: '↩', title: 'Taking over a day someone else built', text: 'The Surg 2 who builds a day is often not that day’s Surg 2. Paste the schedule you were sent (Library → Paste a sent schedule): the app reads it into that day, so Coverage runs live for you — sick calls, residents pulled into the OR, add-ons — and Start from yesterday can build tomorrow from it.' }
+      { tab: 'out', num: '1', title: 'Out today', text: 'Check the Google Calendar first. Add who is out (all day / AM / PM) and who covers each session, or NC — or press “No one out”.' },
+      { tab: 'roster', num: '2', title: 'Roster', text: 'Fills in from the block schedule. Check Night Float; add lectures.' },
+      { tab: 'surgery', num: '3', title: 'Surgery', text: 'Add the CPEC-sheet lists, then the cases from Cerner / NextGen. Accept or change the suggested resident.' },
+      { tab: 'clinics', num: '4', title: 'Clinics', text: 'Type the patient counts.' },
+      { tab: 'coverage', num: '5', title: 'Coverage', text: 'On the day: what is still open, who is operating (check lists off), who is free. Plan a globe or add-ons; name the add-on call.' },
+      { tab: 'preview', num: '6', title: 'Preview & Copy', text: 'Copy and paste.' },
+      { tab: 'import', num: '↩', title: 'Taking over a day someone else built', text: 'Paste the schedule you were sent — Coverage then runs live for you.' }
     ].forEach(function (s) {
       flow.appendChild(el('div', { class: 'howto-step' }, [
         el('span', { class: 'howto-num', text: s.num }),
@@ -4616,79 +5067,18 @@
         })
       ]));
     });
+    flow.appendChild(el('div', { class: 'howto-foot' }, [
+      el('button', { type: 'button', class: 'btn btn-small', text: 'Flow chart', onclick: function () { setTab('flow'); } }),
+      el('button', { type: 'button', class: 'btn btn-small', text: 'Block schedules', onclick: function () { setTab('reference'); } })
+    ]));
     host.appendChild(flow);
 
-    // 2. What fills itself in vs what you type
-    var av = refCard('What fills itself in — and what you type');
-    av.appendChild(el('div', { class: 'howto-cols' }, [
-      el('div', { class: 'howto-col' }, [
-        el('h3', { text: 'Fills itself in' }),
-        bulletList([
-          'Rosters & block assignments for every resident',
-          'Surg 1–5 roles',
-          'WER & Jeff/Cooper consult coverage',
-          'Clinic staffing',
-          'Night Float (from the call schedule) and the Day Float covering them',
-          'Daytime add-on call (that day’s Surg 2, or whoever covers them)',
-          'Cooper buddies (from the buddy call schedule)',
-          'Special clinic days (Bilyk, Wasserman, …)'
-        ])
-      ]),
-      el('div', { class: 'howto-col' }, [
-        el('h3', { text: 'You type' }),
-        bulletList([
-          'Who is out, and who covers them',
-          'Cases from the EMRs',
-          'Clinic patient counts',
-          'Night add-on call',
-          'Lectures & events'
-        ])
-      ])
-    ]));
-    av.appendChild(el('p', { class: 'field-hint howto-note', text: 'Several EMRs, no interfaces — the case list is deliberately manual.' }));
-    host.appendChild(av);
-
-    // 3. The rules in 30 seconds — condensed chains (pulled from SCHED_DATA)
-    // In the how-to doc's order of steps — the authority for who covers.
-    var rules = refCard('The rules in 30 seconds');
-    rules.appendChild(bulletList([
-      'Scheduled cataracts → ' + chainText('scheduledCataract', 'Surg 1 → Surg 5 → Wills OR') + ' (per the lounge-wall block schedule).',
-      'Scheduled cornea → Surg 3. Scheduled glaucoma → Surg 4.',
-      'Add-on glaucoma → Surg 4. Add-on cornea (incl. trauma needing tissue) → Surg 3. Busy in a case? Skip for now.',
-      'Scheduled plastics → ' + chainText('scheduledPlastics', 'PGY-2 on Plastics OR → free junior → Surg 4') + '.',
-      'Peds → ' + chainText('peds', 'junior on Peds OR → free junior → Surg 4 → Surg 3') + '.'
-    ].concat(globeRole() ? [
-      'A globe → ' + globeRole() + ', always — whoever covers them is ' + globeRole() + '; operating, it follows their cases (a second globe follows the first). Only out with nobody covering: ' + chainText('traumaPlasticsAddOn', 'Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5', ['PLASTICS_OR_JUNIOR', globeRole()]) + '. Not rolled back by ' + window.Status.fmtClock(window.Status.parseClock(data().callAfter || '16:30')) + ': it can go to the call person.',
-      'Plastics add-ons → ' + chainText('traumaPlasticsAddOn', 'junior on Plastics OR → Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + ' (the plastics junior only for TABs / outpatient plastics).'
-    ] : [
-      'Trauma and plastics add-ons → ' + chainText('traumaPlasticsAddOn', 'junior on Plastics OR → Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + ' (the plastics junior only for TABs / outpatient plastics).'
-    ]).concat([
-      'Anything skipped or left, chronologically: ' + chainText('remaining', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + '.',
-      'PM clinic coverage: ' + chainText('clinicCoverage', 'Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5 → Wills OR → Retina') + '. With no globe, Surg 2 is the one free to cover Cornea / Glaucoma clinic when Surg 3 / Surg 4 has a PM case — or to take over a case.',
-      'Past the end of a chain it is Surg 2’s call — the app shows who else is free but does not pick them.'
-    ]), 'howto-rules'));
-    rules.appendChild(el('div', { class: 'howto-foot' }, [
-      el('span', { class: 'field-hint', text: 'The same rules as a flow chart, and the full chains, notes and block grids, are in the Library.' }),
-      el('button', {
-        type: 'button', class: 'btn btn-small', text: 'Open the flow chart',
-        onclick: function () { setTab('flow'); }
-      }),
-      el('button', {
-        type: 'button', class: 'btn btn-small', text: 'Open Reference',
-        onclick: function () { setTab('reference'); }
-      })
-    ]));
-    host.appendChild(rules);
-
-    // 4. Tips for new schedulers — from the how-to deck
+    // Tips for new schedulers — from the how-to deck
     var tips = refCard('Tips for new schedulers');
     tips.appendChild(bulletList([
-      'Check the Google Calendar for lectures and vacations first — before anything else.',
       'Surg 3 and Surg 4 should reach out to the attendings about their scheduled cases beforehand.',
-      'The schedule is built the evening before — expect late changes and add-ons.',
-      'Surg 2 is the boss — give them some grace.'
+      'The schedule is built the evening before — expect late changes and add-ons.'
     ]));
-    if (data().quote) tips.appendChild(el('p', { class: 'ref-quote howto-quote', text: data().quote }));
     host.appendChild(tips);
   }
 
@@ -4728,7 +5118,11 @@
         el('td', { text: h.step != null ? String(h.step) : '' }),
         el('td', {}, [el('strong', { text: h.label })]),
         el('td', { text: (h.chain || []).map(function (tok) { return CHAIN_TOKEN_LABELS[tok] || tok; }).join(' → ') }),
-        el('td', {}, [el('span', { class: 'field-hint', text: h.note || '' })])
+        el('td', {}, [
+          // the 10/18/2026 rule beside the how-to's note (data.js keeps the doc's words)
+          key === 'traumaPlasticsAddOn' && globeRole() ? el('b', { class: 'ref-rule', text: 'A globe: ' + globeRole() + ', always — operating, it follows their cases. ' }) : null,
+          el('span', { class: 'field-hint', text: h.note || '' })
+        ])
       ]));
     });
     hTbl.appendChild(hBody);
@@ -4928,6 +5322,7 @@
   // the header ayLabel, and the date pickers' min/max.
   function rerenderEverything() {
     residentYearMap = null; // yearOf() caches resident→year from the old data
+    surg2Cache = {};        // …and the daytime add-on call, each day's Surg 2
     var d = data();
     [$('datePicker'), $('homeDate')].forEach(function (inp) {
       if (inp && d.ayStart && d.ayEnd) {
@@ -5048,19 +5443,12 @@
     var intro = refCard('Set up a new academic year');
     intro.appendChild(el('p', {
       class: 'ref-para',
-      text: 'All schedule knowledge lives in one configuration object — the block schedules and ' +
-        'block dates, the CPEC surgical block sheet, Cooper buddy call, the Night Float schedule, ' +
-        'and the assignment hierarchy. Download it, edit or replace the data for the new academic ' +
-        'year, then upload it back. Uploaded configurations live only in this browser — nothing is sent anywhere.'
+      text: 'Download the configuration, edit it for the new year, upload it back. It stays in this browser.'
     }));
     host.appendChild(intro);
 
     // 2. Download
     var dl = refCard('Download current configuration');
-    dl.appendChild(el('p', {
-      class: 'field-hint setup-hint',
-      text: 'Saves the ACTIVE configuration (including any import) as surg-schedule-config.json.'
-    }));
     dl.appendChild(el('button', {
       type: 'button', class: 'btn btn-primary', text: 'Download configuration (JSON)',
       onclick: downloadConfig
@@ -5069,10 +5457,6 @@
 
     // 3. Upload (file input + paste alternative)
     var up = refCard('Upload configuration');
-    up.appendChild(el('p', {
-      class: 'field-hint setup-hint',
-      text: 'Pick the edited JSON file — or paste its contents below. It is validated before it replaces anything.'
-    }));
     var fileIn = el('input', { type: 'file', accept: '.json,application/json' });
     fileIn.addEventListener('change', function () {
       var f = fileIn.files && fileIn.files[0];
@@ -5496,17 +5880,16 @@
     var grid = el('div', { class: 'pv-surg' });
     ['1', '2', '3', '4', '5'].forEach(function (n) {
       var s = r.surg[n];
-      var tile = el('div', { class: 'pv-tile' + (s && outs.indexOf(s.name) !== -1 ? ' pv-out' : '') }, [
+      var isOut = s && outs.indexOf(s.name) !== -1;
+      var ab = isOut ? ((saved && saved.absences) || []).filter(function (a) { return a && trim(a.name) === s.name; })[0] || {} : {};
+      // who covers takes the role (Out today): named, when it is one person
+      var cov = ab.am && ab.pm && trim(ab.coverAM) === trim(ab.coverPM) ? trim(ab.coverAM) : '';
+      var tone = !isOut ? '' : !cov ? ' pv-tbd' : cov === 'NC' ? ' pv-nc' : '';
+      var tile = el('div', { class: 'pv-tile' + tone }, [
         el('div', { class: 'pv-role', text: 'Surg ' + n }),
-        el('div', { class: 'pv-name', text: s ? s.name : '—', title: s ? s.name : '' })
+        el('div', { class: 'pv-name', text: s ? (isOut && cov && cov !== 'NC' ? cov : s.name) : '—', title: s ? s.name : '' })
       ]);
-      if (s && outs.indexOf(s.name) !== -1) {
-        // who covers takes the role (Out today) — say who, when it is one person
-        var ab = ((saved && saved.absences) || []).filter(function (a) { return a && trim(a.name) === s.name; })[0] || {};
-        var cov = ab.am && ab.pm && trim(ab.coverAM) === trim(ab.coverPM) && trim(ab.coverAM) !== 'NC' ? trim(ab.coverAM) : '';
-        tile.appendChild(el('div', { class: 'pv-tag', text: cov ? 'c/b ' + cov : (ab.am && !ab.pm ? 'out AM' : !ab.am && ab.pm ? 'out PM' : 'out') }));
-      }
-      else if (s && s.allDay && !(s.am && s.pm)) tile.appendChild(el('div', { class: 'pv-tag', text: 'all day' }));
+      if (isOut) tile.appendChild(el('div', { class: 'pv-tag', text: cov && cov !== 'NC' ? 'for ' + s.name : (ab.am && !ab.pm ? s.name + ' out AM' : !ab.am && ab.pm ? s.name + ' out PM' : s.name + ' out' + (cov === 'NC' ? ' — NC' : '')) }));
       grid.appendChild(tile);
     });
     host.appendChild(grid);
@@ -5540,10 +5923,9 @@
     if (sum) {
       dr.appendChild(el('b', { text: 'Saved draft' }));
       dr.appendChild(document.createTextNode(draftText(sum)));
-      if (sum.open) dr.appendChild(el('span', { class: 'pv-pill warn', text: sum.open + ' open' }));
-      else if (sum.cases) dr.appendChild(el('span', { class: 'pv-pill ok', text: 'all assigned' }));
+      if (!sum.open && sum.cases) dr.appendChild(el('span', { class: 'pv-pill ok', text: 'all assigned' }));
     } else {
-      dr.appendChild(document.createTextNode('Nothing entered yet — everything above fills in automatically.'));
+      dr.appendChild(document.createTextNode('Not started.'));
     }
     host.appendChild(dr);
   }
@@ -5559,7 +5941,7 @@
       icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>' },
     { tab: 'coverage', title: 'Coverage', text: 'Who’s free, globe plan',
       icon: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' },
-    { tab: 'preview', title: 'Copy', text: 'The schedule, formatted',
+    { tab: 'preview', title: 'Preview & Copy', text: 'The schedule, formatted',
       icon: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>' }
   ];
 
@@ -5630,7 +6012,7 @@
       var d = parseISO(dISO);
       grid.appendChild(el('button', {
         type: 'button', class: 'recent-card',
-        onclick: function () { enterApp(dISO); }
+        onclick: function () { var l = lastPlace(); enterApp(dISO, l && l.date === dISO ? l.tab : undefined); }
       }, [
         el('b', { text: WEEKDAY_NAMES[d.getDay()].slice(0, 3) + ' ' + fmtMDYY(d) }),
         el('span', { text: draftText(draftSummary(dISO)) || 'saved' })
@@ -5656,7 +6038,7 @@
       var last = lastPlace();
       var savedAt = 0;
       try { savedAt = (raw && JSON.parse(raw).savedAt) || 0; } catch (e) { savedAt = 0; }
-      var bits = [last && last.date === v ? 'Saved draft — reopens on ' + TAB_TITLES[last.tab] : 'Saved draft — picks up where you left off'];
+      var bits = [last && last.date === v ? 'Saved draft — reopens on ' + TAB_TITLES[last.tab] : 'Saved draft'];
       if (savedAt) bits.push('saved ' + savedWhen(savedAt));
       hint.textContent = hasDraft ? bits.join(' · ') : '';
       hint.classList.toggle('hidden', !hasDraft);
@@ -5670,7 +6052,7 @@
     var hd = $('homeDate');
     if (hd && !hd.value) hd.value = tomorrowISO();
     var ay = $('homeAy');
-    if (ay) ay.textContent = (data().ayLabel || '') + ' · ' + APP_VERSION;
+    if (ay) ay.textContent = (data().ayLabel || '') + ' · ' + APP_VERSION + ' · build ' + BUILD + ' (' + BUILD_DATE + ')';
     var q = $('homeQuote');
     if (q) q.textContent = data().quote || '';
     buildIris();
@@ -5721,7 +6103,7 @@
   // tab or a phone reopening a tab lands on the same day and step.
   function dateFromHash() {
     var d = String(window.location.hash || '').replace(/^#\/?/, '').split('/')[1] || '';
-    return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) && isoOf(parseISO(d)) === d ? d : null;
   }
 
   // Record the applied route and mirror it into the URL. Writing
@@ -5769,6 +6151,7 @@
     for (var i = 0; i < tabs.length; i++) {
       var on = tabs[i].getAttribute('data-tab') === tab;
       tabs[i].classList.toggle('active', on);
+      tabs[i].setAttribute('aria-selected', on ? 'true' : 'false');
       if (on) {
         // phones: the tab bar scrolls sideways — bring the active tab into view
         var bar = tabs[i].parentNode;
@@ -5817,6 +6200,7 @@
     if (App.activeTab === 'clinics') renderClinicsTab();
     if (App.activeTab === 'coverage') renderCoverageTab();
     if (App.activeTab === 'preview') renderPreview();
+    if (App.activeTab === 'cpec') renderCpecReference(); // the day's column follows the date
     renderAvailStrip();
     renderBadges();
   }
@@ -5860,11 +6244,12 @@
       })(tabs[i]);
     }
 
-    // Library menu (How-to, CPEC sheet, block schedules, Setup)
-    var libBtns = document.querySelectorAll('#libMenu [data-lib]');
+    // Library pages (How-to, Flow chart, CPEC sheet, Block schedules, Setup)
+    // and Paste a sent schedule (⋯)
+    var libBtns = document.querySelectorAll('#libMenu [data-lib], #moreMenu [data-lib]');
     for (var li = 0; li < libBtns.length; li++) {
       (function (btn) {
-        btn.addEventListener('click', function () { setTab(btn.getAttribute('data-lib')); });
+        btn.addEventListener('click', function () { closeMoreMenu(); setTab(btn.getAttribute('data-lib')); });
       })(libBtns[li]);
     }
     renderStepFoots();
@@ -5873,11 +6258,15 @@
       if (m) m.removeAttribute('open');
     }
     $('btnYesterday').addEventListener('click', function () { closeMoreMenu(); startFromYesterday(); });
-    var btnSetupMenu = $('btnSetupMenu');
-    if (btnSetupMenu) {
-      btnSetupMenu.addEventListener('click', function () { closeMoreMenu(); setTab('setup'); });
-    }
     $('btnClear').addEventListener('click', function () { closeMoreMenu(); clearDay(); });
+    // Escape closes an open menu
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Escape') return;
+      ['libMenu', 'moreMenu'].forEach(function (id) {
+        var m = $(id);
+        if (m && m.hasAttribute('open')) { m.removeAttribute('open'); var s = m.querySelector('summary'); if (s) s.focus(); }
+      });
+    });
     document.addEventListener('click', function (ev) {
       ['moreMenu', 'libMenu'].forEach(function (id) {
         var m = $(id);
@@ -5898,12 +6287,7 @@
     $('btnCopyHTML').addEventListener('click', function () {
       renderPreview();
       window.ExportFmt.copy(exportDay()).then(function (ok) {
-        toast(ok ? 'Formatted schedule copied' : 'Copy failed — select the preview text and copy manually', ok);
-      });
-    });
-    $('btnCopyText').addEventListener('click', function () {
-      window.ExportFmt.copyText(exportDay()).then(function (ok) {
-        toast(ok ? 'Plain-text schedule copied' : 'Copy failed', ok);
+        toast(ok ? 'Schedule copied — bold in email, plain in a text' : 'Copy failed — select the preview text and copy manually', ok);
       });
     });
     $('btnCopyAddons').addEventListener('click', function () {

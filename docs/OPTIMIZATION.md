@@ -82,10 +82,10 @@ suggestion.
   tool is a CP-SAT model: intervals, NoOverlap, and the doc's chains as
   ordered objectives. It would be heavier and harder to audit than the
   doc's step-by-step walk.
-- **Uncertain case lengths.** The durations are estimates (cataract 30 min,
-  trauma 120 …), and a plan can look feasible on paper and fail in the OR.
-  Planning with a buffer, or re-planning as soon as a case runs late (the
-  "running late" card already does the second for mornings), both help.
+- **Uncertain case lengths** (superseded 10/18/2026). There are no
+  estimates any more: a list holds its resident for its session until it is
+  checked off, and a globe follows Surg 2's cases. The planner re-plans
+  from what is checked off, never from a guessed end.
 
 ## What would break it
 
