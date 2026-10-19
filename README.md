@@ -56,20 +56,15 @@ The six tabs follow the "How to Surgical Schedule" order:
 5. **Coverage** — today's roles (Surg 1–5 and Cooper, with whoever covers
    anyone out), everything still open from every tab (a case whose resident
    is out, a service case with nobody, an uncovered absence, a clinic gap —
-   each with its fix), who is operating and how many cases (to check in on,
-   and check off as they finish — no estimated times), then who is
-   available AM and PM (free, or done with their cases; then Retina /
-   Uveitis, the first to pull from — no cover needed; never ER, consults or
-   Path), Surg 2's day — with no globe, Surg 2 is free to cover the Surg 3 /
-   Surg 4 PM clinic (Cornea Mon/Wed/Fri, Glaucoma Tue/Wed/Thu) or take over
-   a case — and what happens if a globe or other add-ons come in: a globe
-   always goes to Surg 2 (whoever covers them), following their cases when
-   they are operating, and the clinic they were covering passes down the chain; the
-   rest one or several, each at its own time, placed in the doc's step
-   order and searched exactly so none is left without a resident when some
-   choice covers it (docs/OPTIMIZATION.md). Then who covers a clinic if a
-   morning OR runs late (free juniors first for a junior), add-on call
-   names, and the rules as a flow chart at the foot of the tab.
+   each with its fix), then the day at a glance: who goes from a morning OR
+   to an afternoon clinic (every year, from the block schedule), and AM | PM —
+   who is operating (their lists, checked off as they finish; no case times
+   are guessed), who is free, whom to pull first (Retina / Uveitis), who is
+   out. Then if a globe or add-ons come in (a globe always goes to Surg 2 —
+   following their cases when they are operating — and the clinic they were
+   covering passes down the chain; the rest in the doc's step order, searched
+   so none is left without a resident when some choice covers it —
+   docs/OPTIMIZATION.md), add-on call names, and the rules as a flow chart.
 6. **Preview & Copy** — the day in the standard document format, copied
    with formatting for Google Docs, Word, or email.
 
@@ -95,9 +90,10 @@ encodes — and the assumptions still to calibrate — are listed in
   Assignments / WER / consult lines show who stands in. Wills and Stadium /
   Cherry Hill are separate sections. A flow chart in the Library and on
   Coverage. Surg 2 always takes the globe (operating, it follows their
-  cases); with no globe Coverage shows Surg 2 free for the Surg 3 / Surg 4
-  PM clinics; Coverage lists who is operating and how many cases, with no
-  estimated times. What was audited and what changed: [docs/AUDIT.md](docs/AUDIT.md).
+  cases). No case times are guessed: a list counts for its half-day until
+  checked off. Coverage is one AM | PM board — who is operating, who goes
+  from a morning OR to an afternoon clinic, who is free, who is out. What
+  was audited and what changed: [docs/AUDIT.md](docs/AUDIT.md).
 - **v2** (9/2026) — the flow follows the how-to (Out today →
   Roster → Surgery → Clinics → Coverage → Preview), the app knows who is
   free at any minute, the Surgery tab is one line per attending with the
@@ -192,9 +188,7 @@ object the Setup page exports:
 - `nfSchedule`: weekly Night Float ranges from the call sheet
 - `cpecSheet`: the CPEC surgical block schedule
 - `hierarchy`, `schedulingNotes`, `specialClinics`, reference content
-- `availability` (which assignments count as free / fixed duty) and
-  `caseMinutes` (estimated minutes per case, used to guess when a resident
-  is free again)
+- `availability` (which assignments count as free / fixed duty)
 
 Transcribe the new year's PDFs into that one file and the whole app follows.
 Run the tests afterwards to catch typos:

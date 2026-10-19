@@ -169,7 +169,7 @@ var bp = Assign.backupPlan(x.day.cases[0], roster, DATA, x.day.cases, x.b);
 eq(bp && bp.clinic, 'Cornea', 'backup plan: Cornea clinic');
 eq(bp && bp.primary && bp.primary.name, 'Djulbegovic', 'Surg 2 covers Cornea while Surg 3 operates');
 eq(bp && bp.window && bp.window.start, 780, 'coverage needed from 1:00…');
-eq(bp && bp.window && bp.window.end, 870, '…to 2:30 (est.)');
+eq(bp && bp.window && bp.window.end, 1020, '…for the rest of the afternoon — no estimate, until Bair is checked off');
 // an AM case never threatens the PM clinic
 x = board({ cases: [{ id: 'c9', section: 'wills', surgeon: 'Hark', count: 1, serviceCount: 1, start: '0800', category: 'cornea', addOn: false, assigned: 'Bair', backup: '' }] });
 eq(Assign.backupPlan(x.day.cases[0], roster, DATA, x.day.cases, x.b), null, 'AM cornea case: no clinic to cover');
@@ -274,12 +274,13 @@ ok(/Surg 2’s call/.test(res[0].warnings.join(' ')), '…as Surg 2’s call');
 plan = Assign.planAddOn('globe', 600, roster, DATA, x.b);
 eq(plan.pick, null, 'globe with every senior out: no pick');
 eq(JSON.stringify(plan.outside), '["Nahar"]', '…the free junior is listed, not picked');
-var lc0 = Assign.lateCover('Nahar', 'Glaucoma', 750, 810, roster, DATA, x.b, [], null);
-eq(lc0.primary && lc0.primary.name + ' / ' + lc0.primary.source, 'Tang / Retina / Uveitis',
+// Nahar (Glaucoma PM) pulled into a 1 PM case: who covers Glaucoma?
+var nahar1 = { id: 'nh', section: 'wills', surgeon: 'X', count: 1, serviceCount: 1, start: '1300', category: 'other', addOn: false, assigned: 'Nahar', backup: '' };
+x = board({ absences: seniorsOut.absences, cases: [nahar1] });
+var lc0 = Assign.backupPlan(nahar1, roster, DATA, [nahar1], x.b);
+eq(lc0 && lc0.primary && lc0.primary.name + ' / ' + lc0.primary.source, 'Tang / Retina / Uveitis',
   'clinic cover with every senior out: the doc\'s last step, Retina — Tang is pulled from Retina Private, no cover needed');
-var lcNone = Assign.lateCover('Nahar', 'Glaucoma', 750, 810, roster, DATA, x.b, ['Tang', 'Momenaei', 'Hamou', 'Patel'], null);
-ok(lcNone.primary === null || /Retina/.test(lcNone.primary.source), 'with the Retina / Uveitis residents taken too, no senior is invented');
-ok(Array.isArray(lcNone.outside) && Array.isArray(lcNone.pullable), 'clinic cover lists who else could (outside / pullable)');
+ok(lc0 && Array.isArray(lc0.outside) && Array.isArray(lc0.pullable), 'clinic cover lists who else could (outside / pullable)');
 
 /* ---------- Retina / Uveitis first, no cover; never Path (chief, 9/28/2026) ---------- */
 x = board({ absences: [{ id: 'n', name: 'Nahar', am: true, pm: true, reason: 'other', coverAM: 'NC', coverPM: 'NC' }] });
@@ -304,40 +305,6 @@ res = Assign.suggest([{ id: 'r2', section: 'wills', surgeon: 'X', count: 1, serv
 eq(JSON.stringify(res[0].pullable), '["Tang","Patel"]', 'Surg 2’s call lists Retina / Uveitis to pull first (Tang, Patel)');
 ok(/pull from Retina \/ Uveitis \(no cover needed\): Tang, Patel/.test(res[0].warnings.join(' ')), '…in the warning text');
 
-/* ---------- a morning OR running late into a PM clinic ---------- */
-// Mon 9/28: Nahar (2nd year, block 5) — Glaucoma OR / Plastics OR AM, Glaucoma PM.
-eq(roster.residents.filter(function (r) { return r.name === 'Nahar'; })[0].pm.text, 'Glaucoma', 'fixture: Nahar has Glaucoma PM');
-var lx = board({ overruns: [{ id: 'o1', name: 'Nahar', until: '13:30', label: 'Glaucoma OR / Plastics OR', cover: '' }] });
-eq(lx.b.pmClinicStart, 750, 'PM clinics start 12:30 (data.pmClinicStart)');
-eq(lx.b.statusAt('Nahar', 765).kind, 'case', 'running late: Nahar is still in the OR at 12:45');
-eq(lx.b.statusAt('Nahar', 825).kind, 'clinic', '…and in Glaucoma clinic again at 1:45');
-var ln = lx.b.needs.filter(function (n) { return n.type === 'clinic'; });
-eq(ln.length === 1 && ln[0].clinic + ' ' + Status.fmtClock(ln[0].start) + '–' + Status.fmtClock(ln[0].end), 'Glaucoma 12:30 PM–1:30 PM', 'the gap is Glaucoma from 12:30 until Nahar is out');
-var lc = Assign.lateCover('Nahar', 'Glaucoma', 750, 810, roster, DATA, lx.b, [], 'late:o1');
-eq(lc.primary && lc.primary.name + ' (' + lc.primary.source + ')', 'Djulbegovic (Surg 2)', 'suggested: Surg 2 covers Glaucoma until Nahar is done');
-lx = board({ overruns: [{ id: 'o1', name: 'Nahar', until: '13:30', cover: 'Djulbegovic' }] });
-eq(lx.b.needs.length, 0, 'with Surg 2 covering, no gap');
-eq(lx.b.statusAt('Djulbegovic', 765).label, 'covering Glaucoma for Nahar', 'Surg 2 is in Glaucoma 12:30–1:30…');
-eq(lx.b.statusAt('Djulbegovic', 825).kind, 'free', '…and free again after');
-lx = board({ overruns: [{ id: 'o1', name: 'Nahar', until: '13:30', cover: 'NC' }] });
-eq(lx.b.needs.length, 0, 'NC acknowledges the gap');
-lx = board({ overruns: [{ id: 'o1', name: 'Nahar', until: '12:15', cover: '' }] });
-eq(lx.b.needs.length + (lx.b.lateCases.length), 0, 'done before 12:30 = not late (ignored)');
-var ExportFmt = require(path.join(__dirname, '..', 'js', 'export.js'));
-var ltxt = ExportFmt.buildText({ date: '2026-09-28', nightFloat: 'Perez', absences: [], cases: [], clinicCounts: {}, clinicStaffOverrides: {}, addOns: [],
-  overruns: [{ id: 'o1', name: 'Nahar', until: '13:30', cover: 'Djulbegovic' }], roster: roster });
-ok(!/running late|Djulbegovic.*Glaucoma/.test(ltxt), 'running late never appears in the copied schedule');
-
-/* ---------- a junior running late: free juniors first (chief, 9/28/2026) ---------- */
-var r929b = Engine.resolveDay('2026-09-29', DATA);
-var b929b = Status.build(r929b, { nightFloat: 'Perez', absences: [], cases: [], clinicStaffOverrides: {} }, DATA);
-var lj = Assign.lateCover('Ransone', 'Plastics', 750, 810, r929b, DATA, b929b, [], null);
-eq(lj.primary && lj.primary.name + ' (' + lj.primary.source + ')', 'Parekh (free junior)', 'Tue: Ransone late from Plastics OR → Parekh, a free junior, covers Plastics (the chief’s Parekh-for-Patel example)');
-eq(lj.second && lj.second.name, 'Djulbegovic', '…Surg 2 next');
-var ls = Assign.lateCover('Calotti', 'Glaucoma', 750, 810, r929b, DATA, b929b, [], null);
-eq(ls.primary && ls.primary.name, 'Djulbegovic', 'a senior running late: the clinic-coverage chain as before (Surg 2)');
-eq(Assign.lateCover('Nahar', 'Glaucoma', 750, 810, roster, DATA, board({}).b, [], null).primary.name, 'Djulbegovic', 'Mon: no junior free 12:30–1:30 → Surg 2');
-
 /* ---------- add-ons at different times (chief, 9/28/2026) ---------- */
 var jt = Assign.planAddOns([{ kind: 'globe', t: 540 }, { kind: 'plastics', t: 840 }], null, roster, DATA, board({}).b);
 eq(jt.items.map(function (it) { return it.pick && it.pick.name; }).join(' '), 'Djulbegovic Djulbegovic', 'a 9 AM globe and a 2 PM TAB can both go to Surg 2 — the times do not overlap');
@@ -349,12 +316,15 @@ eq(jt.items[1].handoff && jt.items[1].handoff.primary && jt.items[1].handoff.pri
 var busyCase = function (id, who, start, count, cat) {
   return { id: id, section: 'wills', surgeon: 'X' + id, count: count, serviceCount: count, start: start, category: cat, addOn: false, assigned: who, backup: '' };
 };
+// (Cheng's list has a typed end — "Done by" 1:30 — so he is free from then)
+var cheng130 = busyCase('e', 'Cheng', '1200', 3, 'cataract');
+cheng130.until = '1330';
 x = board({ cases: [busyCase('a', 'Djulbegovic', '1230', 4, 'other'), busyCase('b', 'Bair', '1230', 4, 'other'),
-  busyCase('c', 'Samuel', '1230', 4, 'other'), busyCase('d', 'Wibbelsman', '1230', 4, 'other'), busyCase('e', 'Cheng', '1200', 3, 'cataract')] });
+  busyCase('c', 'Samuel', '1230', 4, 'other'), busyCase('d', 'Wibbelsman', '1230', 4, 'other'), cheng130] });
 jt = Assign.planAddOns([{ kind: 'other', t: 780 }, { kind: 'glaucoma', t: 810 }], null, roster, DATA, x.b);
 eq(jt.unfilledByOrder + ' → ' + jt.unfilled, '1 → 0', 'the doc’s order alone leaves one add-on with nobody; the plan covers both');
 eq(jt.items.map(function (it) { return it.label.split(' ')[0] + ':' + (it.pick ? it.pick.name : '-'); }).join(' '), 'Other:Calotti Glaucoma:Cheng',
-  'add-on 1:00 → Surg 4 (the only one free); glaucoma 1:30 → skipped for now → Step 10 → Surg 1, whose list ends at 1:30');
+  'add-on 1:00 → Surg 4 (the only one free); glaucoma 1:30 → skipped for now → Step 10 → Surg 1, done by 1:30');
 eq(jt.items[1].adjusted && jt.items[1].byOrder, 'Calotti', '…and it says the order alone would give the glaucoma to Calotti');
 ok(jt.searched < 100, 'the search is tiny (' + jt.searched + ' nodes)');
 // a globe in the same squeeze: Surg 2 always, following their list
@@ -374,8 +344,9 @@ eq(plan.pick && plan.pick.name, 'Bair', '…Surg 3 takes it');
 x = board({});
 var avAll = x.b.availableInSession('am').concat(x.b.availableInSession('pm')).map(function (a) { return a.name; });
 ok(['Teng', 'Williamson', 'Alvarez', 'DeSimone'].every(function (n) { return avAll.indexOf(n) === -1; }), 'ER and consult residents are never listed as available');
-var lcEr = Assign.lateCover('Nahar', 'Glaucoma', 750, 810, roster, DATA, x.b, [], null);
-ok(lcEr.steps.every(function (s) { return ['Teng', 'Williamson', 'Alvarez', 'DeSimone'].indexOf(s.name) === -1 || s.verdict === 'skip'; }), 'late-OR cover never uses ER or consults');
+x = board({ cases: [nahar1] });
+var lcEr = Assign.backupPlan(nahar1, roster, DATA, [nahar1], x.b);
+ok(lcEr && lcEr.steps.every(function (s) { return ['Teng', 'Williamson', 'Alvarez', 'DeSimone'].indexOf(s.name) === -1 || s.verdict === 'skip'; }), 'clinic cover never uses ER or consults');
 
 /* ---------- whoever covers an absent resident takes their place in the chains (10/18/2026) ---------- */
 // "Surg 2 out on vacation is not accounted for on Coverage": the coverer
@@ -395,7 +366,6 @@ ok(/Surg 2 — covering Djulbegovic/.test(res[0].reasons[0]), '…and the reason
 x = board({ absences: s2out.absences, cases: [hark('')] });
 bp = Assign.backupPlan(x.day.cases[0], roster, DATA, x.day.cases, x.b);
 eq(bp && bp.primary && bp.primary.name + ' / ' + bp.primary.source, 'Aguwa / Surg 2 — covering Djulbegovic', 'clinic cover (Step 12): the acting Surg 2 first');
-eq(Assign.lateCover('Nahar', 'Glaucoma', 750, 810, roster, DATA, board(s2out).b, [], null).primary.name, 'Aguwa', 'a morning OR running late: the acting Surg 2 covers');
 j = Assign.planAddOns(['globe', 'glaucoma', 'cornea'], 600, roster, DATA, board(s2out).b);
 eq(names(j), 'Globe:Aguwa Glaucoma:Calotti Cornea:Bair', 'several add-ons: the globe goes to the acting Surg 2');
 // covered for the morning only: the stand-in is Surg 2 only then
@@ -432,10 +402,10 @@ ok(res[0].skipped.some(function (s) { return s.name === 'Cotton'; }) && res[0].n
 ok(!res[0].skipped.concat(res[0].alternates.map(function (n) { return { name: n }; })).some(function (s) { return s.name === 'Camacho'; }) && res[0].name !== 'Camacho', '…Camacho (Day Float) is never in the chain');
 
 /* ---------- a case across noon pulls someone from two clinics (audit 10/18/2026) ---------- */
-// Mon 10/19: Cotton is CPEC AM / Cornea PM; a 10:00 case x2 cornea runs to
-// 1:00. The backup must cover both — the board has them cover both.
+// Mon 10/19: Cotton is CPEC AM / Cornea PM; a 10:00 case x2 cornea, done by
+// 1:00 (typed). The backup must cover both — the board has them cover both.
 var r1019 = Engine.resolveDay('2026-10-19', DATA);
-var two = { id: 't2', section: 'wills', surgeon: 'X', count: 2, serviceCount: 2, start: '1000', category: 'cornea', addOn: false, assigned: 'Cotton', backup: '' };
+var two = { id: 't2', section: 'wills', surgeon: 'X', count: 2, serviceCount: 2, start: '1000', until: '1300', category: 'cornea', addOn: false, assigned: 'Cotton', backup: '' };
 var b1019 = Status.build(r1019, { nightFloat: '', nfCleared: true, absences: [], clinicStaffOverrides: {}, cases: [two] }, DATA);
 bp = Assign.backupPlan(two, r1019, DATA, [two], b1019);
 eq(bp && bp.clinic + ' ' + bp.window.start + '–' + bp.window.end, 'CPEC / Cornea 600–780', 'the backup plan covers CPEC 10–12 and Cornea 12–1');

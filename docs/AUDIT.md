@@ -179,10 +179,25 @@ docs/UISPEC6.md, "Surg 2 and the globe".
     at the foot of Coverage too, with a Surg 2 and the globe chart whose
     weekdays come from the block schedule.
 33. **Coverage showed estimated case times as if known** ("7:30 AM–12:30 PM
-    (est.) · clears 12:30 PM", "until 2:30 PM (est.)"). The check-off card is
-    now **Operating today** — who is operating, their lists and how many
-    cases, to check in on — and no estimated end time shows on Coverage
-    ("after McGowan ×10", "until Djulbegovic is back").
+    (est.) · clears 12:30 PM", "until 2:30 PM (est.)"). Fixed at the root in
+    the fourth pass: no estimates at all.
+
+## Fourth pass — the Coverage revamp
+
+34. **Case lengths were guessed** (30 minutes a cataract, 90 a cornea …)
+    and drove who looked free, clinic gaps and backups. Now a list counts for
+    the session it starts in until it is checked off ("Done by" or "All
+    day" override; one resident's lists run back to back). Tests rewritten
+    in `test-status.js` / `test-coverage.js`.
+35. **The running-late card** asked for an "until" time to plan cover. It is
+    gone (and saved overruns are dropped); Coverage lists everyone who goes
+    from a morning OR to an afternoon clinic — every year, from the block
+    schedule and that morning's lists — to be aware of.
+36. **Coverage was seven cards of explanation.** It is now one AM | PM board
+    (operating with check-off, free, pull first, out) under that list, with
+    the globe planner and the add-on call; rules that are understood (the
+    CPEC urgent-case line, the Surg 3 / Surg 4 clinic list, the "both
+    clinics" warning) are built in, not spelled out.
 
 ## Still open — questions for the chief
 
@@ -205,10 +220,11 @@ docs/UISPEC6.md, "Surg 2 and the globe".
 - **Needs coverage suggests one fix at a time**: two open gaps can suggest
   the same coverer for overlapping windows; after the first click the second
   updates.
-- **Estimates still decide who is free.** Coverage no longer shows
-  estimated case times, but the board still uses them (`data.caseMinutes`)
-  for suggestions, backups and the Free AM / PM strip. If availability
-  should come only from checking cases off, that is a bigger change: say so.
+- **A morning list counts for the morning only.** One that runs all day
+  needs "All day" in its start or a Done by time; otherwise the resident
+  looks free (and back in clinic) from noon. The morning OR → afternoon
+  clinic list is the reminder. Should a big list (say 6+ cataracts at 7:30)
+  count as all day without being told?
 - Assumptions, as listed in docs/UISPEC6.md (10/18/2026): a coverer inherits
   every chain place whatever their year; Surg 2 out all day → the AM coverer
   takes daytime add-ons; after the ER, a case without its resident is the

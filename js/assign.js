@@ -1394,33 +1394,6 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* lateCover — "the morning OR runs past 12:30: who covers their PM    */
-  /* clinic until they are out?"                                         */
-  /* ------------------------------------------------------------------ */
-  // A junior running late: free juniors first (chief, 9/28/2026: "if there
-  // are free juniors (PGY2 and 3), they can be the default to help take
-  // over if the PGY2 is running later in the OR with Carrasco … will have
-  // Parekh cover if Patel goes past 12:30"), PGY-3s before PGY-2s
-  // (assumption). Then — and for a senior running late — the clinic-
-  // coverage chain (how-to Step 12; Surg 2 first — the AY legend: "Surg 2
-  // … Cover Cornea/Glaucoma if Surg 3/4 has PM cases"). The coverer must be
-  // free the whole of [start, end). `exclude`: names to skip (the late
-  // resident is always skipped).
-  function lateCover(name, clinic, start, end, roster, data, board, exclude, excludeId) {
-    data = getData(data);
-    var pulled = { clinic: clinic, owner: name, start: start, end: end, session: 'pm' };
-    var skip = [name].concat(exclude || []);
-    var lead = [];
-    var y = boardYear(board, name);
-    if (y === 'pgy2' || y === 'pgy3') {
-      freeNames(board, [{ start: start, end: end }], excludeId || null, ['pgy3', 'pgy2']).forEach(function (n) {
-        if (skip.indexOf(n) === -1) lead.push({ name: n, source: 'free junior' });
-      });
-    }
-    return findClinicCover(pulled, roster, data, board, skip, excludeId || null, lead);
-  }
-
-  /* ------------------------------------------------------------------ */
 
   var Assign = {
     classify: classify,
@@ -1429,7 +1402,6 @@
     backupPlan: backupPlan,
     planAddOn: planAddOn,
     planAddOns: planAddOns,
-    lateCover: lateCover,
     stepOf: stepOf,
     sessionsOfSpans: sessionsOfSpans,
     alwaysRole: function (c, data) { return alwaysRole(c, getData(data)); },

@@ -439,16 +439,16 @@ const SCHED_DATA = {
 
   // When PM clinics actually start (chief, 9/28/2026: "if the morning
   // plastics OR goes past 12:30, who will cover the person until they get to
-  // glaucoma?"). Used for "running late" coverage on the Coverage tab; the
-  // AM/PM session split everywhere else stays at noon.
+  // glaucoma?"). Shown on Coverage beside whoever goes from a morning OR to
+  // an afternoon clinic (10/18/2026: "we need to be aware of the people on
+  // any day that they go from OR in the morning and are in clinic in PM");
+  // the AM/PM session split everywhere else stays at noon.
   pmClinicStart: '12:30',
 
-  // Minutes per case, turnover included — ESTIMATES the app uses to guess
-  // when a resident is free again when no 'until' time is typed. Calibrate.
-  caseMinutes: {
-    cataract: 30, cornea: 90, glaucoma: 90, plastics: 60,
-    peds: 60, retina: 90, trauma: 120, other: 60
-  },
+  // No case-length estimates (10/18/2026: "estimating may confuse things
+  // because things can run short or long"): a list counts for the session it
+  // starts in until it is checked off (js/status.js caseSpans). The old
+  // minutes-per-case table (caseMinutes) is no longer read.
 
   schedulingNotes: [
     'Surg 2 is the boss. Give them some grace when things get busy.',
