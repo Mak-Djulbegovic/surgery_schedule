@@ -264,6 +264,22 @@ test-status / test-coverage / test-import / test-vacation):
   looks free (and back in clinic) from noon. The morning OR → afternoon
   clinic list is the reminder. Should a big list (say 6+ cataracts at 7:30)
   count as all day without being told?
+- **Deferred from the 10/19/2026 review round** (parked by the chief, not
+  decided; the app keeps today's behaviour until then):
+  - **A coverer's own clinic seat.** When someone covers an absent resident,
+    their own clinic is flagged "one short" even if others are still in it
+    (one click acknowledges it, keyed to that cover). The Clinics reviewer
+    suggests flagging only a clinic left empty; that reverses a test.
+  - **Bigger workflow changes proposed:** Night Float picked from a list on
+    Out today (not typed on Roster); one tap to carry yesterday's absences
+    over; a Roster with nothing to type (lectures move to Out today); an
+    add-on chosen as a case type on Surgery instead of a checkbox behind ⋯.
+  - **Smaller held items:** the copied CPEC line as one line with (AM)/(PM)
+    tags, as sent on 9/21; a note typed after a clinic's names (e.g. "+ 1
+    procedure @ 12:30") kept after the names, not folded into the
+    parenthesis; removing assign.js's board-less path, which only tests use.
+  - **Release:** these changes are on the branch; a new pull request and
+    deploy wait for the go-ahead.
 - Assumptions, as listed in docs/UISPEC6.md (10/18/2026): a coverer inherits
   every chain place whatever their year; Surg 2 out all day → the AM coverer
   takes daytime add-ons; after the ER, a case without its resident is the
