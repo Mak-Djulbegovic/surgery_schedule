@@ -166,8 +166,8 @@ docs/UISPEC6.md, "Surg 2 and the globe".
 29. **A scrubbed Surg 2 was passed over for a globe** — it went down the
     trauma chain: Surg 4 on Mon, Surg 3 on Tue, the Cooper senior pulled out
     of CPEC on Wed, Surg 1 on Thu. Now Surg 2 (or whoever covers them)
-    always takes it and it starts when they are free — on Coverage and on
-    Surgery. Tests: `test-coverage.js`.
+    always takes it — operating, it follows their cases, with no estimated
+    start — on Coverage and on Surgery. Tests: `test-coverage.js`.
 30. **The Coverage planner could not say "no globe"** — it always held one,
     and the last row could not be removed. It now starts empty, and with no
     globe shows Surg 2 free, what Surg 2 already has, and the Surg 3 /
@@ -178,6 +178,11 @@ docs/UISPEC6.md, "Surg 2 and the globe".
 32. **The rules were only in the Library.** The flow chart's cards are now
     at the foot of Coverage too, with a Surg 2 and the globe chart whose
     weekdays come from the block schedule.
+33. **Coverage showed estimated case times as if known** ("7:30 AM–12:30 PM
+    (est.) · clears 12:30 PM", "until 2:30 PM (est.)"). The check-off card is
+    now **Operating today** — who is operating, their lists and how many
+    cases, to check in on — and no estimated end time shows on Coverage
+    ("after McGowan ×10", "until Djulbegovic is back").
 
 ## Still open — questions for the chief
 
@@ -200,13 +205,10 @@ docs/UISPEC6.md, "Surg 2 and the globe".
 - **Needs coverage suggests one fix at a time**: two open gaps can suggest
   the same coverer for overlapping windows; after the first click the second
   updates.
-- **Thursday PM CPEC for Surg 3**: the grid has Surg 3 in CPEC on
-  Thursday afternoons, so a Surg 3 PM case on Thursday asks for clinic cover
-  and Thursday shows as a "both clinics" day with Wednesday. Is that right,
-  or does only Cornea (Mon / Wed / Fri) need cover?
-- **Two globes at once** both go to Surg 2, one after the other. Should the
-  second go to Surg 3 instead?
-- **Surg 2 covering the ER** keeps the ER; the globe goes down the chain.
+- **Estimates still decide who is free.** Coverage no longer shows
+  estimated case times, but the board still uses them (`data.caseMinutes`)
+  for suggestions, backups and the Free AM / PM strip. If availability
+  should come only from checking cases off, that is a bigger change: say so.
 - Assumptions, as listed in docs/UISPEC6.md (10/18/2026): a coverer inherits
   every chain place whatever their year; Surg 2 out all day → the AM coverer
   takes daytime add-ons; after the ER, a case without its resident is the

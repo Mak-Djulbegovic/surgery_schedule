@@ -394,17 +394,19 @@ const SCHED_DATA = {
   },
 
   // A case type one role always takes (10/18/2026: "surg 2 is ALWAYS going
-  // to take a globe"). Scrubbed in another case → the case waits for them
-  // (the Coverage planner starts it when they are free). Only out with
-  // nobody covering them, or on a duty that is never pulled (ER, consults,
-  // Path), sends it down its chain. Whoever covers Surg 2 is Surg 2.
-  // {} turns this off (left out, as in a configuration saved before
-  // 10/18/2026, it is on).
+  // to take a globe"). Operating then → it follows their cases, with no
+  // estimated start ("no need to estimate how long it will take … check in
+  // on them manually"); two globes go one after the other ("typically the
+  // same attending who does both"). Only Surg 2 out with nobody covering
+  // sends it down its chain (also, as a guard, a holder on the ER,
+  // consults or Path — "surg 2 would never cover the ER"). Whoever covers
+  // Surg 2 is Surg 2. {} turns this off (left out, as in a configuration
+  // saved before 10/18/2026, it is on).
   alwaysTakes: { trauma: 'Surg 2' },
 
   // Scheduling notes: "If the patient has not rolled back to the OR by
-  // 4:30, it can be passed to the call person." A globe that waits for
-  // Surg 2 until this time or later says so on Coverage.
+  // 4:30, it can be passed to the call person." Shown with a globe that
+  // follows Surg 2's cases, or comes in this late (confirmed 10/18/2026).
   callAfter: '16:30',
 
   // Availability rules (chief, 9/2026). A resident whose block text is in

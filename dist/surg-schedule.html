@@ -1137,6 +1137,7 @@ select.s-pick { width: 100%; max-width: 100%; min-width: 0; }
 .s-sub { display: flex; flex-direction: column; gap: 3px; padding: 5px 0 1px 10px; }
 .s-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12.5px; color: var(--muted); }
 .s-note.bad { color: var(--red-text); font-weight: 600; }
+.s-note.amber { color: var(--amber-text); font-weight: 600; }
 .s-note.backup { color: var(--text); }
 .s-note.backup.needs .s-note-text { color: var(--amber-text); font-weight: 600; }
 .s-note-warn { color: var(--red-text); font-size: 12px; font-weight: 600; }
@@ -1193,6 +1194,27 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .done-row.done .done-who { color: var(--faint); }
 .done-row.done .done-who .plan-via { text-decoration: line-through; }
 .done-time { border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12.5px; }
+/* Operating today: one row per resident, their lists under them */
+.op-group {
+  margin: 10px 0 2px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--faint);
+}
+.op-group:first-of-type { margin-top: 0; }
+.op-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); gap: 2px 16px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
+.op-row:last-child { border-bottom: none; }
+.op-who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding-top: 7px; }
+.op-who b { font-size: 14px; }
+.op-role { white-space: nowrap; }
+.op-count { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--accent); }
+.op-row.done .op-count { color: var(--green-text); }
+.op-row.done .op-who b { color: var(--faint); }
+.op-list { padding: 5px 0; }
+.op-lists .op-list:last-child { border-bottom: none; }
+.op-list .done-who { flex-basis: 200px; }
+@media (max-width: 640px) {
+  .op-row { grid-template-columns: minmax(0, 1fr); }
+  .op-who { padding-top: 0; }
+}
 .avail-now { padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px dashed var(--border); }
 .ok-card { color: var(--green-text); font-weight: 600; background: var(--green-bg); border-color: var(--green-border); }
 .ok-mark { font-weight: 800; }
@@ -2310,17 +2332,19 @@ const SCHED_DATA = {
   },
 
   // A case type one role always takes (10/18/2026: "surg 2 is ALWAYS going
-  // to take a globe"). Scrubbed in another case → the case waits for them
-  // (the Coverage planner starts it when they are free). Only out with
-  // nobody covering them, or on a duty that is never pulled (ER, consults,
-  // Path), sends it down its chain. Whoever covers Surg 2 is Surg 2.
-  // {} turns this off (left out, as in a configuration saved before
-  // 10/18/2026, it is on).
+  // to take a globe"). Operating then → it follows their cases, with no
+  // estimated start ("no need to estimate how long it will take … check in
+  // on them manually"); two globes go one after the other ("typically the
+  // same attending who does both"). Only Surg 2 out with nobody covering
+  // sends it down its chain (also, as a guard, a holder on the ER,
+  // consults or Path — "surg 2 would never cover the ER"). Whoever covers
+  // Surg 2 is Surg 2. {} turns this off (left out, as in a configuration
+  // saved before 10/18/2026, it is on).
   alwaysTakes: { trauma: 'Surg 2' },
 
   // Scheduling notes: "If the patient has not rolled back to the OR by
-  // 4:30, it can be passed to the call person." A globe that waits for
-  // Surg 2 until this time or later says so on Coverage.
+  // 4:30, it can be passed to the call person." Shown with a globe that
+  // follows Surg 2's cases, or comes in this late (confirmed 10/18/2026).
   callAfter: '16:30',
 
   // Availability rules (chief, 9/2026). A resident whose block text is in
@@ -4493,7 +4517,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       e.pickStatus = null;
       e.deferred = false;
       e.waits = null;
-      e.freeAt = null;
       if (e.step >= 10) { later.push(e); return; }
       if (e.private) { settled.push(e); return; }
       var w = walkStep(e.c, e.chain, e.step, roster, board, claims, e.spans, null);
@@ -4522,11 +4545,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
 
   /* ---- a case type one role always takes (data.alwaysTakes) ---------- */
   // 10/18/2026: "surg 2 is ALWAYS going to take a globe". The role is
-  // whoever holds it at the time — the block holder, or their stand-in.
-  // Scrubbed in another case → the case still goes to them and waits until
-  // they are free. Only when the role is out with nobody covering, or its
-  // holder is on a duty that is never pulled (ER, consults, Path) or
-  // off-site, does the case walk its chain as before.
+  // whoever holds it at the time it comes in — the block holder, or their
+  // stand-in. Operating then → it still goes to them and follows their
+  // cases; no estimated start ("no need to estimate how long it will take
+  // … so we can check in on them manually"). Two globes go one after the
+  // other (usually the same attending). Only when the role is out with
+  // nobody covering does the case walk its chain as before — or, as a
+  // guard, when its holder is on a duty that is never pulled (ER,
+  // consults, Path; Surg 2 never covers the ER) or off-site.
   // A configuration from before the rule (no alwaysTakes) gets it; {} is off.
   var ALWAYS_TAKES = { trauma: 'Surg 2' };
   function alwaysRole(c, data) {
@@ -4550,22 +4576,23 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return { name: n, via: tokenVia(r, n), standingFor: (r.standIn || {})[n] || '' };
   }
 
-  // The first minute from `t` on when `name` is out of every case they are
-  // in (back to back included) and of what `claims` already gives them ->
-  // { start, behind: [{ label, until, estimated }] } — what it waits behind.
+  // What `name` is in from minute `t` on — the case(s) they are in then,
+  // back to back, and what `claims` already gives them (an earlier globe)
+  // -> { start, behind: [{ label, until, claim }] }. A case of the role's
+  // follows these; the times are the board's estimates and are not shown.
   function waitFor(name, selfId, t, board, claims) {
     var start = t;
     var behind = [];
     for (var guard = 0; guard < 40; guard++) {
       var st = board.statusAt(name, start, { exclude: selfId });
       if (st.kind === 'case' && st.until != null && st.until > start) {
-        behind.push({ label: st.label, until: st.until, estimated: !!st.estimated });
+        behind.push({ label: st.label, until: st.until });
         start = st.until;
         continue;
       }
       var cl = claimAt((claims || {})[name], [{ start: start, end: start + 1 }]);
       if (cl && cl.end > start) {
-        behind.push({ claim: true, label: cl.label || cl.what || 'another add-on', until: cl.end, estimated: true });
+        behind.push({ claim: true, label: cl.label || cl.what || 'another add-on', until: cl.end });
         start = cl.end;
         continue;
       }
@@ -4574,18 +4601,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return { start: start, behind: behind };
   }
 
-  // 'in Tyson x3 until 2:30 PM (est.)' — what the case waits behind
+  // 'Tyson x3' · 'Tyson x3, then the globe / trauma at 1:00 PM' — what a
+  // case follows, without times
   function behindText(behind) {
-    var S = getStatus();
-    return (behind || []).map(function (w) {
-      return (w.claim ? '' : 'in ') + w.label + (S ? ' until ' + S.fmtClock(w.until) : '') + (w.estimated && !w.claim ? ' (est.)' : '');
-    }).join(', then ');
+    return (behind || []).map(function (w) { return w.label; }).join(', then ');
   }
 
   // Surgery's suggestion for a case one role always takes: the walk `w` of
   // its chain, with the role's holder put first — whatever they are doing
-  // then. The case keeps its typed start, so a holder still scrubbed then
-  // gets a warning with the time they are free (e.waits, e.freeAt).
+  // then. Operating then: a warning that it follows their cases (e.waits).
   function applyAlways(e, w, roster, board, claims) {
     var t = e.spans && e.spans.length ? e.spans[0].start : null;
     if (t == null) return;
@@ -4611,43 +4635,22 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     w.primaryStatus = st;
     w.alternates = rest.filter(function (x) { return x.verdict === 'alt'; }).map(function (x) { return x.name; });
     e.waits = wt.behind;
-    e.freeAt = wt.start;
   }
 
-  // The role's holder for a case of `draft`'s kind asked for at minute `t`
-  // -> null (walk the chain) or { cand, status, start, spans, behind }:
-  // when it starts (later than `t` when they are scrubbed), its spans then,
-  // and the holder's status over them. `spansAt(start)` gives the spans of
-  // the case starting then.
-  function alwaysPick(role, draft, t, roster, board, claims, spansAt) {
-    var start = t;
-    var behind = [];
-    var holder = null;
-    for (var pass = 0; pass < 3 && !holder; pass++) {
-      var h = roleHolderAt(role, roster, board, start);
-      if (!h) return null;
-      var w = waitFor(h.name, draft.id, start, board, claims);
-      var h2 = w.start === start ? h : roleHolderAt(role, roster, board, w.start);
-      if (!h2) return null; // free only once the role is out with nobody covering
-      if (h2.name !== h.name) {
-        // AM and PM covered by different people, the AM one scrubbed past
-        // noon: the PM one is the role from noon, and takes it then
-        start = Math.max(start, NOON);
-        continue;
-      }
-      holder = h;
-      behind = w.behind;
-      start = w.start;
-    }
-    if (!holder) return null;
-    var spans = spansAt(start);
-    var st = board.statusDuringSpans(holder.name, spans, { exclude: draft.id });
+  // The role's holder for a case of `draft`'s kind coming in at minute `t`
+  // (spans `spans`) -> null (walk the chain) or { cand, status, behind }:
+  // the holder, their status over the case's time, and what it follows
+  // when they are operating then (or taking an earlier one).
+  function alwaysPick(role, draft, t, spans, roster, board, claims) {
+    var h = roleHolderAt(role, roster, board, t);
+    if (!h) return null;
+    var st = board.statusDuringSpans(h.name, spans, { exclude: draft.id });
     if (st.kind === 'out' || st.neverPull || st.cls === 'offsite') return null;
     var cand = {
-      name: holder.name, via: holder.via, token: role, step: null, requireFree: false,
-      orBlock: false, standingFor: holder.standingFor, always: true
+      name: h.name, via: h.via, token: role, step: null, requireFree: false,
+      orBlock: false, standingFor: h.standingFor, always: true
     };
-    return { cand: cand, status: st, start: start, spans: spans, behind: behind };
+    return { cand: cand, status: st, behind: waitFor(h.name, draft.id, t, board, claims).behind };
   }
 
   // Trauma skips the junior on Plastics OR — the doc gives them only TABs
@@ -4710,11 +4713,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var warnings = [];
     if (p.always) {
       reasons[0] = hier.label + ' → ' + p.via + ' — ' + p.token + ' always takes it';
-      var S = getStatus();
-      if (e.waits && e.waits.length && S) {
-        warnings.push(p.name + ' is ' + behindText(e.waits) + ' — start it at ' + S.fmtClock(e.freeAt) + ', when they are free');
+      if (e.waits && e.waits.length) {
+        warnings.push(p.name + ' is operating (' + behindText(e.waits) + ') — it follows their cases; check in with them');
       } else if (st && st.kind === 'case') {
-        warnings.push(p.name + ' is also booked in ' + st.label + ' during it — hand one off or move the start');
+        warnings.push(p.name + ' also has ' + st.label + ' during it — check in with them');
       }
     }
     if (p.token === 'FREE_JUNIOR') {
@@ -4738,7 +4740,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return {
       caseId: c.id, name: p.name, status: st, skipped: skipped, outside: [],
       step: e.step, deferred: e.deferred, replaces: e.replaces, standingFor: p.standingFor || '',
-      always: p.always ? p.token : '', freeAt: p.always && e.waits && e.waits.length ? e.freeAt : null,
+      always: p.always ? p.token : '', follows: p.always && e.waits ? behindText(e.waits) : '',
       reasons: reasons, warnings: warnings, alternates: alternates.slice(0, 6)
     };
   }
@@ -5167,9 +5169,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   // if following it leaves an add-on with nobody while another choice would
   // cover it, the plan takes the first such choice (solvePlan). A kind one
   // role always takes (data.alwaysTakes — the globe, Surg 2) is settled
-  // first, in time order: it goes to that role's holder, and starts when
-  // they are free (`start`, later than `time` when they are scrubbed);
-  // the rest of the plan works around it. Then Step 12: everyone pulled
+  // first, in time order: it goes to that role's holder at its own time —
+  // following their cases when they are operating then (`follows`), and
+  // a second one following the first — and the rest of the plan works
+  // around it. Then Step 12: everyone pulled
   // out of a clinic hands it down the clinic-coverage chain, never to
   // someone taking an add-on at that time. Nobody in the chains free → no
   // pick, and `outside` / `pullable` list who else could (Surg 2's call).
@@ -5202,27 +5205,21 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       }
       e.stage2 = stageOptions(draft, e.step < 10 ? remChain : e.chain, 10, roster, board, e.spans, tried);
       e.always = alwaysRole(draft, data);
-      e.start = at;
       return e;
     });
     // the role that always takes a kind (Surg 2, the globe) takes it first,
-    // one after another in time order
+    // in time order — a second one following the first
     var preClaims = {};
     entries.filter(function (e) { return e.always; }).sort(function (a, b) { return a.time - b.time || a.i - b.i; }).forEach(function (e) {
-      var ap = alwaysPick(e.always, e.c, e.time, roster, board, preClaims, function (start) {
-        var d = {};
-        for (var k in e.c) d[k] = e.c[k];
-        d.start = S.fmtHHMM(start);
-        return board.caseSpansFor(d).spans;
-      });
-      if (!ap) return; // out with nobody covering, never pulled, off-site: its chain as before
+      var ap = alwaysPick(e.always, e.c, e.time, e.spans, roster, board, preClaims);
+      if (!ap) return; // out with nobody covering (or never pulled, off-site): its chain as before
       e.alwaysPick = ap;
-      e.start = ap.start;
-      e.spans = ap.spans;
-      e.c.start = S.fmtHHMM(ap.start);
-      preClaims[ap.cand.name] = (preClaims[ap.cand.name] || []).concat(ap.spans.map(function (sp) {
-        var what = 'taking the ' + e.def.label.toLowerCase() + ' at ' + S.fmtClock(ap.start);
-        return { start: sp.start, end: sp.end, entry: e, what: what, label: what };
+      preClaims[ap.cand.name] = (preClaims[ap.cand.name] || []).concat(e.spans.map(function (sp) {
+        return {
+          start: sp.start, end: sp.end, entry: e,
+          what: 'taking the ' + e.def.label.toLowerCase() + ' at ' + S.fmtClock(e.time),
+          label: 'the ' + e.def.label.toLowerCase() + ' at ' + S.fmtClock(e.time)
+        };
       }));
     });
     var sol = solvePlan(entries.filter(function (e) { return !e.alwaysPick; }), preClaims);
@@ -5293,7 +5290,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         sg[0].forEach(function (o) {
           var isPick = e.pick && o.cand === e.pick;
           var taker = !o.why ? takerOf(o.cand.name, e) : null;
-          var why = o.why || (taker ? 'taking the ' + taker.def.label.toLowerCase() + (taker.start !== e.start && S ? ' at ' + S.fmtClock(taker.start) : '') : null);
+          var why = o.why || (taker ? 'taking the ' + taker.def.label.toLowerCase() + (taker.time !== e.time && S ? ' at ' + S.fmtClock(taker.time) : '') : null);
           var verdict;
           if (isPick) { verdict = 'take'; seenPick = true; }
           else if (why) verdict = 'skip';
@@ -5314,13 +5311,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       var os = e.pick ? { free: [], pullable: [] } : outsideOf(board, e.spans, e.c.id, walked, claimsFinal);
       return {
         kind: e.def.key, label: e.def.label, key: e.key, hierLabel: e.hier.label, time: e.time,
-        // when it starts: `time`, or later when the role that always takes
-        // it is scrubbed (`waits`: what it waits behind)
-        start: e.start, always: e.alwaysPick ? e.always : '',
-        waits: e.alwaysPick ? e.alwaysPick.behind : [],
-        waitText: e.alwaysPick ? behindText(e.alwaysPick.behind) : '',
-        // the holder also has a case booked inside the add-on's time
-        overlap: e.alwaysPick && e.pickStatus && e.pickStatus.kind === 'case' ? e.pickStatus.label : '',
+        // taken by the role that always takes it: what it follows when they
+        // are operating then ('Tyson x3'), or a case of theirs that starts
+        // during it
+        always: e.alwaysPick ? e.always : '',
+        follows: e.alwaysPick ? behindText(e.alwaysPick.behind) : '',
+        overlap: e.alwaysPick && !e.alwaysPick.behind.length && e.pickStatus && e.pickStatus.kind === 'case' ? e.pickStatus.label : '',
         step: e.step, deferred: e.deferred, adjusted: adjusted || e.changed, byOrder: e.byOrder, draft: e.c, spans: e.spans,
         pick: e.pick ? { name: e.pick.name, via: e.pick.via } : null,
         status: e.pickStatus || null,
@@ -5353,7 +5349,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var it = planAddOns([{ kind: kind, t: t }], t, roster, data, board).items[0];
     return {
       kind: it.kind, label: it.label, time: t, key: it.key, hierLabel: it.hierLabel,
-      start: it.start, always: it.always, waits: it.waits, waitText: it.waitText, overlap: it.overlap,
+      always: it.always, follows: it.follows, overlap: it.overlap,
       step: it.step, deferred: it.deferred, draft: it.draft, spans: it.spans,
       pick: it.pick, pickStatus: it.status, steps: it.steps, skipped: it.skipped,
       alternates: it.alternates, outside: it.outside, pullable: it.pullable, handoff: it.handoff
@@ -5400,11 +5396,6 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     stepOf: stepOf,
     sessionsOfSpans: sessionsOfSpans,
     alwaysRole: function (c, data) { return alwaysRole(c, getData(data)); },
-    // when `name` is free of every case from minute t on -> { start, behind, text }
-    whenFree: function (name, t, board, excludeId) {
-      var w = waitFor(name, excludeId || null, t, board, null);
-      return { start: w.start, behind: w.behind, text: behindText(w.behind) };
-    },
     outsideWords: outsideWords,
     ADDON_KINDS: ADDON_KINDS,
     FREE_JUNIOR_LABEL: FREE_JUNIOR_LABEL
@@ -8343,12 +8334,29 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     if (info.done) return { tone: 'ok', text: name + ' — checked off as done' };
     var st = b.statusDuringSpans(name, info.spans, { exclude: c.id });
     if (st.kind === 'out') return { tone: 'bad', out: true, text: name + ' is out (' + st.label + ') — pick someone else' };
-    if (st.kind === 'case') return { tone: 'bad', text: name + ' is double-booked — ' + statusShort(st) };
+    if (st.kind === 'case') {
+      // the role that always takes a globe takes it while operating: it
+      // follows their cases (no estimated start — check in with them)
+      if (holdsAlwaysRole(c, name, info.spans[0] && info.spans[0].start)) {
+        return { tone: 'amber', follows: true, text: name + ' is operating (' + st.label + ') — ' + window.Assign.alwaysRole(c, data()) + ' always takes the globe: it follows their cases; check in with them' };
+      }
+      return { tone: 'bad', text: name + ' is double-booked — ' + statusShort(st) };
+    }
     // Retina / Uveitis: pulled first, no cover needed — as the backup pill shows it
     if (st.kind === 'clinic' && st.pullFirst) return { tone: 'ok', text: name + ' leaves ' + (st.clinic || 'clinic') + ' — no cover needed' };
     if (st.kind === 'clinic') return { tone: 'amber', kind: 'clinic', text: name + ' leaves ' + (st.clinic || 'clinic') + ' for this case' };
     if (st.kind === 'duty') return { tone: 'neutral', text: name + ' is on ' + st.label };
     return { tone: 'ok', text: name + ' is free then (' + st.label + ')' };
+  }
+
+  // `name` holds the role that always takes `c`'s kind (Surg 2 for a globe)
+  // at minute t
+  function holdsAlwaysRole(c, name, t) {
+    var role = window.Assign && window.Assign.alwaysRole ? window.Assign.alwaysRole(c, data()) : '';
+    var m = /^Surg (\d)$/.exec(role);
+    if (!m || t == null || !App.board) return false;
+    var a = App.board.actingSurg(m[1], t < App.board.noon ? 'am' : 'pm');
+    return !!a && a.name === name;
   }
 
   function suggVia(s) {
@@ -8568,27 +8576,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
               }
             }, [el('span', { class: 'res-mark', text: '+' }), el('b', { text: sugg.name }), el('span', { class: 'res-via', text: suggVia(sugg) })]));
           }
-          // a globe waits for Surg 2 (data.alwaysTakes): one click starts it
-          // when they are out of the case they are in
-          if (!chk.out && info && info.spans.length && window.Assign.alwaysRole && window.Assign.alwaysRole(c, data())) {
-            var wf = window.Assign.whenFree(assigned, info.spans[0].start, b, c.id);
-            if (wf.start > info.spans[0].start) {
-              badLine.appendChild(el('button', {
-                type: 'button', class: 'btn btn-small',
-                text: 'Start it at ' + window.Status.fmtClock(wf.start),
-                title: assigned + ' is ' + wf.text + ' — ' + window.Assign.alwaysRole(c, data()) + ' always takes it, so it starts when they are free',
-                onclick: function () {
-                  c.start = window.Status.fmtHHMM(wf.start);
-                  touch();
-                  computeBoard();
-                  renderSurgeryTab();
-                  toast(caseLabelOf(c) + ' now starts at ' + window.Status.fmtClock(wf.start) + ', when ' + assigned + ' is free');
-                }
-              }));
-            }
-          }
           sub.appendChild(badLine);
         }
+        // a globe goes to Surg 2 even while they are operating: it follows their cases
+        if (chk && chk.follows) sub.appendChild(el('div', { class: 's-note amber', text: chk.text }));
         if (c.done && info && info.done) {
           sub.appendChild(el('div', { class: 's-note done-note', text: '✓ Checked off as done at ' + window.Status.fmtClock(info.end) + ' — ' + assigned + ' is free from then' }));
         }
@@ -8636,7 +8627,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     if (timing) {
       clearNode(timing);
       if (info && info.done) {
-        // the same check-off as on Coverage ("Cases — check off when done")
+        // the same check-off as on Coverage ("Operating today")
         timing.appendChild(document.createTextNode('Done at ' + window.Status.fmtClock(info.end) + (trim(c.assigned) ? ' — ' + trim(c.assigned) + ' is free from then' : '') + ' '));
         timing.appendChild(el('button', {
           type: 'button', class: 'btn btn-small', text: 'Not done',
@@ -9452,7 +9443,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       // a service case with nobody, or whose resident is out (Out today)
       var kc = caseById(n.caseId);
       var sg = suggMap[n.caseId];
-      var when = S ? S.fmtClock(n.start) + (n.end > n.start ? '–' + S.fmtClock(n.end) + (n.estimated ? ' (est.)' : '') : '') : '';
+      // its start; the end only when typed ("Done by") — never an estimate
+      var when = !S ? '' : n.estimated || !(n.end > n.start) ? '(' + S.fmtClock(n.start) + ')' : S.fmtClock(n.start) + '–' + S.fmtClock(n.end);
       row.classList.add('case-need');
       row.appendChild(el('div', { class: 'need-text' }, [
         el('b', { text: n.label + ' ' + when }),
@@ -9495,7 +9487,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         }));
       }
     } else if (n.type === 'clinic') {
-      var when = S ? S.fmtClock(n.start) + '–' + S.fmtClock(n.end) : '';
+      // a gap that ends when an estimated case ends: from its start only
+      var gci = n.whyKind === 'case' && n.caseId && b && b.caseInfo[n.caseId];
+      var estEnd = gci && gci.estimated && Math.abs(n.end - gci.end) <= 5;
+      var when = !S ? '' : estEnd ? 'from ' + S.fmtClock(n.start) : S.fmtClock(n.start) + '–' + S.fmtClock(n.end);
       var who = n.owner !== n.holder ? ' (covering for ' + n.owner + ')' : '';
       row.appendChild(el('div', { class: 'need-text' }, [
         el('b', { text: n.clinic + ' ' + n.session.toUpperCase() + ' ' + when }),
@@ -9911,7 +9906,17 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return x.group === 'pull' ? t + ' — no cover needed' : t;
   }
 
-  // 'from 10:45', 'until 10:15', 'except 10:15–10:45 (Henry x10)', '8:00–9:30'
+  // The case whose ESTIMATED end opens a free window at `t` -> its label,
+  // or '' (a typed end, a clinic, a session edge). Coverage never shows an
+  // estimated end time (10/18/2026: "no need to estimate how long it will
+  // take") — the window says 'after Henry ×10' instead.
+  function estCaseEndingAt(name, t) {
+    var st = App.board.statusAt(name, t - 1);
+    return st.kind === 'case' && st.estimated && st.until != null && Math.abs(st.until - t) <= 5 ? st.label : '';
+  }
+
+  // 'after Henry x10', 'until 10:15', 'except during Henry x10 (from 10:15)',
+  // 'from 10:45' (a typed end), '8:00–9:30'
   function availWhen(x, s) {
     var S = window.Status;
     var b = App.board;
@@ -9919,16 +9924,19 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var to = x.to != null ? x.to : (s === 'am' ? b.noon : b.dayEnd);
     var c = function (m) { return S.fmtClock(m).replace(/ [AP]M$/, ''); };
     var r = x.ranges;
+    function opens(w) { var a = estCaseEndingAt(x.name, w.start); return a ? 'after ' + a : ''; }
     if (r.length === 1) {
       if (r[0].start === from) return 'until ' + c(r[0].end);
-      if (r[0].end === to) return 'from ' + c(r[0].start);
-      return c(r[0].start) + '–' + c(r[0].end);
+      var after = opens(r[0]);
+      if (r[0].end === to) return after || 'from ' + c(r[0].start);
+      return after ? after + ', until ' + c(r[0].end) : c(r[0].start) + '–' + c(r[0].end);
     }
     if (r.length === 2 && r[0].start === from && r[1].end === to) {
       var gap = (x.gaps || []).filter(function (g) { return g.start < r[1].start && r[0].end < g.end; })[0];
+      if (estCaseEndingAt(x.name, r[1].start)) return 'except during ' + estCaseEndingAt(x.name, r[1].start) + ' (from ' + c(r[0].end) + ')';
       return 'except ' + c(r[0].end) + '–' + c(r[1].start) + (gap && gap.label ? ' (' + gap.label + ')' : '');
     }
-    return r.map(function (w) { return c(w.start) + '–' + c(w.end); }).join(', ');
+    return r.map(function (w) { var a = opens(w); return a ? a + ', until ' + c(w.end) : c(w.start) + '–' + c(w.end); }).join('; ');
   }
 
   // One add-on case from a plan: named by its kind (the surgeon is rarely
@@ -9974,7 +9982,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       pickName + ' leaves ' + ho.clinic + (ho.owner !== pickName ? ' (covering for ' + ho.owner + ')' : '') + ' → ',
       ho.primary ? el('b', { text: ho.primary.name }) : el('b', { text: 'nobody on the coverage chain is free' }),
       ho.primary
-        ? ' (' + ho.primary.source + ') covers ' + ho.clinic + ' ' + S.fmtClock(ho.window.start) + '–' + S.fmtClock(ho.window.end)
+        ? ' (' + ho.primary.source + ') covers ' + ho.clinic + ' from ' + S.fmtClock(ho.window.start) + ' until ' + ho.owner + ' is back'
         : ' — Surg 2’s call; ' + outsideText(ho.outside, ho.pullable)
     ]);
   }
@@ -10007,6 +10015,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return row;
   }
 
+  // A general clinic (CPEC) — Surg 3 / Surg 4 leave it only for an urgent
+  // case (10/18/2026: "thursday CPEC would theoretically need coverage if
+  // surg 3 has an urgent cornea case"), unlike their subspecialty clinic,
+  // where scheduled cases run (Cornea Mon/Wed/Fri, Glaucoma Tue/Wed/Thu).
+  var GENERAL_CLINICS = ['CPEC'];
+  function isGeneralClinic(text) { return GENERAL_CLINICS.indexOf(trim(text)) !== -1; }
+  var SURG_SERVICE = { '3': 'cornea', '4': 'glaucoma' };
+
   // The role that always takes a globe (data.alwaysTakes — Surg 2), or ''
   function globeRole() {
     return window.Assign && window.Assign.alwaysRole ? window.Assign.alwaysRole({ category: 'trauma' }, data()) : '';
@@ -10025,32 +10041,34 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     return out.sort(function (x, y) { return x.plan.window.start - y.plan.window.start; });
   }
 
-  // What `role`'s holder is already doing today: their cases and the
-  // clinics they are covering -> ['in Tyson x3 1:00–2:30 PM', …]
+  // What Surg n's holder already has today, without estimated times:
+  // their lists and the clinics they cover as a backup ->
+  // ['operating: Tyson ×3 (1:00 PM)', 'covering Cornea for Djulbegovic during Hark ×1']
   function roleCommitments(n) {
-    var S = window.Status;
     var b = App.board;
     var out = [];
+    var names = [];
     ['am', 'pm'].forEach(function (sess) {
       var a = b.actingSurg(n, sess);
-      if (!a) return;
-      var lo = sess === 'am' ? b.dayStart : b.noon;
-      var hi = sess === 'am' ? b.noon : b.dayEnd;
-      b.segments(a.name).forEach(function (sg) {
-        var st = sg.status || {};
-        if (sg.end <= lo || sg.start >= hi) return;
-        if (!(st.kind === 'case' || (st.kind === 'clinic' && st.viaCase))) return;
-        var from = Math.max(sg.start, lo);
-        var to = Math.min(sg.end, hi);
-        var last = out[out.length - 1];
-        // one case across noon is one entry
-        if (last && last.name === a.name && last.label === st.label && last.to === from) { last.to = to; return; }
-        out.push({ name: a.name, for: a.for, kind: st.kind, label: st.label, from: from, to: to });
+      if (a && names.indexOf(a.name) === -1) names.push(a.name);
+    });
+    names.forEach(function (who) {
+      var pre = names.length > 1 ? who + ': ' : '';
+      var op = operatingToday(who);
+      if (op.cases.length) {
+        out.push(pre + 'operating — ' + op.cases.map(function (c) {
+          var st = caseStartText(c);
+          return caseListLabel(c) + (st ? ' (' + st + ')' : '');
+        }).join(', '));
+      }
+      (App.state.cases || []).forEach(function (c) {
+        if (trim(c.backup) !== who || caseDone(c) || assignedOutCase(c)) return;
+        var plan = null;
+        try { plan = window.Assign.backupPlan(c, App.roster, data(), App.state.cases, b); } catch (e) { plan = null; }
+        if (plan) out.push(pre + 'covering ' + plan.clinic + ' for ' + plan.owner + ' during ' + caseListLabel(c));
       });
     });
-    return out.map(function (x) {
-      return (x.for ? x.name + ': ' : '') + (x.kind === 'case' ? 'in ' : '') + x.label + ' ' + shortClock(x.from) + '–' + S.fmtClock(x.to);
-    });
+    return out;
   }
 
   // Surg 2 with no globe entered (10/18/2026: "if there is no globe
@@ -10079,8 +10097,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       globes.sort(function (x, y) { return x.info.start - y.info.start; }).forEach(function (g) {
         var a = trim(g.c.assigned);
         var bk = trim(g.c.backup);
+        var gst = caseStartText(g.c);
         gl.appendChild(el('li', {}, [
-          el('b', { text: caseLabelOf(g.c) + ' ' + shortClock(g.info.start) + '–' + window.Status.fmtClock(g.info.end) }), ' → ',
+          el('b', { text: caseListLabel(g.c) + (gst ? ' (' + gst + ')' : '') }), ' → ',
           a ? el('b', { text: a }) : el('span', { class: 'bad-text', text: 'no resident yet' }),
           bk ? ' · backup ' + (bk === 'NC' ? 'NC' : bk) + (g.c.backupNote ? ' (' + g.c.backupNote + ')' : '') : ''
         ]));
@@ -10108,16 +10127,17 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       if (!a) return;
       var bd = b.base[a.name] && b.base[a.name].pm;
       if (!bd || bd.kind !== 'clinic' || bd.pullFirst) return;
-      rows.push({ n: n, name: a.name, clinic: bd.text, pulls: pmPulls(a.name) });
+      rows.push({ n: n, name: a.name, clinic: bd.text, general: isGeneralClinic(bd.text), pulls: pmPulls(a.name) });
     });
     if (rows.length) {
       var list = el('ul', { class: 'surg2-clinics' });
       rows.forEach(function (row) {
         var bits = [el('b', { text: row.clinic + ' PM' }), ' — ' + row.name + ' (Surg ' + row.n + ')'];
-        if (!row.pulls.length) bits.push(': in clinic — no PM case yet');
+        if (!row.pulls.length) bits.push(row.general ? ': in clinic — needs cover only if an urgent ' + (SURG_SERVICE[row.n] || '') + ' case pulls them' : ': in clinic — no PM case yet');
         row.pulls.forEach(function (p, i) {
           var bk = trim(p.c.backup);
-          bits.push((i ? '; ' : ': ') + caseLabelOf(p.c) + ' ' + shortClock(p.plan.window.start) + '–' + window.Status.fmtClock(p.plan.window.end) + ' → ');
+          var pst = caseStartText(p.c);
+          bits.push((i ? '; ' : ': ') + caseListLabel(p.c) + (pst ? ' (' + pst + ')' : '') + ' → ');
           if (bk === 'NC') bits.push(el('span', { class: 'bad-text', text: 'NC — the clinic runs short' }));
           else if (bk) bits.push(el('b', { text: bk + ' covers' }));
           else bits.push(el('span', { class: 'bad-text', text: 'no backup yet' + (p.plan.primary ? ' (the chain: ' + p.plan.primary.name + ')' : '') }));
@@ -10125,7 +10145,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         list.appendChild(el('li', {}, bits));
       });
       box.appendChild(list);
-      if (rows.length === 2) {
+      // both can be pulled at once: their subspecialty clinics (Wednesday),
+      // or a general one (CPEC) whose resident does have a PM case
+      if (rows.length === 2 && rows.every(function (r) { return !r.general || r.pulls.length; })) {
         box.appendChild(el('p', { class: 'warn-line' }, [
           el('b', { text: 'Both have a PM clinic today' }),
           ' (' + rows[0].clinic + ', ' + rows[1].clinic + '): ' + (globes.length
@@ -10137,7 +10159,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       box.appendChild(el('p', { class: 'field-hint', text: 'Surg 3 and Surg 4 have no PM clinic today.' }));
     }
     if (!nobody && !globes.length && globeRole()) {
-      box.appendChild(el('p', { class: 'field-hint', text: 'A globe: ' + globeRole() + ' always takes it — scrubbed, it starts when they are free. Add it below to see who then covers what they were covering.' }));
+      box.appendChild(el('p', { class: 'field-hint', text: 'A globe: ' + globeRole() + ' always takes it — operating, it follows their cases. Add it below to see who then covers what they were covering.' }));
     }
     return box;
   }
@@ -10149,7 +10171,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     var card = el('div', { class: 'card plan-card' });
     card.appendChild(el('h2', {}, ['If a globe or add-on comes in ', el('span', {
       class: 'h-note',
-      text: 'Each at its own time. A globe always goes to ' + (globeRole() || 'its chain') + ' — scrubbed, it starts when they are free. The rest in the how-to’s order — add-on glaucoma → Surg 4 and cornea → Surg 3 (Step 6), plastics (Step 9), anything skipped down the remaining-cases chain in time order (Step 10) — nobody taking two at once. If that order would leave an add-on with nobody while another choice covers it, the plan takes that choice and says so.'
+      text: 'Each at its own time. A globe always goes to ' + (globeRole() || 'its chain') + ' — operating, it follows their cases; a second globe follows the first. The rest in the how-to’s order — add-on glaucoma → Surg 4 and cornea → Surg 3 (Step 6), plastics (Step 9), anything skipped down the remaining-cases chain in time order (Step 10) — nobody taking two at once. If that order would leave an add-on with nobody while another choice covers it, the plan takes that choice and says so.'
     })]));
     var hasGlobe = planItems.some(function (it) { return it.kind === 'globe'; });
     if (!hasGlobe) card.appendChild(surg2Today());
@@ -10184,13 +10206,20 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
 
     var list = planItems.map(function (it) { return { kind: it.kind, t: planTimeOf(it, t) }; });
     var callAfter = S.parseClock(data().callAfter || '16:30');
-    // 'Samuel is in Tyson x3 until 2:30 PM (est.) → starts 2:30 PM' and the
-    // notes that go with a globe that waits
+    // 'Samuel is operating today — Tyson x3 (3 cases): the globe follows
+    // their cases' and the 4:30 note — no estimated times (10/18/2026: "no
+    // need to estimate how long it will take … check in on them manually")
     function waitNotes(it, who) {
       var out = [];
-      if (it.waitText) out.push(who + ' is ' + it.waitText + ' → it starts at ' + S.fmtClock(it.start) + ', when they are free (' + it.always + ' always takes it)');
-      if (it.overlap) out.push(who + ' also has ' + it.overlap + ' booked during it — hand one off or move it');
-      if (it.always && callAfter != null && it.start >= callAfter) out.push('Starts at ' + S.fmtClock(it.start) + ' — if the patient has not rolled back by ' + S.fmtClock(callAfter) + ', it can be passed to the call person');
+      if (it.follows) {
+        var op = operatingToday(who);
+        out.push(who + ' is operating today — ' + (op.lists.length ? op.lists.join(', ') + ' (' + op.count + ' case' + (op.count === 1 ? '' : 's') + ')' : it.follows) +
+          ': the globe follows ' + (/^the /.test(it.follows) ? it.follows : 'their cases') + '. Check in with them.');
+      }
+      if (it.overlap) out.push(who + ' also has ' + it.overlap + ' during it — check in with them');
+      if (it.always && callAfter != null && (it.follows || it.overlap || it.time >= callAfter)) {
+        out.push('If the patient has not rolled back to the OR by ' + S.fmtClock(callAfter) + ', it can be passed to the call person');
+      }
       return out;
     }
     if (many) {
@@ -10207,17 +10236,16 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         ]));
       }
       var box = el('div', { class: 'plan-joint' });
-      joint.items.slice().sort(function (x, y) { return x.start - y.start || x.time - y.time; }).forEach(function (it) {
+      joint.items.slice().sort(function (x, y) { return x.time - y.time; }).forEach(function (it) {
         var row = el('div', { class: 'plan-joint-row' + (it.pick ? '' : ' bad') });
         row.appendChild(el('span', { class: 'plan-joint-kind' }, [
-          el('span', { class: 'plan-joint-time', text: S.fmtClock(it.start) }), ' ', it.label,
-          it.start !== it.time ? el('span', { class: 'plan-why', text: ' (in at ' + S.fmtClock(it.time) + ')' }) : null
+          el('span', { class: 'plan-joint-time', text: S.fmtClock(it.time) }), ' ', it.label
         ]));
         var skips = skipSummary(it);
         var notes = it.pick ? waitNotes(it, it.pick.name) : [];
         row.appendChild(el('span', { class: 'plan-joint-who' }, it.pick ? [
           '→ ', el('b', { text: it.pick.name }), el('span', { class: 'plan-via', text: ' ' + it.pick.via }),
-          el('span', { class: 'plan-why', text: ' — ' + (it.waitText ? 'free at ' + S.fmtClock(it.start) : statusBrief(it.status)) }),
+          el('span', { class: 'plan-why', text: ' — ' + (it.follows ? 'operating — follows ' + it.follows : statusBrief(it.status)) }),
           skips ? el('span', { class: 'plan-why plan-skips', text: skips }) : null,
           notes.length ? el('span', { class: 'plan-why plan-skips', text: notes.join('. ') + '.' }) : null
         ] : [
@@ -10235,7 +10263,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
             type: 'button', class: 'btn btn-primary',
             text: 'Add ' + (filled.length === 1 ? 'it' : 'all ' + filled.length) + ' as add-on cases',
             onclick: function () {
-              filled.forEach(function (it) { addPlannedCase(it.kind, it.start, it.pick.name, it.handoff); });
+              filled.forEach(function (it) { addPlannedCase(it.kind, it.time, it.pick.name, it.handoff); });
               planItems = [];
               touch();
               refreshEverything();
@@ -10253,7 +10281,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     card.appendChild(el('div', {
       class: 'field-hint plan-chain',
       text: plan.always
-        ? plan.always + ' always takes a globe — whoever covers them is ' + plan.always + '. Only out with nobody covering, or on the ER, consults or Path, sends it down the trauma chain (how-to Step ' + plan.step + ').'
+        ? plan.always + ' always takes a globe — whoever covers them is ' + plan.always + '. Only out with nobody covering sends it down the trauma chain (how-to Step ' + plan.step + ').'
         : 'How-to Step ' + plan.step + ': ' + plan.hierLabel +
           (plan.step < 10 ? ' — if nobody on it can, skip for now and use the remaining-cases chain (Step 10)' : '') +
           '. Past the chain it’s Surg 2’s call.'
@@ -10271,7 +10299,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
         el('span', { class: 'plan-verdict', text: st.verdict === 'take' ? '✓ takes it' : st.verdict === 'skip' ? 'skip' : 'next' }),
         el('b', { text: st.name }),
         el('span', { class: 'plan-via', text: ' ' + st.via }),
-        el('span', { class: 'plan-why', text: ' — ' + (st.why || (st.always && plan.waitText ? plan.waitText : statusBrief(st.status))) })
+        el('span', { class: 'plan-why', text: ' — ' + (st.why || (st.always && plan.follows ? 'operating — follows ' + plan.follows : statusBrief(st.status))) })
       ]));
       return false;
     });
@@ -10292,13 +10320,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     card.appendChild(el('div', { class: 'plan-actions' }, [
       el('button', {
         type: 'button', class: 'btn btn-primary',
-        text: 'Add it as an add-on case' + (plan.start !== one.t ? ' at ' + S.fmtClock(plan.start) : '') + ' → ' + plan.pick.name + (ho && ho.primary ? ' (backup ' + ho.primary.name + ')' : ''),
+        text: 'Add it as an add-on case → ' + plan.pick.name + (ho && ho.primary ? ' (backup ' + ho.primary.name + ')' : ''),
         onclick: function () {
-          var def = addPlannedCase(one.kind, plan.start, plan.pick.name, ho);
+          var def = addPlannedCase(one.kind, one.t, plan.pick.name, ho);
           planItems = [];
           touch();
           refreshEverything();
-          toast(def.label + ' added at ' + S.fmtClock(plan.start) + ' → ' + plan.pick.name + ' — fill in the surgeon on Surgery');
+          toast(def.label + ' added at ' + S.fmtClock(one.t) + ' → ' + plan.pick.name + ' — fill in the surgeon on Surgery');
         }
       }),
       el('span', { class: 'field-hint', text: 'Adds it to Surgery (Wills) so the board, clinics and the copied schedule all follow.' })
@@ -10496,12 +10524,39 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     host.appendChild(lateCard());
   }
 
-  // Every case with a resident, in time order, to check off when it is done
-  // (chief, 9/29/2026: "check off when the cases are done and who clears up
-  // … the goal is to have a list of who is available"). Checking one off
-  // ends the case then — now, today; the estimated end on another day — and
-  // the time can be corrected; the resident is free from that minute and
-  // Available follows. Unchecking puts the case back as it was.
+  // 'Tyson ×3' · 'Pericic ×14 (4 service)' — a list as the resident does it
+  function caseListLabel(c) {
+    var n = parseInt(c.count, 10) || 1;
+    var svc = c.serviceCount > 0 ? c.serviceCount : n;
+    return (trim(c.surgeon) || c.category || 'case') + ' ×' + n + (svc < n ? ' (' + svc + ' service)' : '');
+  }
+  function caseCountOf(c) { return c.serviceCount > 0 ? c.serviceCount : (parseInt(c.count, 10) || 1); }
+
+  // The typed start ('1:00 PM'), never an estimated end; '' when none
+  function caseStartText(c) {
+    var info = App.board && App.board.caseInfo[c.id];
+    return info && !info.unknownStart && info.spans.length ? window.Status.fmtClock(info.spans[0].start) : '';
+  }
+
+  // What `name` is operating on today, not checked off -> { lists, count, cases }
+  function operatingToday(name) {
+    var cases = (App.state.cases || []).filter(function (c) {
+      return trim(c.assigned) === name && !caseDone(c) && !assignedOutCase(c) && App.board && App.board.caseInfo[c.id];
+    }).sort(function (x, y) { return App.board.caseInfo[x.id].start - App.board.caseInfo[y.id].start; });
+    var count = 0;
+    cases.forEach(function (c) { count += caseCountOf(c); });
+    return { lists: cases.map(caseListLabel), count: count, cases: cases };
+  }
+
+  // Who is operating today and how many cases (10/18/2026: "just state in
+  // the coverage tab that they are doing cases that day and how many. no
+  // need to estimate how long it will take. good to visualize who is
+  // operating so we can check in on them manually"). One row per resident,
+  // seniors first; each list with its typed start and a check-off box —
+  // checking one off ends it then (now, today), frees the resident from
+  // that minute and Available follows (chief, 9/29/2026: "check off when
+  // the cases are done and who clears up"). No estimated end times.
+  var OP_YEAR_RANK = { pgy4: 0, pgy3: 1, pgy2: 2 };
   function casesCard() {
     var S = window.Status;
     var b = App.board;
@@ -10513,66 +10568,103 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     // case is under Needs coverage until someone takes it
     var outList = withRes.filter(assignedOutCase);
     var outNeeds = outList.filter(function (c) { return c.serviceCount > 0; }).length;
-    var list = withRes.filter(function (c) { return !assignedOutCase(c); })
-      .sort(function (x, y) { return b.caseInfo[x.id].start - b.caseInfo[y.id].start; });
-    var left = list.filter(function (c) { return !c.done; }).length;
-    var card = el('div', { class: 'card done-card' });
-    card.appendChild(el('h2', {}, ['Cases — check off when done ', el('span', {
+    var list = withRes.filter(function (c) { return !assignedOutCase(c); });
+    var byWho = {};
+    var people = [];
+    list.forEach(function (c) {
+      var who = trim(c.assigned);
+      if (!byWho[who]) { byWho[who] = []; people.push(who); }
+      byWho[who].push(c);
+    });
+    people.forEach(function (who) { byWho[who].sort(function (x, y) { return b.caseInfo[x.id].start - b.caseInfo[y.id].start; }); });
+    people.sort(function (x, y) {
+      var yx = OP_YEAR_RANK[(b.byName[x] || {}).year];
+      var yy = OP_YEAR_RANK[(b.byName[y] || {}).year];
+      return (yx == null ? 9 : yx) - (yy == null ? 9 : yy) || b.caseInfo[byWho[x][0].id].start - b.caseInfo[byWho[y][0].id].start;
+    });
+    var opNow = people.filter(function (who) { return byWho[who].some(function (c) { return !c.done; }); });
+    var card = el('div', { class: 'card done-card op-card' });
+    card.appendChild(el('h2', {}, ['Operating today ', el('span', {
       class: 'h-note',
-      text: (!list.length ? 'Nothing to check off yet'
-        : left ? left + ' of ' + list.length + ' not done · checking one off frees the resident from then, and Available below follows'
-          : 'All ' + list.length + ' done') +
+      text: (!people.length ? 'Nobody has a case yet'
+        : opNow.length ? opNow.length + ' operating · check in with them, and check a list off when it is done — they are free from then, and Available follows'
+          : 'Everyone is done') +
         (outList.length ? ' · ' + outList.length + ' whose resident is out ' + (outList.length === 1 ? 'is' : 'are') +
           (outNeeds === outList.length ? ' under Needs coverage' : ' left off — reassign on Surgery') : '')
     })]));
-    if (!list.length) {
+    if (!people.length) {
       card.appendChild(el('p', { class: 'empty-note', text: 'No case has a resident yet — assign them on Surgery.' }));
       return card;
     }
-    list.forEach(function (c) {
-      var info = b.caseInfo[c.id];
-      var who = trim(c.assigned);
-      var row = el('div', { class: 'done-row' + (c.done ? ' done' : '') });
-      var box = el('input', { type: 'checkbox', 'aria-label': 'Done: ' + caseLabelOf(c) + ' (' + who + ')' });
-      box.checked = !!c.done;
-      box.addEventListener('change', function () {
-        if (box.checked) {
-          var at = info.end;
-          if (isToday()) at = Math.min(Math.max(nowMinutes(), b.dayStart), b.dayEnd);
-          at = Math.round(at / 5) * 5;
-          c.done = true;
-          c.doneAt = S.fmtHHMM(at);
-          toast(who + ' is free from ' + S.fmtClock(at));
-        } else {
-          c.done = false;
-          c.doneAt = '';
-        }
-        touch();
-        refreshEverything();
-      });
-      row.appendChild(el('label', { class: 'done-check' }, [box]));
-      row.appendChild(el('span', { class: 'done-who' }, [
-        el('b', { class: 'res-name ' + yearOf(who), text: who }), ' ',
-        el('span', { class: 'plan-via', text: caseLabelOf(c) + (c.addOn ? ' · add-on' : '') })
-      ]));
-      if (c.done) {
-        var tin = el('input', {
-          type: 'time', class: 'done-time', step: '300', 'aria-label': 'Done at',
-          value: String(c.doneAt || '').replace(/^(\d\d)(\d\d)$/, '$1:$2')
+    var lastGroup = null;
+    people.forEach(function (who) {
+      var year = (b.byName[who] || {}).year;
+      var group = year === 'pgy4' ? 'Seniors' : 'Juniors';
+      if (group !== lastGroup) {
+        card.appendChild(el('div', { class: 'op-group', text: group }));
+        lastGroup = group;
+      }
+      var cs = byWho[who];
+      var left = cs.filter(function (c) { return !c.done; });
+      var count = 0;
+      left.forEach(function (c) { count += caseCountOf(c); });
+      var roles = [];
+      ['am', 'pm'].forEach(function (sess) {
+        b.surgRolesAt(who, sess).forEach(function (r) {
+          var t = 'Surg ' + r.n + (r.for ? ' for ' + r.for : '');
+          if (roles.indexOf(t) === -1) roles.push(t);
         });
-        tin.addEventListener('change', function () {
-          var m = /^(\d{1,2}):(\d{2})/.exec(tin.value);
-          if (!m) return;
-          c.doneAt = ('0' + m[1]).slice(-2) + m[2];
+      });
+      var row = el('div', { class: 'op-row' + (left.length ? '' : ' done') });
+      row.appendChild(el('div', { class: 'op-who' }, [
+        el('b', { class: 'res-name ' + yearOf(who), text: who }),
+        roles.length ? el('span', { class: 'role-k op-role', text: roles.join(' · ') }) : null,
+        el('span', { class: 'op-count', text: left.length ? count + ' case' + (count === 1 ? '' : 's') + ' to go' : 'done' })
+      ]));
+      var lists = el('div', { class: 'op-lists' });
+      cs.forEach(function (c) {
+        var info = b.caseInfo[c.id];
+        var item = el('div', { class: 'done-row op-list' + (c.done ? ' done' : '') });
+        var box = el('input', { type: 'checkbox', 'aria-label': 'Done: ' + caseListLabel(c) + ' (' + who + ')' });
+        box.checked = !!c.done;
+        box.addEventListener('change', function () {
+          if (box.checked) {
+            var at = info.end;
+            if (isToday()) at = Math.min(Math.max(nowMinutes(), b.dayStart), b.dayEnd);
+            at = Math.round(at / 5) * 5;
+            c.done = true;
+            c.doneAt = S.fmtHHMM(at);
+            toast(who + ' is free from ' + S.fmtClock(at));
+          } else {
+            c.done = false;
+            c.doneAt = '';
+          }
           touch();
           refreshEverything();
         });
-        row.appendChild(el('span', { class: 'done-when' }, ['done at ', tin, ' — ' + who + ' free from then']));
-      } else {
-        row.appendChild(el('span', { class: 'done-when' }, [
-          spanText(info.spans) + (info.estimated ? ' (est.)' : '') + ' · clears ' + S.fmtClock(info.end)
+        item.appendChild(el('label', { class: 'done-check' }, [box]));
+        var start = caseStartText(c);
+        item.appendChild(el('span', { class: 'done-who' }, [
+          el('span', { text: caseListLabel(c) }),
+          el('span', { class: 'plan-via', text: (start ? ' · ' + start : '') + (c.addOn ? ' · add-on' : '') })
         ]));
-      }
+        if (c.done) {
+          var tin = el('input', {
+            type: 'time', class: 'done-time', step: '300', 'aria-label': 'Done at',
+            value: String(c.doneAt || '').replace(/^(\d\d)(\d\d)$/, '$1:$2')
+          });
+          tin.addEventListener('change', function () {
+            var m = /^(\d{1,2}):(\d{2})/.exec(tin.value);
+            if (!m) return;
+            c.doneAt = ('0' + m[1]).slice(-2) + m[2];
+            touch();
+            refreshEverything();
+          });
+          item.appendChild(el('span', { class: 'done-when' }, ['done at ', tin]));
+        }
+        lists.appendChild(item);
+      });
+      row.appendChild(lists);
       card.appendChild(row);
     });
     return card;
@@ -11168,7 +11260,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     { title: 'Roster', you: 'Check Night Float, add lectures.', app: 'Surg 1–5, WER, consults and clinics from the block schedule — with whoever covers anyone out.' },
     { title: 'Surgery', you: 'Add the CPEC-sheet lists and the cases from the EMRs: Wills · Stadium / Cherry Hill · JHN · Privates.', app: 'Suggests a resident per case, in the how-to’s order, skipping anyone out or busy; asks for a backup when a case pulls someone from clinic.' },
     { title: 'Clinics', you: 'Patient counts from the EMRs.', app: 'Shows who is out or pulled into a case, and who covers; anything left short is listed first.' },
-    { title: 'Coverage', you: 'On the day: check cases off, plan add-ons, flag a morning OR running late.', app: 'Everything still open, today’s roles, who is available AM / PM, who takes each add-on and who covers their clinic.' },
+    { title: 'Coverage', you: 'On the day: check in with whoever is operating and check their lists off, plan a globe or add-ons, flag a morning OR running late.', app: 'Everything still open, today’s roles, who is operating and how many cases, who is available AM / PM, who takes each add-on and who covers their clinic.' },
     { title: 'Preview & Copy', you: 'Copy and send.', app: 'The schedule in the usual format, and a warning for anything still open.' }
   ];
 
@@ -11283,7 +11375,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
   function surgPmClinicWeek() {
     var E = window.Engine;
     var S = window.Status;
-    var out = { rows: [], both: [] };
+    var out = { rows: [], both: [], bothSub: [], general: [] };
     if (!E || !S || !App.state || !App.state.date) return out;
     var d = parseISO(App.state.date);
     var mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
@@ -11308,6 +11400,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       });
       if (count === 2) out.both.push(label);
     });
+    // both subspecialty clinics (Wednesday) vs a general one (CPEC, Thursday)
+    out.bothSub = out.both.filter(function (day) {
+      return !out.rows.some(function (r) { return r.days.indexOf(day) !== -1 && isGeneralClinic(r.clinic); });
+    });
+    out.general = out.rows.filter(function (r) { return isGeneralClinic(r.clinic); });
     out.rows.sort(function (x, y) { return x.n - y.n; });
     return out;
   }
@@ -11330,7 +11427,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       'First to cover a clinic when Surg 3 or Surg 4 is in a PM case (first on the clinic-coverage chain), and can take over a case (first on the remaining-cases chain).'
     ];
     if (clinics.length) freeBody.push('PM clinics this week: ' + clinics.join(' · ') + '.');
-    if (wk.both.length) freeBody.push('Both on ' + wk.both.join(', ') + ' — the least slack: Surg 2 covers one, and if both are in cases at once the next free on the chain covers the other.');
+    if (wk.bothSub.length) freeBody.push('Both on ' + wk.bothSub.join(', ') + ' — the least slack: Surg 2 covers one, and if both are in cases at once the next free on the chain covers the other.');
+    wk.general.forEach(function (r) {
+      freeBody.push(r.clinic + ' (Surg ' + r.n + ', ' + r.days.join(', ') + ') needs cover only if an urgent ' + (SURG_SERVICE[r.n] || '') + ' case pulls them.');
+    });
     if (!role) {
       card.appendChild(el('p', { class: 'field-hint flow-lede', text: 'No role always takes a globe in this configuration — a globe walks the trauma chain like any add-on (Who takes a case).' }));
       card.appendChild(fcFlow([fcNode('ok', 'With no globe, Surg 2 is free', freeBody)]));
@@ -11339,17 +11439,17 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
     card.appendChild(fcFlow([
       fcDecision('A globe today?', 'No', fcNode('ok', role + ' is free', freeBody), 'Yes'),
       fcNode('ok', role + ' takes it — always', [
-        'Whoever covers ' + role + ' is ' + role + '. Scrubbed in a case? The globe waits: it starts when they are free (Coverage adds it at that time; Surgery offers “Start it at …”).',
-        el('div', { class: 'fc-text' }, ['Only out with nobody covering, or on the ER, consults or Path: down the trauma chain — ', chainChips('traumaPlasticsAddOn', ['PLASTICS_OR_JUNIOR', role])])
+        'Whoever covers ' + role + ' is ' + role + '. Operating? The globe follows their cases — Coverage shows who is operating and how many cases; check in with them. A second globe follows the first (usually the same attending).',
+        el('div', { class: 'fc-text' }, ['Only out with nobody covering: down the trauma chain — ', chainChips('traumaPlasticsAddOn', ['PLASTICS_OR_JUNIOR', role])])
       ]),
       fcArrow(),
       fcDecision('Was ' + role + ' covering a clinic then?', 'No', fcNode('end', 'Nothing to hand off'), 'Yes'),
       fcNode('check', 'The next free on the clinic-coverage chain covers it', [
         chainChips('clinicCoverage', [role]),
-        el('div', { class: 'fc-text', text: 'The usual: Surg 3 in a PKP during Cornea clinic, or a glaucoma case during Glaucoma clinic — ' + role + ' was covering, the globe takes them, the clinic passes on.' + (wk.both.length ? ' On ' + wk.both.join(', ') + ' both clinics can need someone at once.' : '') })
+        el('div', { class: 'fc-text', text: 'The usual: Surg 3 in a PKP during Cornea clinic, or a glaucoma case during Glaucoma clinic — ' + role + ' was covering, the globe takes them, the clinic passes on.' + (wk.bothSub.length ? ' On ' + wk.bothSub.join(', ') + ' both clinics can need someone at once.' : '') })
       ]),
-      fcArrow('if it waits late'),
-      fcNode('end', callAfter != null ? 'Starting ' + S.fmtClock(callAfter) + ' or later' : 'Late in the day', 'If the patient has not rolled back to the OR by ' + (callAfter != null ? S.fmtClock(callAfter) : '4:30') + ', it can be passed to the call person.')
+      fcArrow('if it runs late'),
+      fcNode('end', callAfter != null ? 'Not rolled back by ' + S.fmtClock(callAfter) : 'Late in the day', 'It can be passed to the call person.')
     ]));
     return card;
   }
@@ -11548,7 +11648,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = SCHED_DATA
       'Scheduled plastics → ' + chainText('scheduledPlastics', 'PGY-2 on Plastics OR → free junior → Surg 4') + '.',
       'Peds → ' + chainText('peds', 'junior on Peds OR → free junior → Surg 4 → Surg 3') + '.'
     ].concat(globeRole() ? [
-      'A globe → ' + globeRole() + ', always — whoever covers them is ' + globeRole() + '; scrubbed, it starts when they are free. Only out with nobody covering, or on the ER, consults or Path: ' + chainText('traumaPlasticsAddOn', 'Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5', ['PLASTICS_OR_JUNIOR', globeRole()]) + '.',
+      'A globe → ' + globeRole() + ', always — whoever covers them is ' + globeRole() + '; operating, it follows their cases (a second globe follows the first). Only out with nobody covering: ' + chainText('traumaPlasticsAddOn', 'Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5', ['PLASTICS_OR_JUNIOR', globeRole()]) + '. Not rolled back by ' + window.Status.fmtClock(window.Status.parseClock(data().callAfter || '16:30')) + ': it can go to the call person.',
       'Plastics add-ons → ' + chainText('traumaPlasticsAddOn', 'junior on Plastics OR → Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + ' (the plastics junior only for TABs / outpatient plastics).'
     ] : [
       'Trauma and plastics add-ons → ' + chainText('traumaPlasticsAddOn', 'junior on Plastics OR → Surg 2 → Surg 3 → Surg 4 → Cooper → Surg 1 → Surg 5') + ' (the plastics junior only for TABs / outpatient plastics).'

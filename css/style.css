@@ -1129,6 +1129,7 @@ select.s-pick { width: 100%; max-width: 100%; min-width: 0; }
 .s-sub { display: flex; flex-direction: column; gap: 3px; padding: 5px 0 1px 10px; }
 .s-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12.5px; color: var(--muted); }
 .s-note.bad { color: var(--red-text); font-weight: 600; }
+.s-note.amber { color: var(--amber-text); font-weight: 600; }
 .s-note.backup { color: var(--text); }
 .s-note.backup.needs .s-note-text { color: var(--amber-text); font-weight: 600; }
 .s-note-warn { color: var(--red-text); font-size: 12px; font-weight: 600; }
@@ -1185,6 +1186,27 @@ select.s-move { width: auto; font-size: 12.5px; padding: 4px 6px; }
 .done-row.done .done-who { color: var(--faint); }
 .done-row.done .done-who .plan-via { text-decoration: line-through; }
 .done-time { border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12.5px; }
+/* Operating today: one row per resident, their lists under them */
+.op-group {
+  margin: 10px 0 2px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--faint);
+}
+.op-group:first-of-type { margin-top: 0; }
+.op-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); gap: 2px 16px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
+.op-row:last-child { border-bottom: none; }
+.op-who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding-top: 7px; }
+.op-who b { font-size: 14px; }
+.op-role { white-space: nowrap; }
+.op-count { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--accent); }
+.op-row.done .op-count { color: var(--green-text); }
+.op-row.done .op-who b { color: var(--faint); }
+.op-list { padding: 5px 0; }
+.op-lists .op-list:last-child { border-bottom: none; }
+.op-list .done-who { flex-basis: 200px; }
+@media (max-width: 640px) {
+  .op-row { grid-template-columns: minmax(0, 1fr); }
+  .op-who { padding-top: 0; }
+}
 .avail-now { padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px dashed var(--border); }
 .ok-card { color: var(--green-text); font-weight: 600; background: var(--green-bg); border-color: var(--green-border); }
 .ok-mark { font-weight: 800; }

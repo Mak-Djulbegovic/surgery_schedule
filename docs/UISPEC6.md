@@ -157,35 +157,56 @@ CPEC. The Coverage planner always held a globe ("a globe at now", and the
 last row could not be removed), so there was no way to say "no globe".
 
 **Now.** `data.alwaysTakes = { trauma: 'Surg 2' }`: a globe goes to whoever
-holds Surg 2 at the time — the block holder or their stand-in. Scrubbed in a
-case, the globe waits: it starts when they are out of the case(s) they are
-in, and of any globe planned before it (two globes: one after the other).
-The Coverage planner says so ("Samuel is in Tyson x3 until 2:30 PM (est.) →
-it starts at 2:30 PM") and adds the case at that time; Surgery suggests Surg 2
-with "start it at 2:30 PM", and once assigned offers **Start it at …**. A
-globe still goes down the trauma chain (Surg 3 → Surg 4 → Cooper → Surg 1 →
-Surg 5) only when Surg 2 is out with nobody covering, or its holder is on
-a duty that is never pulled (covering the ER, consults, Path) or off-site.
-A globe that would start at 4:30 PM or later carries the scheduling note —
-"if the patient has not rolled back to the OR by 4:30, it can be passed to
-the call person" (`data.callAfter`); it is not reassigned. A configuration
+holds Surg 2 when it comes in — the block holder or their stand-in. If they
+are operating then, it still goes to them and **follows their cases**, with
+no estimated start ("no need to estimate how long it will take … good to
+visualize who is operating so we can check in on them manually"): the
+Coverage planner says "Samuel is operating today — Tyson ×3 (3 cases): the
+globe follows their cases. Check in with them.", and the case keeps the time
+it came in. On Surgery the suggestion says the same, and once assigned the
+line is amber ("operating — the globe follows their cases"), not red
+double-booked. A second globe follows the first ("typically the same
+attending who does both"). A globe goes down the trauma chain (Surg 3 →
+Surg 4 → Cooper → Surg 1 → Surg 5) only when Surg 2 is out with nobody
+covering ("surg 2 would never cover the ER"; a holder on a never-pulled duty
+or off-site still falls through, as a guard). A globe that follows Surg 2's
+cases, or comes in at 4:30 or later, carries the scheduling note — "if the
+patient has not rolled back to the OR by 4:30, it can be passed to the call
+person" (`data.callAfter`, confirmed); it is not reassigned. A configuration
 without `alwaysTakes` gets the rule; `{}` turns it off.
+
+**Operating today.** The Coverage tab's check-off card is now one row per
+resident who is operating — seniors first, then juniors — with their Surg
+role, each list (attending ×count, the typed start) and how many cases are
+left, and a check-off box per list (checking one off frees them from then,
+as before). No estimated end times anywhere on Coverage: a needs line shows
+the case's start (an end only when typed as "Done by"), a clinic gap that
+ends with an estimated case shows "from 1:00 PM", Available says "after
+McGowan ×10" instead of an estimated "from 12:30", and a clinic handed on
+is covered "from 1:30 PM until Djulbegovic is back". The board still uses
+the per-case estimates (`data.caseMinutes`) underneath, to judge who is free
+for a suggestion or a backup and in the Free AM / PM strip.
 
 **Coverage, with no globe.** The planner starts empty. Its card says Surg 2
 is free — first on the clinic-coverage chain (Step 12) and first on the
 remaining-cases chain (Step 10) — lists what Surg 2 already has today, and
 the Surg 3 / Surg 4 PM clinics with each PM case and its backup. When both
-have a PM clinic that day it says Surg 2 can cover only one at a time. A
-globe already on Surgery turns the card into "Globe today". After **Add it
-as an add-on case** the planner empties (it used to keep the globe, ready
-to be added twice); a new date starts empty.
+have a PM clinic that can pull them that day (Wednesday: Cornea and
+Glaucoma) it says Surg 2 can cover only one at a time. Surg 3's Thursday PM
+CPEC "would theoretically need coverage if surg 3 has an urgent cornea
+case": it is listed as "needs cover only if an urgent cornea case pulls
+them", and counts toward "both" only once such a case is on. A globe
+already on Surgery turns the card into "Globe today". After **Add it as an
+add-on case** the planner empties (it used to keep the globe, ready to be
+added twice); a new date starts empty.
 
 **The rules on Coverage.** The flow chart's cards sit at the foot of
 Coverage (open unless this browser closed it; "The rules ↓" at the top
 jumps there), led by a new **Surg 2 and the globe** chart — also in Library
 → Flow chart. Its weekdays come from the block schedule for the selected
 week, not from text: Cornea (Surg 3) Mon / Wed / Fri, Glaucoma (Surg 4)
-Tue / Wed / Thu, and CPEC (Surg 3) Thu.
+Tue / Wed / Thu — both on Wednesday, the least slack — and CPEC (Surg 3)
+Thu, which needs cover only for an urgent cornea case.
 
 Checked for the week of 10/19 (`tests/test-coverage.js`; a PKP for Surg 3
 and a glaucoma case for Surg 4 at 1 PM whenever they have a PM clinic, each
@@ -199,14 +220,13 @@ backup as the app suggests it, then a 1:30 globe):
 | Thu 10/22 | Samuel | CPEC: Samuel · Glaucoma: Aguwa (Surg 1) | CPEC → Cheng (Surg 5) |
 | Fri 10/23 | Samuel | Cornea: Samuel | Cornea → Shields (Surg 4) |
 
-With Surg 2 in a cataract list 1:00–2:30 instead, every day's globe goes to
-Surg 2 at 2:30.
+With Surg 2 in a 1 PM cataract list instead, every day's globe still goes
+to Surg 2, following their cases.
 
-Assumptions, to confirm: Surg 3's **Thursday PM CPEC** counts as a clinic to
-cover when Surg 3 has a PM case (CPEC is a clinic — chief, 9/28/2026), so
-Thursday is a "both clinics" day like Wednesday; **two globes** both go to
-Surg 2, one after the other; Surg 2 **covering the ER** keeps the ER and the
-globe goes down the chain.
+Decided (10/18/2026): Thursday CPEC needs cover only if an urgent cornea
+case pulls Surg 3; two globes go one after the other to Surg 2 (usually the
+same attending); Surg 2 never covers the ER; the 4:30 call-person note
+stands.
 
 ## Saving and working at the same time (9/28/2026)
 
@@ -241,7 +261,9 @@ automatic save in case they X out of the tab."
   check off when the cases are done and who clears up. again, the goal is to
   have a list of who is available"). Coverage → "Cases — check off when
   done": every case with a resident, in time order, with when the resident
-  clears. Checking one sets `case.done` / `case.doneAt` — now, today; the
+  clears. (10/18/2026: now **Operating today**, one row per resident with
+  their lists and case count, and no estimated times — see "Surg 2 and the
+  globe".) Checking one sets `case.done` / `case.doneAt` — now, today; the
   estimated end on another day — and the time can be corrected. The case is
   over at that minute (earlier or later than the estimate), so the resident
   is free from then and Available updates. Unchecking puts the case back as

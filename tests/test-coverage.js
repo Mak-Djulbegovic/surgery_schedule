@@ -43,23 +43,22 @@ eq(plan.handoff && plan.handoff.primary && plan.handoff.primary.name, 'Calotti',
 var skipBair = plan.handoff && plan.handoff.steps.filter(function (s) { return s.name === 'Bair'; })[0];
 eq(skipBair && skipBair.verdict, 'skip', 'Bair skipped for clinic cover (in a case)');
 
-/* ---------- same, but Surg 2 is scrubbed: the globe waits for Surg 2 ---------- */
-// 10/18/2026: "surg 2 is ALWAYS going to take a globe"
+/* ---------- same, but Surg 2 is scrubbed: still Surg 2, following their cases ---------- */
+// 10/18/2026: "surg 2 is ALWAYS going to take a globe"; "no need to
+// estimate how long it will take" — no estimated start, it follows their cases
 x = board({ cases: [hark('Djulbegovic'),
   { id: 'c2', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1300', category: 'cataract', addOn: false, assigned: 'Djulbegovic', backup: '' }] });
 plan = Assign.planAddOn('globe', 810, roster, DATA, x.b);
 eq(plan.pick && plan.pick.name, 'Djulbegovic', 'Surg 2 scrubbed in Tyson x3 → still Surg 2 (always takes the globe)');
 eq(plan.always, 'Surg 2', '…by the always-takes rule');
-eq(plan.start, 870, '…starting when they are free: 2:30 PM (Tyson x3 from 1 PM, 30 min each)');
-ok(/^in Tyson x3 until 2:30 PM \(est\.\)$/.test(plan.waitText), 'the plan says what it waits behind — got ' + plan.waitText);
-eq(plan.spans[0].start, 870, 'the globe’s time on the board starts then');
-eq(plan.handoff, null, 'Surg 2 is free from 2:30 — nothing to hand off');
+eq(plan.follows, 'Tyson x3', '…it follows their cases (no estimated time)');
+eq(plan.spans[0].start, 810, 'the globe keeps the time it came in');
+eq(plan.handoff, null, 'Surg 2 is operating, not covering a clinic — nothing to hand off');
 eq(plan.steps.length, 1, 'no chain walk: Surg 3 / Surg 4 are not offered the globe');
-// two globes: the second waits for Surg 2 to finish the first
+// two globes: one after the other ("typically the same attending who does both")
 var twoG = Assign.planAddOns([{ kind: 'globe', t: 780 }, { kind: 'globe', t: 800 }], null, roster, DATA, board({}).b);
-eq(twoG.items.map(function (it) { return it.pick && it.pick.name + '@' + it.start; }).join(' '), 'Djulbegovic@780 Djulbegovic@900',
-  'two globes: both Surg 2 — 1:00 PM, then 3:00 PM when the first ends');
-ok(/^taking the globe \/ trauma at 1:00 PM until 3:00 PM$/.test(twoG.items[1].waitText), '…the second says it waits behind the first — got ' + twoG.items[1].waitText);
+eq(twoG.items.map(function (it) { return it.pick && it.pick.name; }).join(' '), 'Djulbegovic Djulbegovic', 'two globes: both Surg 2');
+eq(twoG.items[0].follows + '|' + twoG.items[1].follows, '|the globe / trauma at 1:00 PM', '…the second follows the first');
 // Surgery tab: a trauma case while Surg 2 is scrubbed → Surg 2, with the time they are free
 var gcase = { id: 'g1', section: 'wills', surgeon: 'Globe/trauma', count: 1, serviceCount: 1, start: '1330', category: 'trauma', addOn: true, assigned: '' };
 var tyson = { id: 'c2', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1300', category: 'cataract', addOn: false, assigned: 'Djulbegovic', backup: '' };
@@ -67,8 +66,9 @@ x = board({ cases: [tyson, gcase] });
 res = Assign.suggest([tyson, gcase], roster, DATA, x.b);
 var gr = res.filter(function (r) { return r.caseId === 'g1'; })[0];
 eq(gr && gr.name, 'Djulbegovic', 'Surgery: the trauma case is suggested to Surg 2 while they are scrubbed');
-eq(gr && gr.freeAt, 870, '…free at 2:30 PM');
-ok(gr && gr.warnings.some(function (w) { return /Djulbegovic is in Tyson x3 until 2:30 PM \(est\.\) — start it at 2:30 PM/.test(w); }), '…and the warning says to start it at 2:30 — got ' + JSON.stringify(gr && gr.warnings));
+eq(gr && gr.follows, 'Tyson x3', '…following their cases');
+ok(gr && gr.warnings.some(function (w) { return /^Djulbegovic is operating \(Tyson x3\) — it follows their cases; check in with them$/.test(w); }), '…and the warning says so, with no time — got ' + JSON.stringify(gr && gr.warnings));
+ok(gr && !gr.warnings.some(function (w) { return /\d:\d\d/.test(w); }), '…no estimated time anywhere in the warnings');
 ok(gr && gr.alternates.indexOf('Calotti') !== -1, '…the chain’s free members stay as alternates');
 // Surg 2 out with nobody covering: the chain as before
 x = board({ cases: [tyson], absences: [{ id: 'a9', name: 'Djulbegovic', am: true, pm: true, reason: 'sick', coverAM: 'NC', coverPM: 'NC' }] });
@@ -79,15 +79,16 @@ eq(plan.pick && plan.pick.name, 'Bair', '…the trauma chain: Surg 3 takes it');
 x = board({ cases: [{ id: 'c3', section: 'wills', surgeon: 'Tyson', count: 2, serviceCount: 2, start: '1300', category: 'cataract', addOn: false, assigned: 'Wibbelsman', backup: '' }],
   absences: [{ id: 'a9', name: 'Djulbegovic', am: true, pm: true, reason: 'vacation', coverAM: 'Wibbelsman', coverPM: 'Wibbelsman' }] });
 plan = Assign.planAddOn('globe', 790, roster, DATA, x.b);
-eq(plan.pick && plan.pick.name + ' @' + plan.start, 'Wibbelsman @840', 'Surg 2 c/b Wibbelsman, scrubbed until 2 PM → Wibbelsman at 2 PM');
+eq(plan.pick && plan.pick.name + ' | ' + plan.follows, 'Wibbelsman | Tyson x2', 'Surg 2 c/b Wibbelsman, operating → Wibbelsman, following their cases');
 ok(/covering Djulbegovic/.test(plan.pick && plan.pick.via), '…named as covering Djulbegovic — got ' + (plan.pick && plan.pick.via));
-// split cover: Wibbelsman Surg 2 AM (scrubbed 11:00–12:30), Cheng PM — an
-// 11:30 globe goes to the PM Surg 2 from noon, not after the AM one's case
+// split cover: Wibbelsman Surg 2 AM, Cheng PM — the globe goes to whoever
+// is Surg 2 when it comes in
 x = board({ cases: [{ id: 'c4', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1100', category: 'cataract', addOn: false, assigned: 'Wibbelsman', backup: '' }],
   absences: [{ id: 'a9', name: 'Djulbegovic', am: true, pm: true, reason: 'vacation', coverAM: 'Wibbelsman', coverPM: 'Cheng' }] });
 plan = Assign.planAddOn('globe', 690, roster, DATA, x.b);
-eq(plan.pick && plan.pick.name + ' @' + plan.start, 'Cheng @720', 'Surg 2 AM scrubbed past noon → the PM Surg 2 (Cheng) takes the globe at noon');
-eq(plan.waitText, '', '…with nothing to wait behind');
+eq(plan.pick && plan.pick.name + ' | ' + plan.follows, 'Wibbelsman | Tyson x3', 'an 11:30 globe → the AM Surg 2 (Wibbelsman), following their cases');
+plan = Assign.planAddOn('globe', 780, roster, DATA, x.b);
+eq(plan.pick && plan.pick.name + ' | ' + plan.follows, 'Cheng | ', 'a 1:00 globe → the PM Surg 2 (Cheng), free');
 
 /* ---------- cornea add-on (needs tissue) while Surg 3 is scrubbed ---------- */
 x = board({ cases: [hark('Djulbegovic')] });
@@ -189,7 +190,7 @@ plan = Assign.planAddOn('other', 810, roster, DATA, x.b);
 eq(plan.pick && plan.pick.name, 'Samuel', 'Surg 2/3/4 in cases → the Cooper-block senior (Samuel) takes an add-on (Step 10)');
 eq(plan.pick && plan.pick.via, 'Cooper (PGY-4)', '…via the Cooper (PGY-4) chain step');
 plan = Assign.planAddOn('globe', 810, roster, DATA, x.b);
-eq(plan.pick && plan.pick.name + ' @' + plan.start, 'Djulbegovic @870', '…a globe still waits for Surg 2 (2:30 PM), not Cooper');
+eq(plan.pick && plan.pick.name + ' | ' + plan.follows, 'Djulbegovic | Tyson x3', '…a globe still goes to Surg 2 (following their cases), not Cooper');
 // Thu 10/1: Samuel is at Cooper Clinic — off-site, skipped
 var r101 = Engine.resolveDay('2026-10-01', DATA);
 var b101 = Status.build(r101, { nightFloat: 'Perez', absences: [], clinicStaffOverrides: {}, cases: [
@@ -356,10 +357,10 @@ eq(jt.items.map(function (it) { return it.label.split(' ')[0] + ':' + (it.pick ?
   'add-on 1:00 → Surg 4 (the only one free); glaucoma 1:30 → skipped for now → Step 10 → Surg 1, whose list ends at 1:30');
 eq(jt.items[1].adjusted && jt.items[1].byOrder, 'Calotti', '…and it says the order alone would give the glaucoma to Calotti');
 ok(jt.searched < 100, 'the search is tiny (' + jt.searched + ' nodes)');
-// a globe in the same squeeze: Surg 2 always — it waits until their list ends (4:30)
+// a globe in the same squeeze: Surg 2 always, following their list
 jt = Assign.planAddOns([{ kind: 'globe', t: 780 }, { kind: 'glaucoma', t: 810 }], null, roster, DATA, x.b);
-eq(jt.items.map(function (it) { return it.label.split(' ')[0] + ':' + (it.pick ? it.pick.name + '@' + it.start : '-'); }).join(' '), 'Globe:Djulbegovic@990 Glaucoma:Calotti@810',
-  'globe 1:00 → Surg 2 at 4:30 PM, when their list ends; glaucoma 1:30 → Surg 4 (Step 6)');
+eq(jt.items.map(function (it) { return it.label.split(' ')[0] + ':' + (it.pick ? it.pick.name : '-') + (it.follows ? ' after ' + it.follows : ''); }).join(' '), 'Globe:Djulbegovic after Xa x4 Glaucoma:Calotti',
+  'globe 1:00 → Surg 2, following their list; glaucoma 1:30 → Surg 4 (Step 6)');
 // with nothing in the way the plan is exactly the doc's order
 jt = Assign.planAddOns([{ kind: 'globe', t: 600 }, { kind: 'glaucoma', t: 600 }, { kind: 'cornea', t: 600 }], null, roster, DATA, board({}).b);
 ok(jt.items.every(function (it) { return !it.adjusted; }) && jt.unfilledByOrder === 0, 'no conflict: nothing changed from the doc’s order');
@@ -449,7 +450,7 @@ ok(bp && bp.primary && bp.primary.name !== 'Cheng', 'Surg 2 in a 12:00 globe is 
 // Tue/Wed/Thu PM. No globe: Surg 2 covers the clinic of a Surg 3 / Surg 4
 // in a PM case (Wednesday both: Surg 2 one, the chain the other). A globe:
 // Surg 2 takes it and the clinic they were covering passes down the chain;
-// scrubbed, the globe waits for them.
+// operating, the globe follows their cases.
 [
   { d: '2026-10-19', s2: 'Cheng', s3pm: 'Cornea', s4pm: '', covers: 'Cornea:Cheng', handoff: 'Cornea→Shields' },
   { d: '2026-10-20', s2: 'Cheng', s3pm: '', s4pm: 'Glaucoma', covers: 'Glaucoma:Cheng', handoff: 'Glaucoma→Djulbegovic' },
@@ -480,11 +481,11 @@ ok(bp && bp.primary && bp.primary.name !== 'Cheng', 'Surg 2 in a 12:00 globe is 
   var gp = Assign.planAddOn('globe', 810, r, DATA, bw);
   eq(gp.pick && gp.pick.name, w.s2, w.d + ': a 1:30 globe → Surg 2');
   eq(gp.handoff && gp.handoff.clinic + '→' + (gp.handoff.primary && gp.handoff.primary.name), w.handoff, w.d + ': the clinic Surg 2 was covering passes down the chain');
-  // Surg 2 scrubbed 1:00–2:30: the globe waits for them
+  // Surg 2 operating from 1:00: the globe still goes to them, following their cases
   var cat = { id: 'k', section: 'wills', surgeon: 'Tyson', count: 3, serviceCount: 3, start: '1300', category: 'cataract', addOn: false, assigned: w.s2, backup: '' };
   day.cases = cases.map(function (c) { var d = {}; for (var k in c) d[k] = c[k]; d.backup = ''; return d; }).concat([cat]);
   gp = Assign.planAddOn('globe', 810, r, DATA, Status.build(r, day, DATA));
-  eq(gp.pick && gp.pick.name + ' @' + gp.start, w.s2 + ' @870', w.d + ': Surg 2 scrubbed until 2:30 → the globe waits for them');
+  eq(gp.pick && gp.pick.name + ' | ' + gp.follows, w.s2 + ' | Tyson x3', w.d + ': Surg 2 operating → still Surg 2, following their cases');
 });
 
 console.log(checks + ' checks, ' + failures + ' failure(s)');

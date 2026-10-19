@@ -43,8 +43,8 @@ The six tabs follow the "How to Surgical Schedule" order:
    Stadium / Cherry Hill — the ASC · JHN/TJUH/JSC · Privates), with the
    resident picked on each case: a one-click suggestion that follows the
    how-to doc step by step (scheduled cornea → Surg 3, add-on glaucoma →
-   Surg 4, …, a globe → Surg 2 always — scrubbed, it starts when they are
-   free, one click away; anything skipped waits for Step 10, the
+   Surg 4, …, a globe → Surg 2 always — operating, it follows their
+   cases; anything skipped waits for Step 10, the
    remaining cases Surg 2 → 3 → 4 → Cooper → 1 → 5, in time order). It skips
    anyone out or already in a case then, never suggests anyone off the doc's
    chains (past the end it's Surg 2's call, and it shows who else is free),
@@ -56,14 +56,15 @@ The six tabs follow the "How to Surgical Schedule" order:
 5. **Coverage** — today's roles (Surg 1–5 and Cooper, with whoever covers
    anyone out), everything still open from every tab (a case whose resident
    is out, a service case with nobody, an uncovered absence, a clinic gap —
-   each with its fix), the day's cases to check off as they finish, then who is
+   each with its fix), who is operating and how many cases (to check in on,
+   and check off as they finish — no estimated times), then who is
    available AM and PM (free, or done with their cases; then Retina /
    Uveitis, the first to pull from — no cover needed; never ER, consults or
    Path), Surg 2's day — with no globe, Surg 2 is free to cover the Surg 3 /
    Surg 4 PM clinic (Cornea Mon/Wed/Fri, Glaucoma Tue/Wed/Thu) or take over
    a case — and what happens if a globe or other add-ons come in: a globe
-   always goes to Surg 2 (whoever covers them), waiting until they are out
-   of a case, and the clinic they were covering passes down the chain; the
+   always goes to Surg 2 (whoever covers them), following their cases when
+   they are operating, and the clinic they were covering passes down the chain; the
    rest one or several, each at its own time, placed in the doc's step
    order and searched exactly so none is left without a resident when some
    choice covers it (docs/OPTIMIZATION.md). Then who covers a clinic if a
@@ -93,9 +94,10 @@ encodes — and the assumptions still to calibrate — are listed in
   add-on call follows the acting Surg 2, and the copied schedule's
   Assignments / WER / consult lines show who stands in. Wills and Stadium /
   Cherry Hill are separate sections. A flow chart in the Library and on
-  Coverage. Surg 2 always takes the globe (scrubbed, it waits for them);
-  with no globe Coverage shows Surg 2 free for the Surg 3 / Surg 4 PM
-  clinics. What was audited and what changed: [docs/AUDIT.md](docs/AUDIT.md).
+  Coverage. Surg 2 always takes the globe (operating, it follows their
+  cases); with no globe Coverage shows Surg 2 free for the Surg 3 / Surg 4
+  PM clinics; Coverage lists who is operating and how many cases, with no
+  estimated times. What was audited and what changed: [docs/AUDIT.md](docs/AUDIT.md).
 - **v2** (9/2026) — the flow follows the how-to (Out today →
   Roster → Surgery → Clinics → Coverage → Preview), the app knows who is
   free at any minute, the Surgery tab is one line per attending with the
